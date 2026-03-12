@@ -1,4 +1,4 @@
-# 🟥 Aanalysis results
+# 🟥 Analysis results
 
 
 
