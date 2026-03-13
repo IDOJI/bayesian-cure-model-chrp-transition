@@ -22,8 +22,13 @@ run_all_pairs <- TRUE
 strict_bundle_alignment <- TRUE
 
 boundary_alpha <- 0.05
-bootstrap_success_target_primary <- 999L
-bootstrap_success_target_sensitivity <- 999L
+
+strict_bootstrap_success_target_primary <- 999L
+strict_bootstrap_success_target_sensitivity <- 999L
+
+relaxed_bootstrap_success_target_primary <- 999L
+relaxed_bootstrap_success_target_sensitivity <- 999L
+
 bootstrap_max_attempt_multiplier <- 4L
 censoring_bootstrap_method <- "reverse_km"
 failure_log_max_rows <- 5000L
@@ -67,7 +72,9 @@ build_bundle_paths_from_dir <- function(bundle_dir, file_prefix) {
   if (length(missing_files) > 0L) {
     stop(
       paste0(
-        "Required bundle file(s) not found under ", bundle_dir, ": ",
+        "Required bundle file(s) not found under ",
+        bundle_dir,
+        ": ",
         paste(basename(missing_files), collapse = ", ")
       ),
       call. = FALSE
@@ -141,12 +148,16 @@ if (!is.finite(boundary_alpha) || boundary_alpha <= 0 || boundary_alpha >= 1) {
   stop("boundary_alpha must be a single number between 0 and 1.", call. = FALSE)
 }
 
-if (!is.finite(bootstrap_success_target_primary) || bootstrap_success_target_primary < 1L) {
-  stop("bootstrap_success_target_primary must be a positive integer.", call. = FALSE)
-}
-
-if (!is.finite(bootstrap_success_target_sensitivity) || bootstrap_success_target_sensitivity < 1L) {
-  stop("bootstrap_success_target_sensitivity must be a positive integer.", call. = FALSE)
+for (nm in c(
+  "strict_bootstrap_success_target_primary",
+  "strict_bootstrap_success_target_sensitivity",
+  "relaxed_bootstrap_success_target_primary",
+  "relaxed_bootstrap_success_target_sensitivity"
+)) {
+  val <- get(nm, inherits = FALSE)
+  if (!is.finite(val) || val < 1L) {
+    stop(nm, " must be a positive integer.", call. = FALSE)
+  }
 }
 
 if (!is.finite(bootstrap_max_attempt_multiplier) || bootstrap_max_attempt_multiplier < 1L) {
@@ -192,9 +203,9 @@ for (ds in dataset_labels) {
 
 set.seed(random_seed)
 
-# 🔴 Define: shared utilities for bundle validation and model fitting ===============================
+# 🔴 Define: shared utilities for bundle validation and result rows ===============================
 
-## 🟠 Build: coercion helpers, note helpers, and row binders ===============================
+## 🟠 Build: coercion helpers, binders, and typed row templates ===============================
 `%||%` <- function(x, y) {
   if (is.null(x) || length(x) == 0L) {
     return(y)
@@ -325,81 +336,42 @@ new_empty_failure_counts <- function() {
   )
 }
 
-new_empty_pair_result <- function() {
-  data.frame(
-    dataset = character(0),
-    gate_status_step3 = character(0),
-    step5_gate_pass = logical(0),
-    step5_selected_best_cure_id = character(0),
-    is_primary_pair = logical(0),
-    alt_model_id = character(0),
-    null_model_id = character(0),
-    latency_dist = character(0),
-    null_survreg_dist = character(0),
-    step4_family = character(0),
-    covariate_structure = character(0),
-    analysis_n = integer(0),
-    n_event = integer(0),
-    n_censor = integer(0),
-    zero_time_offset_days = numeric(0),
-    bootstrap_method = character(0),
-    null_fit_ok = logical(0),
-    null_converged = logical(0),
-    null_stable = logical(0),
-    alt_fit_ok = logical(0),
-    alt_converged = logical(0),
-    alt_stable = logical(0),
-    step4_matched_ok = logical(0),
-    step4_matched_converged = logical(0),
-    step4_step5_subject_set_match = logical(0),
-    step4_step5_endpoint_match = logical(0),
-    step4_step5_transformed_covariate_match = logical(0),
-    step4_step5_scaling_match = logical(0),
-    logLik_null = numeric(0),
-    logLik_alt = numeric(0),
-    df_model_null = numeric(0),
-    df_model_alt = numeric(0),
-    AIC_null = numeric(0),
-    AIC_alt = numeric(0),
-    BIC_null = numeric(0),
-    BIC_alt = numeric(0),
-    d_obs = numeric(0),
-    bootstrap_target_B = integer(0),
-    bootstrap_success_B = integer(0),
-    bootstrap_failed_B = integer(0),
-    bootstrap_attempts = integer(0),
-    bootstrap_target_met = logical(0),
-    bootstrap_failure_rate = numeric(0),
-    bootstrap_null_mean = numeric(0),
-    bootstrap_null_median = numeric(0),
-    bootstrap_null_q95 = numeric(0),
-    bootstrap_null_q975 = numeric(0),
-    p_value_boundary = numeric(0),
-    alpha = numeric(0),
-    decision = character(0),
-    reading_role = character(0),
-    null_warning_message = character(0),
-    alt_warning_message = character(0),
-    null_error_message = character(0),
-    alt_error_message = character(0),
-    bootstrap_failure_summary = character(0),
-    note = character(0),
-    stringsAsFactors = FALSE
+new_bootstrap_result <- function(target_B) {
+  list(
+    d_boot = numeric(0),
+    attempts = 0L,
+    success_B = 0L,
+    failed_B = 0L,
+    target_B = as.integer(target_B),
+    target_met = FALSE,
+    failure_log = new_empty_failure_log(),
+    failure_counts = new_empty_failure_counts(),
+    failure_summary = NA_character_,
+    accepted_unstable_null_B = 0L,
+    accepted_unstable_alt_B = 0L,
+    accepted_any_unstable_B = 0L,
+    accepted_all_stable_B = 0L
   )
 }
 
-build_pair_result_row <- function(
-    dataset_name,
-    gate_status,
-    step5_gate_pass,
-    step5_selected_cure_id,
-    is_primary_pair,
-    pair_spec,
-    analysis_n,
-    n_event,
-    n_censor,
-    zero_time_offset_days,
-    bootstrap_method,
+pair_result_template <- function() {
+  list(
+    dataset = NA_character_,
+    gate_status_step3 = NA_character_,
+    step5_gate_pass = NA,
+    step5_selected_best_cure_id = NA_character_,
+    is_primary_pair = NA,
+    alt_model_id = NA_character_,
+    null_model_id = NA_character_,
+    latency_dist = NA_character_,
+    null_survreg_dist = NA_character_,
+    step4_family = NA_character_,
+    covariate_structure = NA_character_,
+    analysis_n = as.integer(NA),
+    n_event = as.integer(NA),
+    n_censor = as.integer(NA),
+    zero_time_offset_days = NA_real_,
+    bootstrap_method = NA_character_,
     null_fit_ok = NA,
     null_converged = NA,
     null_stable = NA,
@@ -421,93 +393,82 @@ build_pair_result_row <- function(
     BIC_null = NA_real_,
     BIC_alt = NA_real_,
     d_obs = NA_real_,
-    bootstrap_target_B = NA_integer_,
-    bootstrap_success_B = 0L,
-    bootstrap_failed_B = 0L,
-    bootstrap_attempts = 0L,
-    bootstrap_target_met = FALSE,
-    bootstrap_failure_rate = NA_real_,
-    bootstrap_null_mean = NA_real_,
-    bootstrap_null_median = NA_real_,
-    bootstrap_null_q95 = NA_real_,
-    bootstrap_null_q975 = NA_real_,
-    p_value_boundary = NA_real_,
-    alpha = boundary_alpha,
-    decision = "not_evaluable",
-    reading_role = "not_evaluable",
+    strict_observed_evaluable = NA,
+    strict_bootstrap_target_B = as.integer(NA),
+    strict_bootstrap_success_B = as.integer(NA),
+    strict_bootstrap_failed_B = as.integer(NA),
+    strict_bootstrap_attempts = as.integer(NA),
+    strict_bootstrap_target_met = NA,
+    strict_bootstrap_failure_rate = NA_real_,
+    strict_bootstrap_null_mean = NA_real_,
+    strict_bootstrap_null_median = NA_real_,
+    strict_bootstrap_null_q95 = NA_real_,
+    strict_bootstrap_null_q975 = NA_real_,
+    strict_p_value_boundary = NA_real_,
+    strict_alpha = NA_real_,
+    strict_decision = NA_character_,
+    strict_reading_role = NA_character_,
+    strict_bootstrap_failure_summary = NA_character_,
+    relaxed_observed_evaluable = NA,
+    relaxed_bootstrap_target_B = as.integer(NA),
+    relaxed_bootstrap_success_B = as.integer(NA),
+    relaxed_bootstrap_failed_B = as.integer(NA),
+    relaxed_bootstrap_attempts = as.integer(NA),
+    relaxed_bootstrap_target_met = NA,
+    relaxed_bootstrap_failure_rate = NA_real_,
+    relaxed_bootstrap_null_mean = NA_real_,
+    relaxed_bootstrap_null_median = NA_real_,
+    relaxed_bootstrap_null_q95 = NA_real_,
+    relaxed_bootstrap_null_q975 = NA_real_,
+    relaxed_p_value_boundary = NA_real_,
+    relaxed_alpha = NA_real_,
+    relaxed_decision = NA_character_,
+    relaxed_reading_role = NA_character_,
+    relaxed_bootstrap_failure_summary = NA_character_,
+    relaxed_bootstrap_accepted_unstable_null_B = as.integer(NA),
+    relaxed_bootstrap_accepted_unstable_alt_B = as.integer(NA),
+    relaxed_bootstrap_accepted_any_unstable_B = as.integer(NA),
+    relaxed_bootstrap_accepted_all_stable_B = as.integer(NA),
     null_warning_message = NA_character_,
     alt_warning_message = NA_character_,
     null_error_message = NA_character_,
     alt_error_message = NA_character_,
-    bootstrap_failure_summary = NA_character_,
     note = NA_character_
-) {
-  alt_model_id <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$alt_model_id[1L]) else NA_character_
-  null_model_id <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$null_model_id[1L]) else NA_character_
-  latency_dist <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$latency_dist[1L]) else NA_character_
-  null_survreg_dist <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$null_survreg_dist[1L]) else NA_character_
-  step4_family <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$step4_family[1L]) else NA_character_
-  covariate_structure <- if (!is.null(pair_spec) && nrow(pair_spec) > 0L) as.character(pair_spec$covariate_structure[1L]) else NA_character_
+  )
+}
+
+build_pair_result_row <- function(values = list()) {
+  template <- pair_result_template()
+  row_list <- utils::modifyList(template, values)
   
-  data.frame(
-    dataset = as.character(dataset_name),
-    gate_status_step3 = as.character(gate_status),
-    step5_gate_pass = as.logical(step5_gate_pass),
-    step5_selected_best_cure_id = as.character(step5_selected_cure_id),
-    is_primary_pair = as.logical(is_primary_pair),
-    alt_model_id = alt_model_id,
-    null_model_id = null_model_id,
-    latency_dist = latency_dist,
-    null_survreg_dist = null_survreg_dist,
-    step4_family = step4_family,
-    covariate_structure = covariate_structure,
-    analysis_n = as.integer(analysis_n),
-    n_event = as.integer(n_event),
-    n_censor = as.integer(n_censor),
-    zero_time_offset_days = as.numeric(zero_time_offset_days),
-    bootstrap_method = as.character(bootstrap_method),
-    null_fit_ok = as.logical(null_fit_ok),
-    null_converged = as.logical(null_converged),
-    null_stable = as.logical(null_stable),
-    alt_fit_ok = as.logical(alt_fit_ok),
-    alt_converged = as.logical(alt_converged),
-    alt_stable = as.logical(alt_stable),
-    step4_matched_ok = as.logical(step4_matched_ok),
-    step4_matched_converged = as.logical(step4_matched_converged),
-    step4_step5_subject_set_match = as.logical(step4_step5_subject_set_match),
-    step4_step5_endpoint_match = as.logical(step4_step5_endpoint_match),
-    step4_step5_transformed_covariate_match = as.logical(step4_step5_transformed_covariate_match),
-    step4_step5_scaling_match = as.logical(step4_step5_scaling_match),
-    logLik_null = as.numeric(logLik_null),
-    logLik_alt = as.numeric(logLik_alt),
-    df_model_null = as.numeric(df_model_null),
-    df_model_alt = as.numeric(df_model_alt),
-    AIC_null = as.numeric(AIC_null),
-    AIC_alt = as.numeric(AIC_alt),
-    BIC_null = as.numeric(BIC_null),
-    BIC_alt = as.numeric(BIC_alt),
-    d_obs = as.numeric(d_obs),
-    bootstrap_target_B = as.integer(bootstrap_target_B),
-    bootstrap_success_B = as.integer(bootstrap_success_B),
-    bootstrap_failed_B = as.integer(bootstrap_failed_B),
-    bootstrap_attempts = as.integer(bootstrap_attempts),
-    bootstrap_target_met = as.logical(bootstrap_target_met),
-    bootstrap_failure_rate = as.numeric(bootstrap_failure_rate),
-    bootstrap_null_mean = as.numeric(bootstrap_null_mean),
-    bootstrap_null_median = as.numeric(bootstrap_null_median),
-    bootstrap_null_q95 = as.numeric(bootstrap_null_q95),
-    bootstrap_null_q975 = as.numeric(bootstrap_null_q975),
-    p_value_boundary = as.numeric(p_value_boundary),
-    alpha = as.numeric(alpha),
-    decision = as.character(decision),
-    reading_role = as.character(reading_role),
-    null_warning_message = blank_to_na(null_warning_message),
-    alt_warning_message = blank_to_na(alt_warning_message),
-    null_error_message = blank_to_na(null_error_message),
-    alt_error_message = blank_to_na(alt_error_message),
-    bootstrap_failure_summary = blank_to_na(bootstrap_failure_summary),
-    note = blank_to_na(note),
-    stringsAsFactors = FALSE
+  row_list <- Map(
+    f = function(val, tmpl) {
+      if (is.null(val) || length(val) == 0L) {
+        return(tmpl)
+      }
+      val[1L]
+    },
+    val = row_list,
+    tmpl = template
+  )
+  
+  as.data.frame(row_list, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+new_empty_pair_result <- function() {
+  out <- build_pair_result_row()
+  out[FALSE, , drop = FALSE]
+}
+
+summarize_bootstrap_result <- function(bootstrap_res) {
+  d <- bootstrap_res$d_boot
+  
+  list(
+    failure_rate = if (bootstrap_res$attempts > 0L) bootstrap_res$failed_B / bootstrap_res$attempts else NA_real_,
+    null_mean = if (length(d) > 0L) mean(d) else NA_real_,
+    null_median = if (length(d) > 0L) stats::median(d) else NA_real_,
+    null_q95 = if (length(d) > 0L) as.numeric(stats::quantile(d, probs = 0.95, names = FALSE, type = 7)) else NA_real_,
+    null_q975 = if (length(d) > 0L) as.numeric(stats::quantile(d, probs = 0.975, names = FALSE, type = 7)) else NA_real_
   )
 }
 
@@ -626,8 +587,8 @@ select_pair_queue <- function(pair_catalog, primary_alt_id, run_all_pairs) {
   pair_catalog
 }
 
-make_pair_seed <- function(base_seed, dataset_name, alt_model_id) {
-  seed_raw <- as.integer(base_seed) + sum(utf8ToInt(paste(dataset_name, alt_model_id, sep = "::")))
+make_pair_seed <- function(base_seed, dataset_name, alt_model_id, mode_label) {
+  seed_raw <- as.integer(base_seed) + sum(utf8ToInt(paste(dataset_name, alt_model_id, mode_label, sep = "::")))
   seed_mod <- seed_raw %% .Machine$integer.max
   if (!is.finite(seed_mod) || seed_mod <= 0L) {
     seed_mod <- 1L
@@ -648,7 +609,8 @@ assert_step4_bundle_structure <- function(bundle, dataset_name) {
   missing_names <- setdiff(required_names, names(bundle))
   if (length(missing_names) > 0L) {
     stop(
-      "Step4 bundle for dataset ", dataset_name,
+      "Step4 bundle for dataset ",
+      dataset_name,
       " is missing required element(s): ",
       paste(missing_names, collapse = ", "),
       call. = FALSE
@@ -660,9 +622,12 @@ assert_step4_bundle_structure <- function(bundle, dataset_name) {
   
   if (!identical(actual_label, expected_label)) {
     stop(
-      "Step4 bundle dataset label mismatch for ", dataset_name,
-      ". Expected ", expected_label,
-      " but found ", actual_label,
+      "Step4 bundle dataset label mismatch for ",
+      dataset_name,
+      ". Expected ",
+      expected_label,
+      " but found ",
+      actual_label,
       call. = FALSE
     )
   }
@@ -681,7 +646,8 @@ assert_step5_bundle_structure <- function(bundle, dataset_name) {
   missing_names <- setdiff(required_names, names(bundle))
   if (length(missing_names) > 0L) {
     stop(
-      "Step5 bundle for dataset ", dataset_name,
+      "Step5 bundle for dataset ",
+      dataset_name,
       " is missing required element(s): ",
       paste(missing_names, collapse = ", "),
       call. = FALSE
@@ -693,9 +659,12 @@ assert_step5_bundle_structure <- function(bundle, dataset_name) {
   
   if (!identical(actual_label, expected_label)) {
     stop(
-      "Step5 bundle dataset label mismatch for ", dataset_name,
-      ". Expected ", expected_label,
-      " but found ", actual_label,
+      "Step5 bundle dataset label mismatch for ",
+      dataset_name,
+      ". Expected ",
+      expected_label,
+      " but found ",
+      actual_label,
       call. = FALSE
     )
   }
@@ -952,7 +921,7 @@ extract_step4_matched_status <- function(step4_record) {
 
 # 🔴 Define: fit wrappers and likelihood summaries ===============================
 
-## 🟠 Build: guarded fit runners, convergence checks, and model metrics ===============================
+## 🟠 Build: guarded fit runners, convergence checks, and evaluation rules ===============================
 capture_fit <- function(expr_fun) {
   warnings_caught <- character(0)
   t0 <- proc.time()[["elapsed"]]
@@ -1001,11 +970,10 @@ get_survreg_converged <- function(fit) {
   
   scale_ok <- isTRUE(is.finite(fit$scale)) && fit$scale > 0
   
-  fail_obj <- fit$fail %||% NULL
-  fail_ok <- is.null(fail_obj) ||
-    identical(fail_obj, FALSE) ||
-    identical(fail_obj, 0) ||
-    (is.character(fail_obj) && is.na(blank_to_na(fail_obj)))
+  fail_ok <- is.null(fit$fail) ||
+    identical(fit$fail, FALSE) ||
+    identical(fit$fail, 0L) ||
+    identical(fit$fail, 0)
   
   isTRUE(coef_ok) && isTRUE(scale_ok) && isTRUE(fail_ok)
 }
@@ -1132,7 +1100,22 @@ fit_alt_cure_model <- function(data, pair_spec, cure_optim_method, optim_maxit, 
   finalize_fit_info(fit_info, model_family = "alt_cure")
 }
 
-compose_fit_failure_reason <- function(fit_info) {
+is_pair_evaluable_mode <- function(null_fit_info, alt_fit_info, null_metrics, alt_metrics, require_stable = TRUE) {
+  fit_part <- if (isTRUE(require_stable)) {
+    isTRUE(null_fit_info$stable) && isTRUE(alt_fit_info$stable)
+  } else {
+    isTRUE(null_fit_info$ok) &&
+      isTRUE(null_fit_info$converged) &&
+      isTRUE(alt_fit_info$ok) &&
+      isTRUE(alt_fit_info$converged)
+  }
+  
+  fit_part &&
+    is.finite(null_metrics$logLik) &&
+    is.finite(alt_metrics$logLik)
+}
+
+compose_fit_failure_reason <- function(fit_info, require_stable = TRUE) {
   if (isFALSE(fit_info$ok)) {
     return(blank_to_na(c("fit_error", truncate_text(fit_info$error_message, 160L))))
   }
@@ -1141,7 +1124,7 @@ compose_fit_failure_reason <- function(fit_info) {
     return(blank_to_na(c("nonconverged", truncate_text(fit_info$warning_message, 160L), truncate_text(fit_info$error_message, 160L))))
   }
   
-  if (!isTRUE(fit_info$stable)) {
+  if (isTRUE(require_stable) && !isTRUE(fit_info$stable)) {
     return(blank_to_na(c("numerical_instability", truncate_text(fit_info$warning_message, 160L), truncate_text(fit_info$error_message, 160L))))
   }
   
@@ -1150,7 +1133,7 @@ compose_fit_failure_reason <- function(fit_info) {
 
 # 🔴 Define: censoring samplers and bootstrap engines ===============================
 
-## 🟠 Build: reverse-KM censoring samplers and null simulation helpers ===============================
+## 🟠 Build: reverse-KM censoring samplers and mode-specific bootstrap runners ===============================
 build_censoring_sampler <- function(data, method) {
   method <- tolower(method[1L])
   censor_times_observed <- as.numeric(data$time_model[data$event_primary == 0L])
@@ -1346,11 +1329,17 @@ run_boundary_bootstrap <- function(
     cure_optim_method,
     optim_maxit,
     survreg_maxiter,
-    failure_log_max_rows
+    failure_log_max_rows,
+    require_stable = TRUE
 ) {
   d_boot <- numeric(0)
   failure_log <- new_empty_failure_log()
   failure_counter <- integer(0)
+  
+  accepted_unstable_null_B <- 0L
+  accepted_unstable_alt_B <- 0L
+  accepted_any_unstable_B <- 0L
+  accepted_all_stable_B <- 0L
   
   max_attempts <- max(1L, as.integer(bootstrap_target_B) * as.integer(bootstrap_max_attempt_multiplier))
   attempt <- 0L
@@ -1359,9 +1348,9 @@ run_boundary_bootstrap <- function(
     key <- paste(stage, reason, sep = "||")
     
     if (key %in% names(failure_counter)) {
-      failure_counter[[key]] <<- failure_counter[[key]] + 1L
+      failure_counter[key] <<- failure_counter[key] + 1L
     } else {
-      failure_counter[[key]] <<- 1L
+      failure_counter[key] <<- 1L
     }
     
     if (nrow(failure_log) < failure_log_max_rows) {
@@ -1407,9 +1396,10 @@ run_boundary_bootstrap <- function(
       survreg_maxiter = survreg_maxiter
     )
     
-    if (!isTRUE(null_fit_b$stable)) {
-      add_failure("null_refit", compose_fit_failure_reason(null_fit_b))
-      next
+    null_metrics_b <- if (!is.null(null_fit_b$fit)) {
+      safe_fit_metrics(null_fit_b$fit, n_obs = nrow(dat_b))
+    } else {
+      list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
     }
     
     alt_fit_b <- fit_alt_cure_model(
@@ -1420,18 +1410,47 @@ run_boundary_bootstrap <- function(
       survreg_maxiter = survreg_maxiter
     )
     
-    if (!isTRUE(alt_fit_b$stable)) {
-      add_failure("alt_refit", compose_fit_failure_reason(alt_fit_b))
+    alt_metrics_b <- if (!is.null(alt_fit_b$fit)) {
+      safe_fit_metrics(alt_fit_b$fit, n_obs = nrow(dat_b))
+    } else {
+      list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
+    }
+    
+    accepted_flag <- is_pair_evaluable_mode(
+      null_fit_info = null_fit_b,
+      alt_fit_info = alt_fit_b,
+      null_metrics = null_metrics_b,
+      alt_metrics = alt_metrics_b,
+      require_stable = require_stable
+    )
+    
+    if (!isTRUE(accepted_flag)) {
+      if (!(isTRUE(null_fit_b$ok) && isTRUE(null_fit_b$converged) && (!isTRUE(require_stable) || isTRUE(null_fit_b$stable)))) {
+        add_failure("null_refit", compose_fit_failure_reason(null_fit_b, require_stable = require_stable))
+        next
+      }
+      
+      if (!(isTRUE(alt_fit_b$ok) && isTRUE(alt_fit_b$converged) && (!isTRUE(require_stable) || isTRUE(alt_fit_b$stable)))) {
+        add_failure("alt_refit", compose_fit_failure_reason(alt_fit_b, require_stable = require_stable))
+        next
+      }
+      
+      if (!is.finite(null_metrics_b$logLik) || !is.finite(alt_metrics_b$logLik)) {
+        add_failure("logLik", "non_finite_loglik")
+        next
+      }
+      
+      add_failure("other", "not_accepted_for_mode")
       next
     }
     
-    null_metrics_b <- safe_fit_metrics(null_fit_b$fit, n_obs = nrow(dat_b))
-    alt_metrics_b <- safe_fit_metrics(alt_fit_b$fit, n_obs = nrow(dat_b))
+    unstable_null_flag <- !isTRUE(null_fit_b$stable)
+    unstable_alt_flag <- !isTRUE(alt_fit_b$stable)
     
-    if (!is.finite(null_metrics_b$logLik) || !is.finite(alt_metrics_b$logLik)) {
-      add_failure("logLik", "non_finite_loglik")
-      next
-    }
+    accepted_unstable_null_B <- accepted_unstable_null_B + as.integer(unstable_null_flag)
+    accepted_unstable_alt_B <- accepted_unstable_alt_B + as.integer(unstable_alt_flag)
+    accepted_any_unstable_B <- accepted_any_unstable_B + as.integer(unstable_null_flag || unstable_alt_flag)
+    accepted_all_stable_B <- accepted_all_stable_B + as.integer(!(unstable_null_flag || unstable_alt_flag))
     
     d_boot <- c(d_boot, max(0, 2 * (alt_metrics_b$logLik - null_metrics_b$logLik)))
   }
@@ -1449,29 +1468,32 @@ run_boundary_bootstrap <- function(
     out[order(-out$n, out$stage, out$reason), , drop = FALSE]
   }
   
-  list(
-    d_boot = d_boot,
-    attempts = attempt,
-    success_B = length(d_boot),
-    failed_B = if (length(failure_counter) == 0L) 0L else sum(failure_counter),
-    target_B = as.integer(bootstrap_target_B),
-    target_met = length(d_boot) >= bootstrap_target_B,
-    failure_log = failure_log,
-    failure_counts = failure_counts,
-    failure_summary = blank_to_na(
-      if (nrow(failure_counts) > 0L) {
-        paste0(failure_counts$stage, ":", failure_counts$reason, "=", failure_counts$n)
-      } else {
-        NA_character_
-      }
-    )
+  out <- new_bootstrap_result(target_B = bootstrap_target_B)
+  out$d_boot <- d_boot
+  out$attempts <- attempt
+  out$success_B <- length(d_boot)
+  out$failed_B <- if (length(failure_counter) == 0L) 0L else sum(failure_counter)
+  out$target_met <- length(d_boot) >= bootstrap_target_B
+  out$failure_log <- failure_log
+  out$failure_counts <- failure_counts
+  out$failure_summary <- blank_to_na(
+    if (nrow(failure_counts) > 0L) {
+      paste0(failure_counts$stage, ":", failure_counts$reason, "=", failure_counts$n)
+    } else {
+      NA_character_
+    }
   )
+  out$accepted_unstable_null_B <- accepted_unstable_null_B
+  out$accepted_unstable_alt_B <- accepted_unstable_alt_B
+  out$accepted_any_unstable_B <- accepted_any_unstable_B
+  out$accepted_all_stable_B <- accepted_all_stable_B
+  out
 }
 
-# 🔴 Define: pair evaluators and primary placeholders ===============================
+# 🔴 Define: pair evaluators and decision rules ===============================
 
-## 🟠 Build: decision rules, pair evaluators, and primary-row fallbacks ===============================
-classify_reading_role <- function(gate_status, evaluable_flag) {
+## 🟠 Build: strict and relaxed decision rules, pair evaluators, and placeholders ===============================
+classify_strict_reading_role <- function(gate_status, evaluable_flag) {
   if (!isTRUE(evaluable_flag)) {
     return("not_evaluable")
   }
@@ -1489,6 +1511,14 @@ classify_reading_role <- function(gate_status, evaluable_flag) {
   }
   
   "not_evaluable"
+}
+
+classify_relaxed_reading_role <- function(evaluable_flag) {
+  if (!isTRUE(evaluable_flag)) {
+    return("not_evaluable")
+  }
+  
+  "exploratory_relaxed"
 }
 
 classify_decision <- function(p_value, alpha, evaluable_flag) {
@@ -1514,7 +1544,8 @@ evaluate_boundary_pair <- function(
     dataset_validation,
     step4_record,
     alpha,
-    bootstrap_target_B,
+    strict_bootstrap_target_B,
+    relaxed_bootstrap_target_B,
     bootstrap_max_attempt_multiplier,
     censoring_bootstrap_method,
     cure_optim_method,
@@ -1530,256 +1561,335 @@ evaluate_boundary_pair <- function(
   
   step4_status <- extract_step4_matched_status(step4_record)
   
-  if (analysis_n == 0L) {
-    row <- build_pair_result_row(
-      dataset_name = dataset_name,
-      gate_status = gate_status,
-      step5_gate_pass = step5_gate_pass,
-      step5_selected_cure_id = step5_selected_cure_id,
-      is_primary_pair = is_primary_pair,
-      pair_spec = pair_spec,
-      analysis_n = analysis_n,
-      n_event = n_event,
-      n_censor = n_censor,
-      zero_time_offset_days = zero_time_offset_days,
-      bootstrap_method = censoring_bootstrap_method,
-      step4_matched_ok = step4_status$ok,
-      step4_matched_converged = step4_status$converged,
-      step4_step5_subject_set_match = dataset_validation$subject_set_match,
-      step4_step5_endpoint_match = dataset_validation$endpoint_match,
-      step4_step5_transformed_covariate_match = dataset_validation$transformed_covariate_match,
-      step4_step5_scaling_match = dataset_validation$scaling_match,
-      bootstrap_target_B = bootstrap_target_B,
-      decision = "not_evaluable",
-      reading_role = "not_evaluable",
-      note = "No rows available in the common Step6 analysis frame."
-    )
-    
-    return(list(
-      row = row,
-      store = list(
-        pair_spec = pair_spec,
-        observed = NULL,
-        bootstrap = NULL,
-        censoring_sampler_summary = NULL,
-        pair_seed = NA_integer_
-      )
-    ))
-  }
+  strict_bootstrap_res <- new_bootstrap_result(strict_bootstrap_target_B)
+  relaxed_bootstrap_res <- new_bootstrap_result(relaxed_bootstrap_target_B)
   
-  if (n_event == 0L) {
-    row <- build_pair_result_row(
-      dataset_name = dataset_name,
-      gate_status = gate_status,
-      step5_gate_pass = step5_gate_pass,
-      step5_selected_cure_id = step5_selected_cure_id,
-      is_primary_pair = is_primary_pair,
-      pair_spec = pair_spec,
-      analysis_n = analysis_n,
-      n_event = n_event,
-      n_censor = n_censor,
-      zero_time_offset_days = zero_time_offset_days,
-      bootstrap_method = censoring_bootstrap_method,
-      step4_matched_ok = step4_status$ok,
-      step4_matched_converged = step4_status$converged,
-      step4_step5_subject_set_match = dataset_validation$subject_set_match,
-      step4_step5_endpoint_match = dataset_validation$endpoint_match,
-      step4_step5_transformed_covariate_match = dataset_validation$transformed_covariate_match,
-      step4_step5_scaling_match = dataset_validation$scaling_match,
-      bootstrap_target_B = bootstrap_target_B,
-      decision = "not_evaluable",
-      reading_role = "not_evaluable",
-      note = "No transition events are available in the common Step6 analysis frame."
-    )
-    
-    return(list(
-      row = row,
-      store = list(
-        pair_spec = pair_spec,
-        observed = NULL,
-        bootstrap = NULL,
-        censoring_sampler_summary = NULL,
-        pair_seed = NA_integer_
-      )
-    ))
-  }
-  
-  null_fit_info <- fit_null_no_cure_model(
-    data = data_template,
-    pair_spec = pair_spec,
-    survreg_maxiter = survreg_maxiter
+  strict_pair_seed <- NA_integer_
+  relaxed_pair_seed <- NA_integer_
+  censor_sampler_summary <- data.frame(
+    method_requested = censoring_bootstrap_method,
+    method_used = NA_character_,
+    n_observed_censor = n_censor,
+    unique_censor_times = NA_integer_,
+    total_finite_mass = NA_real_,
+    infinite_mass = NA_real_,
+    stringsAsFactors = FALSE
   )
   
-  alt_fit_info <- fit_alt_cure_model(
-    data = data_template,
-    pair_spec = pair_spec,
-    cure_optim_method = cure_optim_method,
-    optim_maxit = optim_maxit,
-    survreg_maxiter = survreg_maxiter
+  null_fit_info <- list(
+    fit = NULL,
+    ok = FALSE,
+    converged = FALSE,
+    stable = FALSE,
+    warning_message = NA_character_,
+    error_message = NA_character_
   )
   
-  null_metrics <- if (!is.null(null_fit_info$fit)) safe_fit_metrics(null_fit_info$fit, analysis_n) else list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
-  alt_metrics <- if (!is.null(alt_fit_info$fit)) safe_fit_metrics(alt_fit_info$fit, analysis_n) else list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
+  alt_fit_info <- list(
+    fit = NULL,
+    ok = FALSE,
+    converged = FALSE,
+    stable = FALSE,
+    warning_message = NA_character_,
+    error_message = NA_character_
+  )
   
-  observed_evaluable <- isTRUE(null_fit_info$stable) &&
-    isTRUE(alt_fit_info$stable) &&
-    is.finite(null_metrics$logLik) &&
-    is.finite(alt_metrics$logLik)
+  null_metrics <- list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
+  alt_metrics <- list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
   
-  d_obs <- if (isTRUE(observed_evaluable)) {
-    max(0, 2 * (alt_metrics$logLik - null_metrics$logLik))
+  strict_observed_evaluable <- FALSE
+  relaxed_observed_evaluable <- FALSE
+  d_obs <- NA_real_
+  
+  if (analysis_n > 0L && n_event > 0L) {
+    null_fit_info <- fit_null_no_cure_model(
+      data = data_template,
+      pair_spec = pair_spec,
+      survreg_maxiter = survreg_maxiter
+    )
+    
+    alt_fit_info <- fit_alt_cure_model(
+      data = data_template,
+      pair_spec = pair_spec,
+      cure_optim_method = cure_optim_method,
+      optim_maxit = optim_maxit,
+      survreg_maxiter = survreg_maxiter
+    )
+    
+    null_metrics <- if (!is.null(null_fit_info$fit)) {
+      safe_fit_metrics(null_fit_info$fit, n_obs = analysis_n)
+    } else {
+      list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
+    }
+    
+    alt_metrics <- if (!is.null(alt_fit_info$fit)) {
+      safe_fit_metrics(alt_fit_info$fit, n_obs = analysis_n)
+    } else {
+      list(logLik = NA_real_, df_model = NA_real_, AIC = NA_real_, BIC = NA_real_)
+    }
+    
+    strict_observed_evaluable <- is_pair_evaluable_mode(
+      null_fit_info = null_fit_info,
+      alt_fit_info = alt_fit_info,
+      null_metrics = null_metrics,
+      alt_metrics = alt_metrics,
+      require_stable = TRUE
+    )
+    
+    relaxed_observed_evaluable <- is_pair_evaluable_mode(
+      null_fit_info = null_fit_info,
+      alt_fit_info = alt_fit_info,
+      null_metrics = null_metrics,
+      alt_metrics = alt_metrics,
+      require_stable = FALSE
+    )
+    
+    if (isTRUE(relaxed_observed_evaluable)) {
+      d_obs <- max(0, 2 * (alt_metrics$logLik - null_metrics$logLik))
+    }
+    
+    if (isTRUE(strict_observed_evaluable) || isTRUE(relaxed_observed_evaluable)) {
+      censor_sampler <- build_censoring_sampler(
+        data = data_template,
+        method = censoring_bootstrap_method
+      )
+      censor_sampler_summary <- censor_sampler$summary
+      
+      if (isTRUE(strict_observed_evaluable)) {
+        strict_pair_seed <- make_pair_seed(
+          base_seed = random_seed_base,
+          dataset_name = dataset_name,
+          alt_model_id = pair_spec$alt_model_id[1L],
+          mode_label = "strict"
+        )
+        
+        set.seed(strict_pair_seed)
+        
+        strict_bootstrap_res <- run_boundary_bootstrap(
+          data_template = data_template,
+          pair_spec = pair_spec,
+          null_fit_observed = null_fit_info$fit,
+          censor_sampler = censor_sampler,
+          zero_time_offset_days = zero_time_offset_days,
+          bootstrap_target_B = strict_bootstrap_target_B,
+          bootstrap_max_attempt_multiplier = bootstrap_max_attempt_multiplier,
+          cure_optim_method = cure_optim_method,
+          optim_maxit = optim_maxit,
+          survreg_maxiter = survreg_maxiter,
+          failure_log_max_rows = failure_log_max_rows,
+          require_stable = TRUE
+        )
+      }
+      
+      if (isTRUE(relaxed_observed_evaluable)) {
+        relaxed_pair_seed <- make_pair_seed(
+          base_seed = random_seed_base,
+          dataset_name = dataset_name,
+          alt_model_id = pair_spec$alt_model_id[1L],
+          mode_label = "relaxed"
+        )
+        
+        set.seed(relaxed_pair_seed)
+        
+        relaxed_bootstrap_res <- run_boundary_bootstrap(
+          data_template = data_template,
+          pair_spec = pair_spec,
+          null_fit_observed = null_fit_info$fit,
+          censor_sampler = censor_sampler,
+          zero_time_offset_days = zero_time_offset_days,
+          bootstrap_target_B = relaxed_bootstrap_target_B,
+          bootstrap_max_attempt_multiplier = bootstrap_max_attempt_multiplier,
+          cure_optim_method = cure_optim_method,
+          optim_maxit = optim_maxit,
+          survreg_maxiter = survreg_maxiter,
+          failure_log_max_rows = failure_log_max_rows,
+          require_stable = FALSE
+        )
+      }
+    }
+  }
+  
+  strict_p_value_boundary <- if (isTRUE(strict_observed_evaluable) && strict_bootstrap_res$success_B > 0L) {
+    (1 + sum(strict_bootstrap_res$d_boot >= d_obs)) / (strict_bootstrap_res$success_B + 1)
   } else {
     NA_real_
   }
   
-  pair_seed <- NA_integer_
-  censor_sampler <- list(
-    summary = data.frame(
-      method_requested = censoring_bootstrap_method,
-      method_used = NA_character_,
-      n_observed_censor = n_censor,
-      unique_censor_times = NA_integer_,
-      total_finite_mass = NA_real_,
-      infinite_mass = NA_real_,
-      stringsAsFactors = FALSE
-    )
-  )
-  bootstrap_res <- list(
-    d_boot = numeric(0),
-    attempts = 0L,
-    success_B = 0L,
-    failed_B = 0L,
-    target_B = as.integer(bootstrap_target_B),
-    target_met = FALSE,
-    failure_log = new_empty_failure_log(),
-    failure_counts = new_empty_failure_counts(),
-    failure_summary = NA_character_
-  )
-  p_value_boundary <- NA_real_
-  
-  if (isTRUE(observed_evaluable)) {
-    pair_seed <- make_pair_seed(
-      base_seed = random_seed_base,
-      dataset_name = dataset_name,
-      alt_model_id = pair_spec$alt_model_id[1L]
-    )
-    
-    set.seed(pair_seed)
-    
-    censor_sampler <- build_censoring_sampler(
-      data = data_template,
-      method = censoring_bootstrap_method
-    )
-    
-    bootstrap_res <- run_boundary_bootstrap(
-      data_template = data_template,
-      pair_spec = pair_spec,
-      null_fit_observed = null_fit_info$fit,
-      censor_sampler = censor_sampler,
-      zero_time_offset_days = zero_time_offset_days,
-      bootstrap_target_B = bootstrap_target_B,
-      bootstrap_max_attempt_multiplier = bootstrap_max_attempt_multiplier,
-      cure_optim_method = cure_optim_method,
-      optim_maxit = optim_maxit,
-      survreg_maxiter = survreg_maxiter,
-      failure_log_max_rows = failure_log_max_rows
-    )
-    
-    if (bootstrap_res$success_B > 0L) {
-      p_value_boundary <- (1 + sum(bootstrap_res$d_boot >= d_obs)) / (bootstrap_res$success_B + 1)
-    }
+  relaxed_p_value_boundary <- if (isTRUE(relaxed_observed_evaluable) && relaxed_bootstrap_res$success_B > 0L) {
+    (1 + sum(relaxed_bootstrap_res$d_boot >= d_obs)) / (relaxed_bootstrap_res$success_B + 1)
+  } else {
+    NA_real_
   }
   
-  bootstrap_null_mean <- if (length(bootstrap_res$d_boot) > 0L) mean(bootstrap_res$d_boot) else NA_real_
-  bootstrap_null_median <- if (length(bootstrap_res$d_boot) > 0L) stats::median(bootstrap_res$d_boot) else NA_real_
-  bootstrap_null_q95 <- if (length(bootstrap_res$d_boot) > 0L) as.numeric(stats::quantile(bootstrap_res$d_boot, probs = 0.95, names = FALSE, type = 7)) else NA_real_
-  bootstrap_null_q975 <- if (length(bootstrap_res$d_boot) > 0L) as.numeric(stats::quantile(bootstrap_res$d_boot, probs = 0.975, names = FALSE, type = 7)) else NA_real_
-  bootstrap_failure_rate <- if (bootstrap_res$attempts > 0L) bootstrap_res$failed_B / bootstrap_res$attempts else NA_real_
+  strict_summary <- summarize_bootstrap_result(strict_bootstrap_res)
+  relaxed_summary <- summarize_bootstrap_result(relaxed_bootstrap_res)
   
-  evaluable_flag <- isTRUE(observed_evaluable) && isTRUE(bootstrap_res$target_met)
-  reading_role <- classify_reading_role(gate_status = gate_status, evaluable_flag = evaluable_flag)
-  decision <- classify_decision(p_value = p_value_boundary, alpha = alpha, evaluable_flag = evaluable_flag)
+  strict_evaluable_final <- isTRUE(strict_observed_evaluable) && isTRUE(strict_bootstrap_res$target_met)
+  relaxed_evaluable_final <- isTRUE(relaxed_observed_evaluable) && isTRUE(relaxed_bootstrap_res$target_met)
+  
+  strict_reading_role <- classify_strict_reading_role(
+    gate_status = gate_status,
+    evaluable_flag = strict_evaluable_final
+  )
+  
+  relaxed_reading_role <- classify_relaxed_reading_role(
+    evaluable_flag = relaxed_evaluable_final
+  )
+  
+  strict_decision <- classify_decision(
+    p_value = strict_p_value_boundary,
+    alpha = alpha,
+    evaluable_flag = strict_evaluable_final
+  )
+  
+  relaxed_decision <- classify_decision(
+    p_value = relaxed_p_value_boundary,
+    alpha = alpha,
+    evaluable_flag = relaxed_evaluable_final
+  )
   
   note <- blank_to_na(c(
     note_if_false(dataset_validation$subject_set_match, "Step4 and Step5 subject sets differ."),
     note_if_false(dataset_validation$endpoint_match, "Step4 and Step5 endpoint variables differ."),
     note_if_false(dataset_validation$transformed_covariate_match, "Step4 and Step5 transformed covariates differ."),
     note_if_false(dataset_validation$scaling_match, "Step4 and Step5 scaling constants differ."),
-    if (!isTRUE(observed_evaluable)) "Observed matched-pair refit was not evaluable." else NA_character_,
-    if (isTRUE(observed_evaluable) && !isTRUE(bootstrap_res$target_met)) {
+    if (analysis_n == 0L) "No rows available in the common Step6 analysis frame." else NA_character_,
+    if (analysis_n > 0L && n_event == 0L) "No transition events are available in the common Step6 analysis frame." else NA_character_,
+    if (!isTRUE(relaxed_observed_evaluable) && analysis_n > 0L && n_event > 0L) {
+      "Observed matched-pair refit was not evaluable even under the relaxed rule."
+    } else {
+      NA_character_
+    },
+    if (!isTRUE(strict_observed_evaluable) && isTRUE(relaxed_observed_evaluable)) {
+      "Observed matched-pair refit failed the strict stability rule but passed the relaxed exploratory rule."
+    } else {
+      NA_character_
+    },
+    if (isTRUE(relaxed_observed_evaluable) && !isTRUE(alt_fit_info$stable)) {
+      "Observed alternative cure fit had a stability warning; relaxed results must be interpreted as exploratory."
+    } else {
+      NA_character_
+    },
+    if (isTRUE(strict_observed_evaluable) && !isTRUE(strict_bootstrap_res$target_met)) {
       paste0(
-        "Bootstrap success target was not reached (",
-        bootstrap_res$success_B,
+        "Strict bootstrap success target was not reached (",
+        strict_bootstrap_res$success_B,
         "/",
-        bootstrap_target_B,
+        strict_bootstrap_target_B,
         ")."
       )
     } else {
       NA_character_
     },
-    bootstrap_res$failure_summary
+    if (isTRUE(relaxed_observed_evaluable) && !isTRUE(relaxed_bootstrap_res$target_met)) {
+      paste0(
+        "Relaxed bootstrap success target was not reached (",
+        relaxed_bootstrap_res$success_B,
+        "/",
+        relaxed_bootstrap_target_B,
+        ")."
+      )
+    } else {
+      NA_character_
+    },
+    if (isTRUE(relaxed_evaluable_final) && relaxed_bootstrap_res$accepted_any_unstable_B > 0L) {
+      paste0(
+        "Relaxed accepted bootstrap replicates included unstable fits (any unstable accepted = ",
+        relaxed_bootstrap_res$accepted_any_unstable_B,
+        ")."
+      )
+    } else {
+      NA_character_
+    }
   ))
   
   row <- build_pair_result_row(
-    dataset_name = dataset_name,
-    gate_status = gate_status,
-    step5_gate_pass = step5_gate_pass,
-    step5_selected_cure_id = step5_selected_cure_id,
-    is_primary_pair = is_primary_pair,
-    pair_spec = pair_spec,
-    analysis_n = analysis_n,
-    n_event = n_event,
-    n_censor = n_censor,
-    zero_time_offset_days = zero_time_offset_days,
-    bootstrap_method = censoring_bootstrap_method,
-    null_fit_ok = null_fit_info$ok,
-    null_converged = null_fit_info$converged,
-    null_stable = null_fit_info$stable,
-    alt_fit_ok = alt_fit_info$ok,
-    alt_converged = alt_fit_info$converged,
-    alt_stable = alt_fit_info$stable,
-    step4_matched_ok = step4_status$ok,
-    step4_matched_converged = step4_status$converged,
-    step4_step5_subject_set_match = dataset_validation$subject_set_match,
-    step4_step5_endpoint_match = dataset_validation$endpoint_match,
-    step4_step5_transformed_covariate_match = dataset_validation$transformed_covariate_match,
-    step4_step5_scaling_match = dataset_validation$scaling_match,
-    logLik_null = null_metrics$logLik,
-    logLik_alt = alt_metrics$logLik,
-    df_model_null = null_metrics$df_model,
-    df_model_alt = alt_metrics$df_model,
-    AIC_null = null_metrics$AIC,
-    AIC_alt = alt_metrics$AIC,
-    BIC_null = null_metrics$BIC,
-    BIC_alt = alt_metrics$BIC,
-    d_obs = d_obs,
-    bootstrap_target_B = bootstrap_res$target_B,
-    bootstrap_success_B = bootstrap_res$success_B,
-    bootstrap_failed_B = bootstrap_res$failed_B,
-    bootstrap_attempts = bootstrap_res$attempts,
-    bootstrap_target_met = bootstrap_res$target_met,
-    bootstrap_failure_rate = bootstrap_failure_rate,
-    bootstrap_null_mean = bootstrap_null_mean,
-    bootstrap_null_median = bootstrap_null_median,
-    bootstrap_null_q95 = bootstrap_null_q95,
-    bootstrap_null_q975 = bootstrap_null_q975,
-    p_value_boundary = p_value_boundary,
-    alpha = alpha,
-    decision = decision,
-    reading_role = reading_role,
-    null_warning_message = null_fit_info$warning_message,
-    alt_warning_message = alt_fit_info$warning_message,
-    null_error_message = null_fit_info$error_message,
-    alt_error_message = alt_fit_info$error_message,
-    bootstrap_failure_summary = bootstrap_res$failure_summary,
-    note = note
+    values = list(
+      dataset = dataset_name,
+      gate_status_step3 = gate_status,
+      step5_gate_pass = step5_gate_pass,
+      step5_selected_best_cure_id = step5_selected_cure_id,
+      is_primary_pair = is_primary_pair,
+      alt_model_id = as.character(pair_spec$alt_model_id[1L]),
+      null_model_id = as.character(pair_spec$null_model_id[1L]),
+      latency_dist = as.character(pair_spec$latency_dist[1L]),
+      null_survreg_dist = as.character(pair_spec$null_survreg_dist[1L]),
+      step4_family = as.character(pair_spec$step4_family[1L]),
+      covariate_structure = as.character(pair_spec$covariate_structure[1L]),
+      analysis_n = as.integer(analysis_n),
+      n_event = as.integer(n_event),
+      n_censor = as.integer(n_censor),
+      zero_time_offset_days = as.numeric(zero_time_offset_days),
+      bootstrap_method = as.character(censoring_bootstrap_method),
+      null_fit_ok = null_fit_info$ok,
+      null_converged = null_fit_info$converged,
+      null_stable = null_fit_info$stable,
+      alt_fit_ok = alt_fit_info$ok,
+      alt_converged = alt_fit_info$converged,
+      alt_stable = alt_fit_info$stable,
+      step4_matched_ok = step4_status$ok,
+      step4_matched_converged = step4_status$converged,
+      step4_step5_subject_set_match = dataset_validation$subject_set_match,
+      step4_step5_endpoint_match = dataset_validation$endpoint_match,
+      step4_step5_transformed_covariate_match = dataset_validation$transformed_covariate_match,
+      step4_step5_scaling_match = dataset_validation$scaling_match,
+      logLik_null = null_metrics$logLik,
+      logLik_alt = alt_metrics$logLik,
+      df_model_null = null_metrics$df_model,
+      df_model_alt = alt_metrics$df_model,
+      AIC_null = null_metrics$AIC,
+      AIC_alt = alt_metrics$AIC,
+      BIC_null = null_metrics$BIC,
+      BIC_alt = alt_metrics$BIC,
+      d_obs = d_obs,
+      strict_observed_evaluable = strict_observed_evaluable,
+      strict_bootstrap_target_B = strict_bootstrap_res$target_B,
+      strict_bootstrap_success_B = strict_bootstrap_res$success_B,
+      strict_bootstrap_failed_B = strict_bootstrap_res$failed_B,
+      strict_bootstrap_attempts = strict_bootstrap_res$attempts,
+      strict_bootstrap_target_met = strict_bootstrap_res$target_met,
+      strict_bootstrap_failure_rate = strict_summary$failure_rate,
+      strict_bootstrap_null_mean = strict_summary$null_mean,
+      strict_bootstrap_null_median = strict_summary$null_median,
+      strict_bootstrap_null_q95 = strict_summary$null_q95,
+      strict_bootstrap_null_q975 = strict_summary$null_q975,
+      strict_p_value_boundary = strict_p_value_boundary,
+      strict_alpha = alpha,
+      strict_decision = strict_decision,
+      strict_reading_role = strict_reading_role,
+      strict_bootstrap_failure_summary = strict_bootstrap_res$failure_summary,
+      relaxed_observed_evaluable = relaxed_observed_evaluable,
+      relaxed_bootstrap_target_B = relaxed_bootstrap_res$target_B,
+      relaxed_bootstrap_success_B = relaxed_bootstrap_res$success_B,
+      relaxed_bootstrap_failed_B = relaxed_bootstrap_res$failed_B,
+      relaxed_bootstrap_attempts = relaxed_bootstrap_res$attempts,
+      relaxed_bootstrap_target_met = relaxed_bootstrap_res$target_met,
+      relaxed_bootstrap_failure_rate = relaxed_summary$failure_rate,
+      relaxed_bootstrap_null_mean = relaxed_summary$null_mean,
+      relaxed_bootstrap_null_median = relaxed_summary$null_median,
+      relaxed_bootstrap_null_q95 = relaxed_summary$null_q95,
+      relaxed_bootstrap_null_q975 = relaxed_summary$null_q975,
+      relaxed_p_value_boundary = relaxed_p_value_boundary,
+      relaxed_alpha = alpha,
+      relaxed_decision = relaxed_decision,
+      relaxed_reading_role = relaxed_reading_role,
+      relaxed_bootstrap_failure_summary = relaxed_bootstrap_res$failure_summary,
+      relaxed_bootstrap_accepted_unstable_null_B = relaxed_bootstrap_res$accepted_unstable_null_B,
+      relaxed_bootstrap_accepted_unstable_alt_B = relaxed_bootstrap_res$accepted_unstable_alt_B,
+      relaxed_bootstrap_accepted_any_unstable_B = relaxed_bootstrap_res$accepted_any_unstable_B,
+      relaxed_bootstrap_accepted_all_stable_B = relaxed_bootstrap_res$accepted_all_stable_B,
+      null_warning_message = null_fit_info$warning_message,
+      alt_warning_message = alt_fit_info$warning_message,
+      null_error_message = null_fit_info$error_message,
+      alt_error_message = alt_fit_info$error_message,
+      note = note
+    )
   )
   
   list(
     row = row,
     store = list(
       pair_spec = pair_spec,
-      pair_seed = pair_seed,
       step4_matched_record = step4_record,
       observed = list(
         null_fit = null_fit_info$fit,
@@ -1788,10 +1898,19 @@ evaluate_boundary_pair <- function(
         alt_fit_info = alt_fit_info,
         null_metrics = null_metrics,
         alt_metrics = alt_metrics,
-        d_obs = d_obs
+        d_obs = d_obs,
+        strict_observed_evaluable = strict_observed_evaluable,
+        relaxed_observed_evaluable = relaxed_observed_evaluable
       ),
-      censoring_sampler_summary = censor_sampler$summary,
-      bootstrap = bootstrap_res
+      censoring_sampler_summary = censor_sampler_summary,
+      strict = list(
+        pair_seed = strict_pair_seed,
+        bootstrap = strict_bootstrap_res
+      ),
+      relaxed = list(
+        pair_seed = relaxed_pair_seed,
+        bootstrap = relaxed_bootstrap_res
+      )
     )
   )
 }
@@ -1809,30 +1928,51 @@ make_primary_placeholder_row <- function(
     alpha,
     note
 ) {
-  pair_catalog <- make_pair_catalog()
-  pair_spec <- if (!is.na(step5_selected_cure_id) && step5_selected_cure_id %in% pair_catalog$alt_model_id) {
-    pair_catalog[pair_catalog$alt_model_id == step5_selected_cure_id, , drop = FALSE]
+  pair_catalog_local <- make_pair_catalog()
+  pair_spec <- if (!is.na(step5_selected_cure_id) && step5_selected_cure_id %in% pair_catalog_local$alt_model_id) {
+    pair_catalog_local[pair_catalog_local$alt_model_id == step5_selected_cure_id, , drop = FALSE]
   } else {
     NULL
   }
   
   build_pair_result_row(
-    dataset_name = dataset_name,
-    gate_status = gate_status,
-    step5_gate_pass = step5_gate_pass,
-    step5_selected_cure_id = step5_selected_cure_id,
-    is_primary_pair = TRUE,
-    pair_spec = pair_spec,
-    analysis_n = analysis_n,
-    n_event = n_event,
-    n_censor = n_censor,
-    zero_time_offset_days = zero_time_offset_days,
-    bootstrap_method = bootstrap_method,
-    bootstrap_target_B = bootstrap_success_target_primary,
-    alpha = alpha,
-    decision = "not_evaluable",
-    reading_role = "not_evaluable",
-    note = note
+    values = list(
+      dataset = dataset_name,
+      gate_status_step3 = gate_status,
+      step5_gate_pass = step5_gate_pass,
+      step5_selected_best_cure_id = step5_selected_cure_id,
+      is_primary_pair = TRUE,
+      alt_model_id = if (!is.null(pair_spec)) as.character(pair_spec$alt_model_id[1L]) else NA_character_,
+      null_model_id = if (!is.null(pair_spec)) as.character(pair_spec$null_model_id[1L]) else NA_character_,
+      latency_dist = if (!is.null(pair_spec)) as.character(pair_spec$latency_dist[1L]) else NA_character_,
+      null_survreg_dist = if (!is.null(pair_spec)) as.character(pair_spec$null_survreg_dist[1L]) else NA_character_,
+      step4_family = if (!is.null(pair_spec)) as.character(pair_spec$step4_family[1L]) else NA_character_,
+      covariate_structure = if (!is.null(pair_spec)) as.character(pair_spec$covariate_structure[1L]) else NA_character_,
+      analysis_n = as.integer(analysis_n),
+      n_event = as.integer(n_event),
+      n_censor = as.integer(n_censor),
+      zero_time_offset_days = as.numeric(zero_time_offset_days),
+      bootstrap_method = as.character(bootstrap_method),
+      strict_observed_evaluable = FALSE,
+      strict_bootstrap_target_B = strict_bootstrap_success_target_primary,
+      strict_bootstrap_success_B = 0L,
+      strict_bootstrap_failed_B = 0L,
+      strict_bootstrap_attempts = 0L,
+      strict_bootstrap_target_met = FALSE,
+      strict_alpha = alpha,
+      strict_decision = "not_evaluable",
+      strict_reading_role = "not_evaluable",
+      relaxed_observed_evaluable = FALSE,
+      relaxed_bootstrap_target_B = relaxed_bootstrap_success_target_primary,
+      relaxed_bootstrap_success_B = 0L,
+      relaxed_bootstrap_failed_B = 0L,
+      relaxed_bootstrap_attempts = 0L,
+      relaxed_bootstrap_target_met = FALSE,
+      relaxed_alpha = alpha,
+      relaxed_decision = "not_evaluable",
+      relaxed_reading_role = "not_evaluable",
+      note = note
+    )
   )
 }
 
@@ -1888,7 +2028,7 @@ for (ds in dataset_labels) {
 
 # 🔴 Execute: Step6 boundary tests by dataset ===============================
 
-## 🟠 Loop: observed matched-pair refits and null-based bootstrap calibration ===============================
+## 🟠 Loop: strict confirmatory and relaxed exploratory bootstrap calibration ===============================
 all_pairs_results_list <- list()
 primary_results_list <- list()
 manifest_rows <- list()
@@ -1927,10 +2067,16 @@ for (ds in dataset_labels) {
       alt_model_id_i <- pair_spec_i$alt_model_id[1L]
       is_primary_pair_i <- !is.na(step5_selected_cure_id_i) && identical(alt_model_id_i, step5_selected_cure_id_i)
       
-      bootstrap_target_B_i <- if (isTRUE(is_primary_pair_i)) {
-        bootstrap_success_target_primary
+      strict_bootstrap_target_B_i <- if (isTRUE(is_primary_pair_i)) {
+        strict_bootstrap_success_target_primary
       } else {
-        bootstrap_success_target_sensitivity
+        strict_bootstrap_success_target_sensitivity
+      }
+      
+      relaxed_bootstrap_target_B_i <- if (isTRUE(is_primary_pair_i)) {
+        relaxed_bootstrap_success_target_primary
+      } else {
+        relaxed_bootstrap_success_target_sensitivity
       }
       
       vmessage(
@@ -1938,8 +2084,10 @@ for (ds in dataset_labels) {
         alt_model_id_i,
         " (primary = ",
         is_primary_pair_i,
-        ", target B = ",
-        bootstrap_target_B_i,
+        ", strict target B = ",
+        strict_bootstrap_target_B_i,
+        ", relaxed target B = ",
+        relaxed_bootstrap_target_B_i,
         ")"
       )
       
@@ -1959,7 +2107,8 @@ for (ds in dataset_labels) {
         dataset_validation = dataset_validation_list[[ds]],
         step4_record = step4_record_i,
         alpha = boundary_alpha,
-        bootstrap_target_B = bootstrap_target_B_i,
+        strict_bootstrap_target_B = strict_bootstrap_target_B_i,
+        relaxed_bootstrap_target_B = relaxed_bootstrap_target_B_i,
         bootstrap_max_attempt_multiplier = bootstrap_max_attempt_multiplier,
         censoring_bootstrap_method = censoring_bootstrap_method,
         cure_optim_method = cure_optim_method,
@@ -1974,14 +2123,20 @@ for (ds in dataset_labels) {
       pair_store_i[[alt_model_id_i]] <- eval_out_i$store
       
       vmessage(
-        "    observed d = ",
+        "    d_obs = ",
         ifelse(is.finite(eval_out_i$row$d_obs[1L]), format(eval_out_i$row$d_obs[1L], digits = 6), "NA"),
-        ", bootstrap success = ",
-        eval_out_i$row$bootstrap_success_B[1L],
+        " | strict success = ",
+        eval_out_i$row$strict_bootstrap_success_B[1L],
         "/",
-        eval_out_i$row$bootstrap_target_B[1L],
+        eval_out_i$row$strict_bootstrap_target_B[1L],
         ", p = ",
-        ifelse(is.finite(eval_out_i$row$p_value_boundary[1L]), format(eval_out_i$row$p_value_boundary[1L], digits = 6), "NA")
+        ifelse(is.finite(eval_out_i$row$strict_p_value_boundary[1L]), format(eval_out_i$row$strict_p_value_boundary[1L], digits = 6), "NA"),
+        " | relaxed success = ",
+        eval_out_i$row$relaxed_bootstrap_success_B[1L],
+        "/",
+        eval_out_i$row$relaxed_bootstrap_target_B[1L],
+        ", p = ",
+        ifelse(is.finite(eval_out_i$row$relaxed_p_value_boundary[1L]), format(eval_out_i$row$relaxed_p_value_boundary[1L], digits = 6), "NA")
       )
     }
   }
@@ -2045,12 +2200,21 @@ for (ds in dataset_labels) {
     primary_null_model_id = as.character(primary_row_i$null_model_id[1L]),
     primary_latency_dist = as.character(primary_row_i$latency_dist[1L]),
     primary_covariate_structure = as.character(primary_row_i$covariate_structure[1L]),
-    primary_bootstrap_target_B = as.integer(primary_row_i$bootstrap_target_B[1L]),
-    primary_bootstrap_success_B = as.integer(primary_row_i$bootstrap_success_B[1L]),
-    primary_bootstrap_target_met = as.logical(primary_row_i$bootstrap_target_met[1L]),
-    primary_p_value_boundary = as.numeric(primary_row_i$p_value_boundary[1L]),
-    primary_decision = as.character(primary_row_i$decision[1L]),
-    primary_reading_role = as.character(primary_row_i$reading_role[1L]),
+    primary_d_obs = as.numeric(primary_row_i$d_obs[1L]),
+    primary_strict_observed_evaluable = as.logical(primary_row_i$strict_observed_evaluable[1L]),
+    primary_strict_bootstrap_target_B = as.integer(primary_row_i$strict_bootstrap_target_B[1L]),
+    primary_strict_bootstrap_success_B = as.integer(primary_row_i$strict_bootstrap_success_B[1L]),
+    primary_strict_bootstrap_target_met = as.logical(primary_row_i$strict_bootstrap_target_met[1L]),
+    primary_strict_p_value_boundary = as.numeric(primary_row_i$strict_p_value_boundary[1L]),
+    primary_strict_decision = as.character(primary_row_i$strict_decision[1L]),
+    primary_strict_reading_role = as.character(primary_row_i$strict_reading_role[1L]),
+    primary_relaxed_observed_evaluable = as.logical(primary_row_i$relaxed_observed_evaluable[1L]),
+    primary_relaxed_bootstrap_target_B = as.integer(primary_row_i$relaxed_bootstrap_target_B[1L]),
+    primary_relaxed_bootstrap_success_B = as.integer(primary_row_i$relaxed_bootstrap_success_B[1L]),
+    primary_relaxed_bootstrap_target_met = as.logical(primary_row_i$relaxed_bootstrap_target_met[1L]),
+    primary_relaxed_p_value_boundary = as.numeric(primary_row_i$relaxed_p_value_boundary[1L]),
+    primary_relaxed_decision = as.character(primary_row_i$relaxed_decision[1L]),
+    primary_relaxed_reading_role = as.character(primary_row_i$relaxed_reading_role[1L]),
     primary_note = as.character(primary_row_i$note[1L]),
     step4_bundle_path = normalizePath(step4_bundle_paths[[ds]], winslash = "/", mustWork = FALSE),
     step5_bundle_path = normalizePath(step5_bundle_paths[[ds]], winslash = "/", mustWork = FALSE),
@@ -2072,11 +2236,14 @@ for (ds in dataset_labels) {
       alternative_model_engine = "flexsurvcure::flexsurvcure",
       cox_used_in_step6 = FALSE,
       boundary_statistic = "d_obs = max(0, 2 * (logLik_alt - logLik_null))",
-      primary_pvalue_calibration = "null-based parametric bootstrap",
+      strict_rule = "Observed and bootstrap refits must be stable: fit_ok + converged + no instability warning + finite logLik.",
+      relaxed_rule = "Observed and bootstrap refits may be unstable, but must have fit_ok + converged + finite logLik. Relaxed results are exploratory only.",
       alpha = boundary_alpha,
       censoring_bootstrap_method = censoring_bootstrap_method,
-      bootstrap_success_target_primary = bootstrap_success_target_primary,
-      bootstrap_success_target_sensitivity = bootstrap_success_target_sensitivity,
+      strict_bootstrap_success_target_primary = strict_bootstrap_success_target_primary,
+      strict_bootstrap_success_target_sensitivity = strict_bootstrap_success_target_sensitivity,
+      relaxed_bootstrap_success_target_primary = relaxed_bootstrap_success_target_primary,
+      relaxed_bootstrap_success_target_sensitivity = relaxed_bootstrap_success_target_sensitivity,
       bootstrap_max_attempt_multiplier = bootstrap_max_attempt_multiplier
     ),
     step5_primary_selection = list(
