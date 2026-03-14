@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reports</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.6;
+    }
+    h1 { margin-bottom: 8px; }
+    p { color: #555; }
+    ul { padding-left: 20px; }
+    li { margin: 8px 0; }
+    a { text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>📚 보고서 목록</h1>
+  <p><code>2.Reports HTML</code> 폴더 안의 HTML 파일을 자동으로 불러옵니다.</p>
+
+  <ul id="report-list">
+    <li>불러오는 중...</li>
+  </ul>
+
+  <script>
+    const owner = "IDOJI";
+    const repo = "bayesian-cure-model-chrp-transition";
+    const branch = "main";
+    const folder = "2.Reports HTML";
+
+    const apiFolderPath = folder.split("/").map(encodeURIComponent).join("/");
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${apiFolderPath}?ref=${encodeURIComponent(branch)}`;
+    const pagesBase = `https://${owner.toLowerCase()}.github.io/${repo}/`;
+
+    function encodePath(path) {
+      return path.split("/").map(encodeURIComponent).join("/");
+    }
+
+    async function loadReports() {
+      const list = document.getElementById("report-list");
+
+      try {
+        const response = await fetch(apiUrl, {
+          headers: { "Accept": "application/vnd.github+json" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`API 요청 실패: ${response.status}`);
+        }
+
+        const items = await response.json();
+
+        const htmlFiles = items
+          .filter(item => item.type === "file" && item.name.toLowerCase().endsWith(".html"))
+          .sort((a, b) => b.name.localeCompare(a.name, "ko"));
+
+        if (htmlFiles.length === 0) {
+          list.innerHTML = "<li>HTML 파일이 없습니다.</li>";
+          return;
+        }
+
+        list.innerHTML = htmlFiles.map(file => {
+          const pageUrl = pagesBase + encodePath(file.path);
+          return `<li><a href="${pageUrl}" target="_blank" rel="noopener">${file.name}</a></li>`;
+        }).join("");
+      } catch (error) {
+        list.innerHTML = `<li>목록을 불러오지 못했습니다: ${error.message}</li>`;
+      }
+    }
+
+    loadReports();
+  </script>
+</body>
+</html>
