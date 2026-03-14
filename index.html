@@ -3,30 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Reports</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 900px;
-      margin: 40px auto;
-      padding: 0 16px;
-      line-height: 1.6;
-    }
-    h1 { margin-bottom: 8px; }
-    p { color: #555; }
-    ul { padding-left: 20px; }
-    li { margin: 8px 0; }
-    a { text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
+  <title>최신 보고서로 이동 중...</title>
 </head>
 <body>
-  <h1>📚 보고서 목록</h1>
-  <p><code>2.Reports HTML</code> 폴더 안의 HTML 파일을 자동으로 불러옵니다.</p>
-
-  <ul id="report-list">
-    <li>불러오는 중...</li>
-  </ul>
+  <p>최신 보고서로 이동 중...</p>
 
   <script>
     const owner = "IDOJI";
@@ -42,9 +22,20 @@
       return path.split("/").map(encodeURIComponent).join("/");
     }
 
-    async function loadReports() {
-      const list = document.getElementById("report-list");
+    function getDateValue(filename) {
+      const m = filename.match(/(\d{2,4})년도\s*(\d{1,2})월\s*(\d{1,2})일/);
+      if (!m) return -1;
 
+      let year = Number(m[1]);
+      if (year < 100) year += 2000;
+
+      const month = Number(m[2]);
+      const day = Number(m[3]);
+
+      return new Date(year, month - 1, day).getTime();
+    }
+
+    async function redirectToLatestReport() {
       try {
         const response = await fetch(apiUrl, {
           headers: { "Accept": "application/vnd.github+json" }
@@ -56,25 +47,30 @@
 
         const items = await response.json();
 
-        const htmlFiles = items
-          .filter(item => item.type === "file" && item.name.toLowerCase().endsWith(".html"))
-          .sort((a, b) => b.name.localeCompare(a.name, "ko"));
+        const htmlFiles = items.filter(
+          item => item.type === "file" && item.name.toLowerCase().endsWith(".html")
+        );
 
         if (htmlFiles.length === 0) {
-          list.innerHTML = "<li>HTML 파일이 없습니다.</li>";
-          return;
+          throw new Error("HTML 파일이 없습니다.");
         }
 
-        list.innerHTML = htmlFiles.map(file => {
-          const pageUrl = pagesBase + encodePath(file.path);
-          return `<li><a href="${pageUrl}" target="_blank" rel="noopener">${file.name}</a></li>`;
-        }).join("");
+        htmlFiles.sort((a, b) => {
+          const da = getDateValue(a.name);
+          const db = getDateValue(b.name);
+
+          if (da !== db) return db - da;
+          return b.name.localeCompare(a.name, "ko");
+        });
+
+        const latestUrl = pagesBase + encodePath(htmlFiles[0].path);
+        window.location.replace(latestUrl);
       } catch (error) {
-        list.innerHTML = `<li>목록을 불러오지 못했습니다: ${error.message}</li>`;
+        document.body.innerHTML = `<p>최신 보고서를 찾지 못했습니다: ${error.message}</p>`;
       }
     }
 
-    loadReports();
+    redirectToLatestReport();
   </script>
 </body>
 </html>
