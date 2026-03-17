@@ -1,853 +1,697 @@
-# 🔴 Configure: 로컬 경로와 분석 스위치 ===============================
+# 🔴 설정: 경로와 핵심 옵션 ===============================
+script_name <- "step1_plain_km"
+script_version <- "v1.0.0"
 
-DATA_PATH <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
-EXPORT_PATH <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦1.Step1_KM/attachments'
+data_path <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
+export_path <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦1.Step1_KM/attachments'
 
-FILE_PREFIX <- "step1_plainkm"
-YEAR_GRID <- 1:10
-DATASET_BRANCHES <- c("merged", "PNU", "SNU")
-SUBGROUP_VARS <- c("sex_fact")
-KM_CONF_TYPE <- "log-log"
-MAX_UNIQUE_LEVELS_FOR_GROUPED_KM <- 10L
-SAVE_PNG <- TRUE
-INSTALL_MISSING_PACKAGES <- FALSE
-SEED <- 20260315
+site_pnu_values <- c("PNU")
+site_snu_values <- c("SNU")  # 예: 실제 라벨이 CHR-P라면 c("SNU", "CHR-P")로 수정
+time_grid_years <- 1:10
+days_per_year <- 365.25
 
-# 🔴 Prepare: 패키지와 전역 옵션 초기화 ===============================
+transition_code <- 1L
+right_censor_code <- 0L
+remission_code <- 2L
+allowed_status_codes <- c(right_censor_code, transition_code, remission_code)
 
-## 🟠 Load: 필요한 패키지 ===============================
+conf_type_km <- "log-log"
+missing_subgroup_label <- "(Missing)"
+subgroup_specs <- c(sex = "sex_fact")  # overall만 원하면 character(0)로 수정
+plot_dpi <- 300
 
-load_required_packages <- function(pkgs, install_missing = FALSE) {
-  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing_pkgs) > 0L) {
-    if (!install_missing) {
-      stop(
-        sprintf(
-          "다음 패키지가 설치되어 있지 않습니다: %s\nINSTALL_MISSING_PACKAGES <- TRUE 로 바꾸거나 수동 설치 후 다시 실행하세요.",
-          paste(missing_pkgs, collapse = ", ")
-        ),
-        call. = FALSE
-      )
-    }
-    install.packages(missing_pkgs, repos = "https://cloud.r-project.org")
-  }
-  
-  invisible(lapply(pkgs, library, character.only = TRUE))
+# 🟠 준비: 패키지와 실행 옵션 ===============================
+required_packages <- c("survival", "ggplot2")
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+if (length(missing_packages) > 0L) {
+  stop(
+    "다음 패키지를 먼저 설치하세요: ",
+    paste(missing_packages, collapse = ", "),
+    call. = FALSE
+  )
 }
 
-required_pkgs <- c(
-  "readr",
-  "dplyr",
-  "tidyr",
-  "tibble",
-  "survival",
-  "ggplot2"
-)
-
-load_required_packages(required_pkgs, install_missing = INSTALL_MISSING_PACKAGES)
+invisible(lapply(required_packages, function(pkg) {
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
 
 options(stringsAsFactors = FALSE)
-options(dplyr.summarise.inform = FALSE)
-options(scipen = 999)
-
-set.seed(SEED)
-
-if (!dir.exists(EXPORT_PATH)) {
-  dir.create(EXPORT_PATH, recursive = TRUE, showWarnings = FALSE)
+if (!file.exists(data_path)) {
+  stop("data_path에 해당 파일이 없습니다: ", data_path, call. = FALSE)
+}
+if (!dir.exists(export_path)) {
+  dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
 }
 
-EXPORT_PATH <- normalizePath(EXPORT_PATH, winslash = "/", mustWork = FALSE)
-
-# 🔴 Define: Step1용 보조 함수들 ===============================
-
-## 🟠 Create: 경로와 파일명 도우미 ===============================
-
-sanitize_filename <- function(x) {
-  x <- gsub("[^A-Za-z0-9_\\-]+", "_", x)
-  x <- gsub("_+", "_", x)
-  x <- gsub("^_|_$", "", x)
-  ifelse(nchar(x) == 0, "unnamed", x)
+# 🔴 함수: 입력 검증과 KM 추출 ===============================
+## 🟠 함수: 공통 유틸리티 정의 ===============================
+collapse_value <- function(x) {
+  x <- x[!is.na(x) & nzchar(as.character(x))]
+  if (length(x) == 0L) return("")
+  paste(x, collapse = "; ")
 }
 
-make_output_path <- function(stem, ext) {
-  file.path(EXPORT_PATH, paste0(FILE_PREFIX, "_", stem, ".", ext))
+clamp01 <- function(x) {
+  pmin(pmax(x, 0), 1)
 }
 
-analysis_csv_path <- make_output_path("analysis_dataset", "csv")
-qc_overview_csv_path <- make_output_path("qc_dataset_overview", "csv")
-qc_status_csv_path <- make_output_path("qc_status_distribution", "csv")
-qc_missing_csv_path <- make_output_path("qc_missingness", "csv")
-km_yearly_csv_path <- make_output_path("km_yearly_summary", "csv")
-km_curve_csv_path <- make_output_path("km_curve_data", "csv")
-km_registry_csv_path <- make_output_path("km_registry", "csv")
-km_bundle_rds_path <- make_output_path("km_bundle", "rds")
-overall_png_path <- make_output_path("km_overall_curves", "png")
-subgroup_png_path <- make_output_path("km_subgroup_curves", "png")
-manifest_csv_path <- make_output_path("output_manifest", "csv")
-
-## 🟠 Validate: 입력 데이터와 subgroup 설정 ===============================
-
-assert_required_columns <- function(df, required_cols) {
-  missing_cols <- setdiff(required_cols, names(df))
-  if (length(missing_cols) > 0L) {
-    stop(
-      sprintf("필수 컬럼이 없습니다: %s", paste(missing_cols, collapse = ", ")),
-      call. = FALSE
-    )
-  }
-}
-
-resolve_dataset_branches <- function(df, requested_branches) {
-  available_sites <- sort(unique(as.character(df$site)))
-  requested_branches <- unique(requested_branches)
-  
-  keep_merged <- any(tolower(requested_branches) == "merged")
-  requested_sites <- requested_branches[tolower(requested_branches) != "merged"]
-  
-  missing_sites <- setdiff(requested_sites, available_sites)
-  if (length(missing_sites) > 0L) {
-    warning(
-      sprintf("다음 DATASET_BRANCHES 값은 site에서 찾지 못해 제외합니다: %s", paste(missing_sites, collapse = ", ")),
-      call. = FALSE
-    )
-  }
-  
-  resolved <- c()
-  if (keep_merged) {
-    resolved <- c(resolved, "merged")
-  }
-  resolved <- c(resolved, intersect(requested_sites, available_sites))
-  resolved <- unique(resolved)
-  
-  if (length(resolved) == 0L) {
-    stop("유효한 DATASET_BRANCHES가 없습니다. DATASET_BRANCHES 설정을 확인하세요.", call. = FALSE)
-  }
-  
-  resolved
-}
-
-resolve_subgroup_vars <- function(df, subgroup_vars, max_unique_levels = 10L) {
-  resolved <- character(0)
-  
-  if (length(subgroup_vars) == 0L) {
-    return(resolved)
-  }
-  
-  for (var in subgroup_vars) {
-    if (!var %in% names(df)) {
-      warning(sprintf("SUBGROUP_VARS의 '%s' 컬럼이 없어 제외합니다.", var), call. = FALSE)
-      next
-    }
-    
-    non_missing <- df[[var]][!is.na(df[[var]])]
-    
-    if (length(non_missing) == 0L) {
-      warning(sprintf("SUBGROUP_VARS의 '%s'는 전부 NA라 제외합니다.", var), call. = FALSE)
-      next
-    }
-    
-    n_unique <- dplyr::n_distinct(non_missing)
-    
-    if (is.numeric(df[[var]]) && n_unique > max_unique_levels) {
-      warning(
-        sprintf(
-          "SUBGROUP_VARS의 '%s'는 numeric이고 고유값이 %d개라 plain grouped KM에 부적절하여 제외합니다.",
-          var, n_unique
-        ),
-        call. = FALSE
-      )
-      next
-    }
-    
-    resolved <- c(resolved, var)
-  }
-  
-  unique(resolved)
-}
-
-## 🟠 Transform: Step1 분석용 survival 데이터셋 ===============================
-
-build_analysis_dataset <- function(raw_df) {
-  required_cols <- c("id", "site", "days_followup", "status_num")
-  assert_required_columns(raw_df, required_cols)
-  
-  dat <- raw_df %>%
-    dplyr::mutate(
-      id = as.character(.data$id),
-      site = as.character(.data$site),
-      subject_key = paste(.data$site, .data$id, sep = "::"),
-      days_followup = as.numeric(.data$days_followup),
-      status_num = as.integer(.data$status_num),
-      status_transition_only = dplyr::case_when(
-        .data$status_num == 1L ~ "transition",
-        .data$status_num == 2L ~ "remission_as_censor",
-        .data$status_num == 0L ~ "right_censoring",
-        TRUE ~ NA_character_
-      ),
-      event_transition = dplyr::if_else(.data$status_num == 1L, 1L, 0L, missing = NA_integer_),
-      time_years = .data$days_followup / 365.25
-    )
-  
-  if (anyNA(dat$subject_key)) {
-    stop("site + id 기반 subject_key에 NA가 있습니다. id/site 컬럼을 확인하세요.", call. = FALSE)
-  }
-  
-  dup_keys <- dat %>%
-    dplyr::count(.data$subject_key, name = "n_dup") %>%
-    dplyr::filter(.data$n_dup > 1L)
-  
-  if (nrow(dup_keys) > 0L) {
-    stop(
-      sprintf(
-        "site + id 기준 중복 키가 발견되었습니다. 예시: %s",
-        paste(utils::head(dup_keys$subject_key, 5L), collapse = ", ")
-      ),
-      call. = FALSE
-    )
-  }
-  
-  if (anyNA(dat$days_followup)) {
-    stop("days_followup에 NA가 있습니다. Step1 전에 결측을 처리하세요.", call. = FALSE)
-  }
-  
-  if (any(dat$days_followup < 0, na.rm = TRUE)) {
-    stop("days_followup에 음수가 있습니다. 데이터 QC를 확인하세요.", call. = FALSE)
-  }
-  
-  if (anyNA(dat$status_num)) {
-    stop("status_num에 NA가 있습니다. Step1 전에 결측을 처리하세요.", call. = FALSE)
-  }
-  
-  allowed_status <- c(0L, 1L, 2L)
-  if (any(!dat$status_num %in% allowed_status, na.rm = TRUE)) {
-    bad_vals <- sort(unique(dat$status_num[!dat$status_num %in% allowed_status]))
-    stop(
-      sprintf("status_num에 허용되지 않은 값이 있습니다: %s", paste(bad_vals, collapse = ", ")),
-      call. = FALSE
-    )
-  }
-  
-  dat
-}
-
-subset_dataset_branch <- function(df, dataset_label) {
-  if (tolower(dataset_label) == "merged") {
-    return(df)
-  }
-  df %>% dplyr::filter(.data$site == dataset_label)
-}
-
-prepare_grouped_data <- function(df, group_var) {
-  if (identical(group_var, "overall")) {
-    return(df)
-  }
-  
-  df %>%
-    dplyr::filter(!is.na(.data[[group_var]])) %>%
-    dplyr::mutate(`.__group__` = droplevels(as.factor(.data[[group_var]])))
-}
-
-## 🟠 Fit: plain KM 적합 ===============================
-
-fit_plain_km <- function(df, group_var = "overall", conf_type = "log-log") {
-  if (identical(group_var, "overall")) {
-    return(
-      survival::survfit(
-        survival::Surv(time_years, event_transition) ~ 1,
-        data = df,
-        conf.type = conf_type
-      )
-    )
-  }
-  
-  df_fit <- prepare_grouped_data(df, group_var)
-  
-  survival::survfit(
-    survival::Surv(time_years, event_transition) ~ `.__group__`,
-    data = df_fit,
-    conf.type = conf_type
+write_csv_utf8 <- function(x, path) {
+  utils::write.csv(
+    x,
+    file = path,
+    row.names = FALSE,
+    fileEncoding = "UTF-8",
+    na = ""
   )
 }
 
-## 🟠 Extract: yearly summary와 curve table ===============================
-
-vec_or_default <- function(x, n, default = NA_real_) {
+expand_component <- function(x, default, n_out) {
   if (is.null(x) || length(x) == 0L) {
-    return(rep(default, n))
+    return(rep(default, n_out))
   }
-  x
+  rep_len(x, n_out)
 }
 
-parse_strata_to_level <- function(strata_raw, group_var) {
-  if (identical(group_var, "overall")) {
-    return(rep("all", length(strata_raw)))
-  }
-  sub("^[^=]+=", "", strata_raw)
-}
-
-build_support_lookup <- function(df_used, group_var) {
-  if (identical(group_var, "overall")) {
+extract_survfit_table <- function(fit, times_vec) {
+  if (length(times_vec) == 0L) {
     return(
-      tibble::tibble(
-        subgroup_level = "all",
-        n_subjects = nrow(df_used),
-        n_transition = sum(df_used$event_transition == 1L, na.rm = TRUE),
-        n_right_censor = sum(df_used$status_num == 0L, na.rm = TRUE),
-        n_remission = sum(df_used$status_num == 2L, na.rm = TRUE),
-        n_any_censor = sum(df_used$event_transition == 0L, na.rm = TRUE),
-        max_followup_years = max(df_used$time_years, na.rm = TRUE),
-        max_event_years = if (any(df_used$event_transition == 1L, na.rm = TRUE)) {
-          max(df_used$time_years[df_used$event_transition == 1L], na.rm = TRUE)
-        } else {
-          NA_real_
-        }
+      data.frame(
+        time_year = numeric(0),
+        survival = numeric(0),
+        lower = numeric(0),
+        upper = numeric(0),
+        n_risk = integer(0),
+        n_event = integer(0),
+        n_censor = integer(0),
+        stringsAsFactors = FALSE
       )
     )
   }
   
-  df_used %>%
-    dplyr::mutate(subgroup_level = as.character(`.__group__`)) %>%
-    dplyr::group_by(.data$subgroup_level) %>%
-    dplyr::summarise(
-      n_subjects = dplyr::n(),
-      n_transition = sum(.data$event_transition == 1L, na.rm = TRUE),
-      n_right_censor = sum(.data$status_num == 0L, na.rm = TRUE),
-      n_remission = sum(.data$status_num == 2L, na.rm = TRUE),
-      n_any_censor = sum(.data$event_transition == 0L, na.rm = TRUE),
-      max_followup_years = max(.data$time_years, na.rm = TRUE),
-      max_event_years = if (any(.data$event_transition == 1L, na.rm = TRUE)) {
-        max(.data$time_years[.data$event_transition == 1L], na.rm = TRUE)
-      } else {
-        NA_real_
-      }
-    )
-}
-
-extract_km_timepoint_summary <- function(fit, df_used, dataset_label, group_var, time_grid, fit_key) {
-  support_lookup <- build_support_lookup(df_used, group_var)
-  s <- summary(fit, times = time_grid, extend = TRUE)
+  s <- summary(fit, times = times_vec, extend = TRUE)
+  n_out <- length(times_vec)
   
-  n_rows <- length(s$time)
+  surv_vals <- clamp01(expand_component(s$surv, 1, n_out))
+  lower_vals <- expand_component(s$lower, NA_real_, n_out)
+  upper_vals <- expand_component(s$upper, NA_real_, n_out)
   
-  out <- tibble::tibble(
-    strata_raw = if (!is.null(s$strata)) as.character(s$strata) else rep("overall=all", n_rows),
-    time_years = s$time,
-    survival_prob = s$surv,
-    lcl = vec_or_default(s$lower, n_rows, default = NA_real_),
-    ucl = vec_or_default(s$upper, n_rows, default = NA_real_),
-    n_risk = vec_or_default(s$n.risk, n_rows, default = NA_real_),
-    n_event = vec_or_default(s$n.event, n_rows, default = NA_real_),
-    n_censor = vec_or_default(s$n.censor, n_rows, default = NA_real_)
-  ) %>%
-    dplyr::mutate(
-      dataset = dataset_label,
-      data_cut = "full",
-      group_var = group_var,
-      subgroup_level = parse_strata_to_level(.data$strata_raw, group_var),
-      fit_key = fit_key,
-      model_class = "plain_KM",
-      source_type = "cohort_curve"
-    ) %>%
-    dplyr::left_join(support_lookup, by = "subgroup_level") %>%
-    dplyr::mutate(
-      risk_prob = 1 - .data$survival_prob,
-      risk_lcl = ifelse(is.na(.data$ucl), NA_real_, pmax(0, 1 - .data$ucl)),
-      risk_ucl = ifelse(is.na(.data$lcl), NA_real_, pmin(1, 1 - .data$lcl)),
-      is_extended_past_last_followup = .data$time_years > .data$max_followup_years,
-      is_extended_past_last_event = ifelse(
-        is.na(.data$max_event_years),
-        .data$time_years > 0,
-        .data$time_years > .data$max_event_years
-      ),
-      stage1_support_flag = dplyr::case_when(
-        .data$is_extended_past_last_followup ~ "beyond_last_followup",
-        .data$is_extended_past_last_event ~ "beyond_last_event",
-        TRUE ~ "within_observed_event_range"
-      ),
-      panel_label = if (identical(group_var, "overall")) {
-        dataset_label
-      } else {
-        paste(dataset_label, group_var, subgroup_level, sep = " | ")
-      }
-    ) %>%
-    dplyr::arrange(.data$subgroup_level, .data$time_years)
+  lower_vals[is.na(lower_vals)] <- surv_vals[is.na(lower_vals)]
+  upper_vals[is.na(upper_vals)] <- surv_vals[is.na(upper_vals)]
+  
+  out <- data.frame(
+    time_year = times_vec,
+    survival = clamp01(surv_vals),
+    lower = clamp01(lower_vals),
+    upper = clamp01(upper_vals),
+    n_risk = as.integer(round(expand_component(s$n.risk, 0, n_out))),
+    n_event = as.integer(round(expand_component(s$n.event, 0, n_out))),
+    n_censor = as.integer(round(expand_component(s$n.censor, 0, n_out))),
+    stringsAsFactors = FALSE
+  )
   
   out
 }
 
-extract_km_curve_data <- function(fit, df_used, dataset_label, group_var, fit_key) {
-  support_lookup <- build_support_lookup(df_used, group_var)
-  s <- summary(fit, censored = TRUE)
-  
-  n_rows <- length(s$time)
-  
-  curve_df <- tibble::tibble(
-    strata_raw = if (!is.null(s$strata)) as.character(s$strata) else rep("overall=all", n_rows),
-    time_years = vec_or_default(s$time, n_rows, default = numeric(0)),
-    survival_prob = vec_or_default(s$surv, n_rows, default = numeric(0)),
-    lcl = vec_or_default(s$lower, n_rows, default = numeric(0)),
-    ucl = vec_or_default(s$upper, n_rows, default = numeric(0)),
-    n_risk = vec_or_default(s$n.risk, n_rows, default = numeric(0)),
-    n_event = vec_or_default(s$n.event, n_rows, default = numeric(0)),
-    n_censor = vec_or_default(s$n.censor, n_rows, default = numeric(0))
+## 🟠 함수: 품질점검 행 생성 ===============================
+make_qc_row <- function(df, qc_scope, dataset_name) {
+  data.frame(
+    qc_scope = qc_scope,
+    dataset = dataset_name,
+    n_rows = nrow(df),
+    n_unique_subject_uid = length(unique(df$subject_uid)),
+    n_duplicate_subject_uid = sum(duplicated(df$subject_uid)),
+    n_transition_raw = sum(df$status_num == transition_code, na.rm = TRUE),
+    n_right_censor_raw = sum(df$status_num == right_censor_code, na.rm = TRUE),
+    n_remission_raw = sum(df$status_num == remission_code, na.rm = TRUE),
+    n_transition_analysis = sum(df$event_transition == 1L, na.rm = TRUE),
+    n_censor_analysis = sum(df$event_transition == 0L, na.rm = TRUE),
+    followup_min_days = min(df$days_followup, na.rm = TRUE),
+    followup_median_days = stats::median(df$days_followup, na.rm = TRUE),
+    followup_max_days = max(df$days_followup, na.rm = TRUE),
+    followup_min_years = min(df$time_years, na.rm = TRUE),
+    followup_median_years = stats::median(df$time_years, na.rm = TRUE),
+    followup_max_years = max(df$time_years, na.rm = TRUE),
+    site_levels = collapse_value(sort(unique(df$site))),
+    stringsAsFactors = FALSE
   )
+}
+
+## 🟠 함수: 단일 곡선 KM 적합 ===============================
+fit_km_curve <- function(df_curve, curve_id, dataset_name, subgroup_name, subgroup_var, subgroup_level) {
+  n_total <- nrow(df_curve)
+  n_event <- sum(df_curve$event_transition == 1L, na.rm = TRUE)
+  n_censor <- sum(df_curve$event_transition == 0L, na.rm = TRUE)
+  n_right_censor <- sum(df_curve$status_num == right_censor_code, na.rm = TRUE)
+  n_remission <- sum(df_curve$status_num == remission_code, na.rm = TRUE)
   
-  if (nrow(curve_df) > 0L) {
-    curve_df <- curve_df %>%
-      dplyr::mutate(
-        subgroup_level = parse_strata_to_level(.data$strata_raw, group_var),
-        row_type = "observed"
-      )
+  max_followup_years <- max(df_curve$time_years, na.rm = TRUE)
+  min_followup_years <- min(df_curve$time_years, na.rm = TRUE)
+  median_followup_years <- stats::median(df_curve$time_years, na.rm = TRUE)
+  
+  last_event_time_years <- if (n_event > 0L) {
+    max(df_curve$time_years[df_curve$event_transition == 1L], na.rm = TRUE)
   } else {
-    curve_df <- tibble::tibble(
-      strata_raw = character(0),
-      time_years = numeric(0),
-      survival_prob = numeric(0),
-      lcl = numeric(0),
-      ucl = numeric(0),
-      n_risk = numeric(0),
-      n_event = numeric(0),
-      n_censor = numeric(0),
-      subgroup_level = character(0),
-      row_type = character(0)
-    )
+    NA_real_
   }
   
-  initial_df <- support_lookup %>%
-    dplyr::mutate(
-      strata_raw = if (identical(group_var, "overall")) {
-        "overall=all"
-      } else {
-        paste0(group_var, "=", .data$subgroup_level)
-      },
-      time_years = 0,
-      survival_prob = 1,
-      lcl = 1,
-      ucl = 1,
-      n_risk = .data$n_subjects,
-      n_event = 0,
-      n_censor = 0,
-      row_type = "initial"
-    ) %>%
-    dplyr::select(
-      .data$strata_raw, .data$time_years, .data$survival_prob, .data$lcl, .data$ucl,
-      .data$n_risk, .data$n_event, .data$n_censor, .data$subgroup_level, .data$row_type
-    )
-  
-  out <- dplyr::bind_rows(initial_df, curve_df) %>%
-    dplyr::mutate(
-      dataset = dataset_label,
-      data_cut = "full",
-      group_var = group_var,
-      fit_key = fit_key,
-      model_class = "plain_KM",
-      source_type = "cohort_curve",
-      risk_prob = 1 - .data$survival_prob,
-      panel_label = if (identical(group_var, "overall")) {
-        dataset_label
-      } else {
-        paste(dataset_label, group_var, subgroup_level, sep = " | ")
-      },
-      row_type = factor(.data$row_type, levels = c("initial", "observed"))
-    ) %>%
-    dplyr::arrange(.data$subgroup_level, .data$time_years, .data$row_type)
-  
-  out
-}
-
-build_registry_row <- function(df_dataset, df_fit, dataset_label, group_var, fit_key, bundle_slot, subgroup_levels) {
-  tibble::tibble(
-    fit_key = fit_key,
-    dataset = dataset_label,
-    data_cut = "full",
-    group_var = group_var,
-    bundle_slot = bundle_slot,
-    bundle_name = fit_key,
-    bundle_rds_path = km_bundle_rds_path,
-    n_subjects_dataset = nrow(df_dataset),
-    n_subjects_fit = nrow(df_fit),
-    n_missing_group_var = if (identical(group_var, "overall")) 0L else sum(is.na(df_dataset[[group_var]])),
-    n_transition_fit = sum(df_fit$event_transition == 1L, na.rm = TRUE),
-    n_right_censor_fit = sum(df_fit$status_num == 0L, na.rm = TRUE),
-    n_remission_fit = sum(df_fit$status_num == 2L, na.rm = TRUE),
-    n_any_censor_fit = sum(df_fit$event_transition == 0L, na.rm = TRUE),
-    n_strata = if (identical(group_var, "overall")) 1L else dplyr::n_distinct(df_fit$.__group__),
-    subgroup_levels = subgroup_levels,
-    km_conf_type = KM_CONF_TYPE,
-    year_grid = paste(YEAR_GRID, collapse = "|"),
-    created_in_step = "Step1"
-  )
-}
-
-## 🟠 Plot: curve table 기반 KM 그림 ===============================
-
-make_overall_km_plot <- function(curve_df) {
-  ggplot2::ggplot(
-    curve_df,
-    ggplot2::aes(
-      x = .data$time_years,
-      y = .data$survival_prob,
-      color = .data$dataset,
-      fill = .data$dataset,
-      group = interaction(.data$dataset, .data$subgroup_level)
-    )
-  ) +
-    ggplot2::geom_ribbon(
-      ggplot2::aes(ymin = .data$lcl, ymax = .data$ucl),
-      alpha = 0.18,
-      linewidth = 0,
-      show.legend = FALSE
-    ) +
-    ggplot2::geom_step(linewidth = 0.8) +
-    ggplot2::facet_wrap(~dataset, scales = "free_y") +
-    ggplot2::scale_y_continuous(limits = c(0, 1)) +
-    ggplot2::labs(
-      title = "Step1 Plain KM: 전체 cohort별 Kaplan-Meier 곡선",
-      x = "추적시간 (년)",
-      y = "추정 생존확률"
-    ) +
-    ggplot2::theme_bw(base_size = 11) +
-    ggplot2::theme(
-      legend.position = "none",
-      plot.title = ggplot2::element_text(face = "bold"),
-      strip.background = ggplot2::element_rect(fill = "grey95")
-    )
-}
-
-make_subgroup_km_plot <- function(curve_df) {
-  ggplot2::ggplot(
-    curve_df,
-    ggplot2::aes(
-      x = .data$time_years,
-      y = .data$survival_prob,
-      color = .data$subgroup_level,
-      fill = .data$subgroup_level,
-      group = interaction(.data$panel_label, .data$subgroup_level)
-    )
-  ) +
-    ggplot2::geom_ribbon(
-      ggplot2::aes(ymin = .data$lcl, ymax = .data$ucl),
-      alpha = 0.16,
-      linewidth = 0,
-      show.legend = FALSE
-    ) +
-    ggplot2::geom_step(linewidth = 0.8) +
-    ggplot2::facet_wrap(~panel_label, scales = "free_y") +
-    ggplot2::scale_y_continuous(limits = c(0, 1)) +
-    ggplot2::labs(
-      title = "Step1 Plain KM: subgroup별 Kaplan-Meier 곡선",
-      x = "추적시간 (년)",
-      y = "추정 생존확률",
-      color = "Subgroup"
-    ) +
-    ggplot2::theme_bw(base_size = 11) +
-    ggplot2::theme(
-      legend.position = "bottom",
-      plot.title = ggplot2::element_text(face = "bold"),
-      strip.background = ggplot2::element_rect(fill = "grey95")
-    )
-}
-
-# 🔴 Read: 원본 CSV를 불러와 Step1 분석 데이터셋 생성 ===============================
-
-## 🟠 Import: merged dataset 로딩 ===============================
-
-if (!file.exists(DATA_PATH)) {
-  stop(sprintf("DATA_PATH에 파일이 없습니다: %s", DATA_PATH), call. = FALSE)
-}
-
-raw_df <- readr::read_csv(
-  file = DATA_PATH,
-  show_col_types = FALSE,
-  progress = FALSE,
-  locale = readr::locale(encoding = "UTF-8")
-)
-
-## 🟠 Check: 필수 컬럼과 키 무결성 ===============================
-
-dat_analysis <- build_analysis_dataset(raw_df)
-dataset_branches_resolved <- resolve_dataset_branches(dat_analysis, DATASET_BRANCHES)
-subgroup_vars_resolved <- resolve_subgroup_vars(
-  dat_analysis,
-  SUBGROUP_VARS,
-  max_unique_levels = MAX_UNIQUE_LEVELS_FOR_GROUPED_KM
-)
-
-## 🟠 Export: analysis-ready 데이터와 QC 테이블 ===============================
-
-readr::write_csv(dat_analysis, analysis_csv_path, na = "")
-
-branch_stack <- dplyr::bind_rows(
-  lapply(dataset_branches_resolved, function(branch) {
-    subset_dataset_branch(dat_analysis, branch) %>%
-      dplyr::mutate(dataset = branch)
-  })
-)
-
-qc_dataset_overview <- branch_stack %>%
-  dplyr::group_by(.data$dataset) %>%
-  dplyr::summarise(
-    n_subjects = dplyr::n(),
-    n_unique_subject_key = dplyr::n_distinct(.data$subject_key),
-    n_transition = sum(.data$event_transition == 1L, na.rm = TRUE),
-    n_right_censor = sum(.data$status_num == 0L, na.rm = TRUE),
-    n_remission = sum(.data$status_num == 2L, na.rm = TRUE),
-    max_followup_years = max(.data$time_years, na.rm = TRUE),
-    median_followup_years = stats::median(.data$time_years, na.rm = TRUE)
-  ) %>%
-  dplyr::arrange(match(.data$dataset, dataset_branches_resolved))
-
-qc_status_distribution <- branch_stack %>%
-  dplyr::mutate(
-    status_label = dplyr::case_when(
-      .data$status_num == 0L ~ "right_censoring",
-      .data$status_num == 1L ~ "transition",
-      .data$status_num == 2L ~ "remission",
-      TRUE ~ "unknown"
-    )
-  ) %>%
-  dplyr::count(.data$dataset, .data$status_num, .data$status_label, name = "n") %>%
-  dplyr::arrange(.data$dataset, .data$status_num)
-
-qc_missingness <- tibble::tibble(
-  variable = names(dat_analysis),
-  n_missing = vapply(dat_analysis, function(x) sum(is.na(x)), numeric(1))
-) %>%
-  dplyr::arrange(dplyr::desc(.data$n_missing), .data$variable)
-
-readr::write_csv(qc_dataset_overview, qc_overview_csv_path, na = "")
-readr::write_csv(qc_status_distribution, qc_status_csv_path, na = "")
-readr::write_csv(qc_missingness, qc_missing_csv_path, na = "")
-
-# 🔴 Run: Step1 plain KM 적합과 요약 추출 ===============================
-
-## 🟠 Iterate: merged와 site branch별 KM 적합 ===============================
-
-km_overall <- list()
-km_by_group <- list()
-km_registry_rows <- list()
-km_yearly_rows <- list()
-km_curve_rows <- list()
-
-for (dataset_label in dataset_branches_resolved) {
-  dat_dataset <- subset_dataset_branch(dat_analysis, dataset_label)
-  
-  if (nrow(dat_dataset) == 0L) {
-    next
+  censored_after_last_event <- if (is.na(last_event_time_years)) {
+    n_censor
+  } else {
+    sum(df_curve$event_transition == 0L & df_curve$time_years > last_event_time_years, na.rm = TRUE)
   }
   
-  overall_key <- paste(sanitize_filename(dataset_label), "overall", sep = "__")
-  overall_fit <- fit_plain_km(
-    df = dat_dataset,
-    group_var = "overall",
-    conf_type = KM_CONF_TYPE
+  fit_obj <- survival::survfit(
+    survival::Surv(time_years, event_transition) ~ 1,
+    data = df_curve,
+    conf.type = conf_type_km
   )
   
-  km_overall[[overall_key]] <- overall_fit
+  n_risk_at_last_event <- if (is.na(last_event_time_years)) {
+    NA_integer_
+  } else {
+    as.integer(round(summary(fit_obj, times = last_event_time_years, extend = TRUE)$n.risk[1]))
+  }
   
-  km_registry_rows[[overall_key]] <- build_registry_row(
-    df_dataset = dat_dataset,
-    df_fit = dat_dataset,
-    dataset_label = dataset_label,
-    group_var = "overall",
-    fit_key = overall_key,
-    bundle_slot = "km_overall",
-    subgroup_levels = "all"
+  observed_times <- sort(unique(df_curve$time_years))
+  observed_times_positive <- observed_times[observed_times > 0]
+  
+  curve_points <- extract_survfit_table(fit_obj, observed_times_positive)
+  curve_data <- rbind(
+    data.frame(
+      time_year = 0,
+      survival = 1,
+      lower = 1,
+      upper = 1,
+      n_risk = as.integer(n_total),
+      n_event = 0L,
+      n_censor = 0L,
+      stringsAsFactors = FALSE
+    ),
+    curve_points
   )
   
-  km_yearly_rows[[overall_key]] <- extract_km_timepoint_summary(
-    fit = overall_fit,
-    df_used = dat_dataset,
-    dataset_label = dataset_label,
-    group_var = "overall",
-    time_grid = YEAR_GRID,
-    fit_key = overall_key
+  curve_data$curve_id <- curve_id
+  curve_data$dataset <- dataset_name
+  curve_data$subgroup_name <- subgroup_name
+  curve_data$subgroup_var <- subgroup_var
+  curve_data$subgroup_level <- subgroup_level
+  curve_data$risk <- 1 - curve_data$survival
+  curve_data$survival_lcl <- curve_data$lower
+  curve_data$survival_ucl <- curve_data$upper
+  curve_data$risk_lcl <- 1 - curve_data$upper
+  curve_data$risk_ucl <- 1 - curve_data$lower
+  curve_data$cum_event <- cumsum(curve_data$n_event)
+  curve_data$cum_censor <- cumsum(curve_data$n_censor)
+  curve_data$curve_label <- if (subgroup_name == "overall") {
+    paste0(dataset_name, " | overall")
+  } else {
+    paste0(dataset_name, " | ", subgroup_name, " | ", subgroup_level)
+  }
+  
+  yearly_points <- extract_survfit_table(fit_obj, time_grid_years)
+  yearly_points$curve_id <- curve_id
+  yearly_points$dataset <- dataset_name
+  yearly_points$subgroup_name <- subgroup_name
+  yearly_points$subgroup_var <- subgroup_var
+  yearly_points$subgroup_level <- subgroup_level
+  yearly_points$time_year_label <- paste0(yearly_points$time_year, "y")
+  yearly_points$S_KM <- yearly_points$survival
+  yearly_points$Risk_KM <- 1 - yearly_points$survival
+  yearly_points$S_KM_LCL <- yearly_points$lower
+  yearly_points$S_KM_UCL <- yearly_points$upper
+  yearly_points$Risk_KM_LCL <- 1 - yearly_points$upper
+  yearly_points$Risk_KM_UCL <- 1 - yearly_points$lower
+  yearly_points$time_supported_by_followup <- yearly_points$time_year <= max_followup_years
+  yearly_points$time_beyond_last_event <- if (is.na(last_event_time_years)) {
+    FALSE
+  } else {
+    yearly_points$time_year > last_event_time_years
+  }
+  yearly_points$n_total <- n_total
+  yearly_points$n_event_total <- n_event
+  yearly_points$n_censor_total <- n_censor
+  yearly_points$followup_max_years <- max_followup_years
+  yearly_points$last_event_time_years <- last_event_time_years
+  yearly_points <- yearly_points[
+    ,
+    c(
+      "curve_id", "dataset", "subgroup_name", "subgroup_var", "subgroup_level",
+      "time_year", "time_year_label",
+      "S_KM", "Risk_KM", "S_KM_LCL", "S_KM_UCL", "Risk_KM_LCL", "Risk_KM_UCL",
+      "n_risk", "n_event", "n_censor",
+      "time_supported_by_followup", "time_beyond_last_event",
+      "n_total", "n_event_total", "n_censor_total",
+      "followup_max_years", "last_event_time_years"
+    )
+  ]
+  
+  registry_row <- data.frame(
+    curve_id = curve_id,
+    dataset = dataset_name,
+    subgroup_name = subgroup_name,
+    subgroup_var = subgroup_var,
+    subgroup_level = subgroup_level,
+    n_total = n_total,
+    n_unique_subject_uid = length(unique(df_curve$subject_uid)),
+    n_event_transition = n_event,
+    n_censor_transition = n_censor,
+    n_right_censor_raw = n_right_censor,
+    n_remission_raw = n_remission,
+    followup_min_years = min_followup_years,
+    followup_median_years = median_followup_years,
+    followup_max_years = max_followup_years,
+    last_event_time_years = last_event_time_years,
+    n_risk_at_last_event = n_risk_at_last_event,
+    censored_after_last_event = censored_after_last_event,
+    event_fraction_transition = n_event / n_total,
+    censor_fraction_transition = n_censor / n_total,
+    stringsAsFactors = FALSE
   )
   
-  km_curve_rows[[overall_key]] <- extract_km_curve_data(
-    fit = overall_fit,
-    df_used = dat_dataset,
-    dataset_label = dataset_label,
-    group_var = "overall",
-    fit_key = overall_key
+  list(
+    fit = fit_obj,
+    registry = registry_row,
+    yearly = yearly_points,
+    curve_data = curve_data
+  )
+}
+
+# 🔴 입력: 생존분석용 데이터 구성 ===============================
+## 🟠 읽기: 병합 코호트 불러오기 ===============================
+raw_data <- utils::read.csv(
+  file = data_path,
+  stringsAsFactors = FALSE,
+  check.names = FALSE,
+  fileEncoding = "UTF-8-BOM"
+)
+
+if (nrow(raw_data) == 0L) {
+  stop("입력 CSV가 비어 있습니다.", call. = FALSE)
+}
+
+## 🟠 점검: 핵심 컬럼과 식별키 검증 ===============================
+required_columns <- c("id", "site", "days_followup", "status_num")
+missing_required_columns <- setdiff(required_columns, names(raw_data))
+if (length(missing_required_columns) > 0L) {
+  stop(
+    "필수 컬럼이 없습니다: ",
+    paste(missing_required_columns, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+if (length(subgroup_specs) > 0L && is.null(names(subgroup_specs))) {
+  stop("subgroup_specs는 이름이 있는 character 벡터여야 합니다.", call. = FALSE)
+}
+
+analysis_df <- raw_data
+analysis_df$id <- as.character(analysis_df$id)
+analysis_df$site <- trimws(as.character(analysis_df$site))
+analysis_df$site[analysis_df$site == ""] <- NA_character_
+
+analysis_df$days_followup <- suppressWarnings(as.numeric(analysis_df$days_followup))
+analysis_df$status_num <- suppressWarnings(as.integer(as.numeric(analysis_df$status_num)))
+
+if ("sex_fact" %in% names(analysis_df)) {
+  analysis_df$sex_fact <- trimws(as.character(analysis_df$sex_fact))
+  analysis_df$sex_fact[analysis_df$sex_fact == ""] <- NA_character_
+}
+
+if (!("sex_fact" %in% names(analysis_df)) && ("sex_num" %in% names(analysis_df))) {
+  sex_num_tmp <- suppressWarnings(as.integer(as.numeric(analysis_df$sex_num)))
+  analysis_df$sex_fact <- ifelse(
+    is.na(sex_num_tmp), NA_character_,
+    ifelse(sex_num_tmp == 0L, "Female",
+           ifelse(sex_num_tmp == 1L, "Male", NA_character_))
+  )
+}
+
+essential_missing <- is.na(analysis_df$id) |
+  is.na(analysis_df$site) |
+  is.na(analysis_df$days_followup) |
+  is.na(analysis_df$status_num)
+
+if (any(essential_missing)) {
+  stop(
+    "핵심 분석 변수(id/site/days_followup/status_num)에 결측이 있습니다. 결측 행 수: ",
+    sum(essential_missing),
+    call. = FALSE
+  )
+}
+
+if (any(!is.finite(analysis_df$days_followup))) {
+  stop("days_followup에 비유한(infinite/non-finite) 값이 있습니다.", call. = FALSE)
+}
+
+if (any(analysis_df$days_followup < 0)) {
+  stop("days_followup에 음수 값이 있습니다.", call. = FALSE)
+}
+
+unexpected_status_codes <- sort(setdiff(unique(analysis_df$status_num), allowed_status_codes))
+if (length(unexpected_status_codes) > 0L) {
+  stop(
+    "status_num에 허용되지 않은 코드가 있습니다: ",
+    paste(unexpected_status_codes, collapse = ", "),
+    call. = FALSE
+  )
+}
+
+analysis_df$subject_uid <- paste(analysis_df$site, analysis_df$id, sep = "||")
+if (any(duplicated(analysis_df$subject_uid))) {
+  stop(
+    "site + id 조합이 유일키가 아닙니다. 중복 subject_uid 수: ",
+    sum(duplicated(analysis_df$subject_uid)),
+    call. = FALSE
+  )
+}
+
+## 🟠 파생: 전이-전용 분석 변수 생성 ===============================
+analysis_df$time_years <- analysis_df$days_followup / days_per_year
+analysis_df$event_transition <- ifelse(analysis_df$status_num == transition_code, 1L, 0L)
+analysis_df$censor_reason_transition <- ifelse(
+  analysis_df$status_num == remission_code, "remission",
+  ifelse(analysis_df$status_num == right_censor_code, "right_censoring",
+         ifelse(analysis_df$status_num == transition_code, "event_transition", "unknown"))
+)
+
+analysis_df$site_std <- toupper(trimws(analysis_df$site))
+site_pnu_values_std <- toupper(site_pnu_values)
+site_snu_values_std <- toupper(site_snu_values)
+
+resolved_subgroup_specs <- subgroup_specs
+if (length(resolved_subgroup_specs) > 0L) {
+  keep_index <- logical(length(resolved_subgroup_specs))
+  names(keep_index) <- names(resolved_subgroup_specs)
+  
+  for (sg_name in names(resolved_subgroup_specs)) {
+    sg_var <- resolved_subgroup_specs[[sg_name]]
+    if (!sg_var %in% names(analysis_df)) {
+      warning("subgroup 변수 '", sg_var, "'가 없어 '", sg_name, "' 분석을 건너뜁니다.")
+      keep_index[sg_name] <- FALSE
+    } else {
+      analysis_df[[sg_var]] <- as.character(analysis_df[[sg_var]])
+      analysis_df[[sg_var]][is.na(analysis_df[[sg_var]]) | trimws(analysis_df[[sg_var]]) == ""] <- missing_subgroup_label
+      keep_index[sg_name] <- TRUE
+    }
+  }
+  
+  resolved_subgroup_specs <- resolved_subgroup_specs[keep_index]
+}
+
+dataset_list <- list(
+  PNU = analysis_df[analysis_df$site_std %in% site_pnu_values_std, , drop = FALSE],
+  SNU = analysis_df[analysis_df$site_std %in% site_snu_values_std, , drop = FALSE],
+  merged = analysis_df
+)
+
+if (nrow(dataset_list$PNU) == 0L) {
+  stop(
+    "PNU 분기가 비어 있습니다. site_pnu_values 설정을 확인하세요. 현재 site 값: ",
+    collapse_value(sort(unique(analysis_df$site))),
+    call. = FALSE
+  )
+}
+if (nrow(dataset_list$SNU) == 0L) {
+  stop(
+    "SNU 분기가 비어 있습니다. site_snu_values 설정을 확인하세요. 현재 site 값: ",
+    collapse_value(sort(unique(analysis_df$site))),
+    call. = FALSE
+  )
+}
+
+raw_qc <- make_qc_row(analysis_df, qc_scope = "raw_input", dataset_name = "all_rows")
+dataset_qc <- do.call(
+  rbind,
+  c(
+    list(raw_qc),
+    lapply(names(dataset_list), function(ds_name) {
+      make_qc_row(dataset_list[[ds_name]], qc_scope = "analysis_branch", dataset_name = ds_name)
+    })
+  )
+)
+
+# 🔴 연산: Plain KM와 시점 요약 생성 ===============================
+## 🟠 적합: 데이터셋별 overall 및 subgroup KM ===============================
+curve_counter <- 0L
+km_fits <- list()
+registry_list <- list()
+yearly_list <- list()
+curve_data_list <- list()
+
+for (dataset_name in names(dataset_list)) {
+  ds_df <- dataset_list[[dataset_name]]
+  
+  curve_counter <- curve_counter + 1L
+  curve_id <- sprintf("km_%03d", curve_counter)
+  overall_result <- fit_km_curve(
+    df_curve = ds_df,
+    curve_id = curve_id,
+    dataset_name = dataset_name,
+    subgroup_name = "overall",
+    subgroup_var = NA_character_,
+    subgroup_level = "overall"
   )
   
-  if (length(subgroup_vars_resolved) > 0L) {
-    for (group_var in subgroup_vars_resolved) {
-      dat_group <- prepare_grouped_data(dat_dataset, group_var)
+  km_fits[[curve_id]] <- overall_result$fit
+  registry_list[[length(registry_list) + 1L]] <- overall_result$registry
+  yearly_list[[length(yearly_list) + 1L]] <- overall_result$yearly
+  curve_data_list[[length(curve_data_list) + 1L]] <- overall_result$curve_data
+  
+  if (length(resolved_subgroup_specs) > 0L) {
+    for (sg_name in names(resolved_subgroup_specs)) {
+      sg_var <- resolved_subgroup_specs[[sg_name]]
+      subgroup_levels <- sort(unique(ds_df[[sg_var]]), na.last = TRUE)
       
-      if (nrow(dat_group) == 0L) {
-        next
+      for (sg_level in subgroup_levels) {
+        sg_df <- ds_df[ds_df[[sg_var]] == sg_level, , drop = FALSE]
+        if (nrow(sg_df) == 0L) next
+        
+        curve_counter <- curve_counter + 1L
+        curve_id <- sprintf("km_%03d", curve_counter)
+        
+        subgroup_result <- fit_km_curve(
+          df_curve = sg_df,
+          curve_id = curve_id,
+          dataset_name = dataset_name,
+          subgroup_name = sg_name,
+          subgroup_var = sg_var,
+          subgroup_level = as.character(sg_level)
+        )
+        
+        km_fits[[curve_id]] <- subgroup_result$fit
+        registry_list[[length(registry_list) + 1L]] <- subgroup_result$registry
+        yearly_list[[length(yearly_list) + 1L]] <- subgroup_result$yearly
+        curve_data_list[[length(curve_data_list) + 1L]] <- subgroup_result$curve_data
       }
-      
-      subgroup_key <- paste(sanitize_filename(dataset_label), sanitize_filename(group_var), sep = "__")
-      subgroup_fit <- fit_plain_km(
-        df = dat_dataset,
-        group_var = group_var,
-        conf_type = KM_CONF_TYPE
-      )
-      
-      km_by_group[[subgroup_key]] <- subgroup_fit
-      
-      subgroup_levels <- paste(sort(unique(as.character(dat_group$.__group__))), collapse = "|")
-      
-      km_registry_rows[[subgroup_key]] <- build_registry_row(
-        df_dataset = dat_dataset,
-        df_fit = dat_group,
-        dataset_label = dataset_label,
-        group_var = group_var,
-        fit_key = subgroup_key,
-        bundle_slot = "km_by_group",
-        subgroup_levels = subgroup_levels
-      )
-      
-      km_yearly_rows[[subgroup_key]] <- extract_km_timepoint_summary(
-        fit = subgroup_fit,
-        df_used = dat_group,
-        dataset_label = dataset_label,
-        group_var = group_var,
-        time_grid = YEAR_GRID,
-        fit_key = subgroup_key
-      )
-      
-      km_curve_rows[[subgroup_key]] <- extract_km_curve_data(
-        fit = subgroup_fit,
-        df_used = dat_group,
-        dataset_label = dataset_label,
-        group_var = group_var,
-        fit_key = subgroup_key
-      )
     }
   }
 }
 
-km_registry <- dplyr::bind_rows(km_registry_rows) %>%
-  dplyr::mutate(
-    analysis_csv_path = analysis_csv_path,
-    yearly_summary_csv_path = km_yearly_csv_path,
-    curve_data_csv_path = km_curve_csv_path,
-    registry_csv_path = km_registry_csv_path
-  ) %>%
-  dplyr::arrange(.data$dataset, .data$group_var)
+## 🟠 결합: registry, yearly, curve data 생성 ===============================
+km_registry <- do.call(rbind, registry_list)
+km_yearly_summary <- do.call(rbind, yearly_list)
+km_curve_data <- do.call(rbind, curve_data_list)
 
-km_yearly_summary <- dplyr::bind_rows(km_yearly_rows) %>%
-  dplyr::arrange(.data$dataset, .data$group_var, .data$subgroup_level, .data$time_years)
+km_registry <- km_registry[order(km_registry$dataset, km_registry$subgroup_name, km_registry$subgroup_level), ]
+km_yearly_summary <- km_yearly_summary[order(km_yearly_summary$dataset, km_yearly_summary$subgroup_name, km_yearly_summary$subgroup_level, km_yearly_summary$time_year), ]
+km_curve_data <- km_curve_data[order(km_curve_data$dataset, km_curve_data$subgroup_name, km_curve_data$subgroup_level, km_curve_data$time_year), ]
 
-km_curve_data <- dplyr::bind_rows(km_curve_rows) %>%
-  dplyr::arrange(.data$dataset, .data$group_var, .data$subgroup_level, .data$time_years, .data$row_type)
+overall_curve_ids <- km_registry$curve_id[km_registry$subgroup_name == "overall"]
+group_curve_ids <- km_registry$curve_id[km_registry$subgroup_name != "overall"]
 
-# 🔴 Save: Step1 bundle과 export 파일 생성 ===============================
-
-## 🟠 Assemble: later load용 bundle 오브젝트 ===============================
-
-km_bundle <- list(
-  meta = list(
-    step = "Step1",
-    purpose = "plain Kaplan-Meier fitting and storage for later model comparison",
-    created_at = as.character(Sys.time()),
-    seed = SEED,
-    data_path = DATA_PATH,
-    export_path = EXPORT_PATH,
-    file_prefix = FILE_PREFIX,
-    year_grid = YEAR_GRID,
-    dataset_branches_requested = DATASET_BRANCHES,
-    dataset_branches_resolved = dataset_branches_resolved,
-    subgroup_vars_requested = SUBGROUP_VARS,
-    subgroup_vars_resolved = subgroup_vars_resolved,
-    km_conf_type = KM_CONF_TYPE,
-    endpoint_definition = "transition only",
-    censoring_definition = "right_censoring + remission treated as censoring",
-    time_unit = "years"
+analysis_spec <- data.frame(
+  item = c(
+    "script_name",
+    "script_version",
+    "created_at",
+    "data_path",
+    "export_path",
+    "dataset_branches",
+    "site_pnu_values",
+    "site_snu_values",
+    "endpoint_name",
+    "event_definition",
+    "censoring_definition",
+    "time_origin",
+    "raw_time_unit",
+    "analysis_time_unit",
+    "days_per_year",
+    "time_grid_years",
+    "km_conf_type",
+    "subgroup_specs",
+    "missing_subgroup_label",
+    "raw_site_levels",
+    "n_rows_raw_input",
+    "n_rows_PNU",
+    "n_rows_SNU",
+    "n_rows_merged"
   ),
-  analysis_data = dat_analysis,
-  km_overall = km_overall,
-  km_by_group = km_by_group,
+  value = c(
+    script_name,
+    script_version,
+    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+    data_path,
+    export_path,
+    collapse_value(names(dataset_list)),
+    collapse_value(site_pnu_values),
+    collapse_value(site_snu_values),
+    "Transition to schizophrenia (transition-only Step1 KM)",
+    "event_transition = 1 if status_num == 1",
+    "status_num in c(0, 2) treated as censoring; remission is censored",
+    "cohort entry",
+    "days_followup in days",
+    "years since cohort entry",
+    as.character(days_per_year),
+    paste(time_grid_years, collapse = ", "),
+    conf_type_km,
+    if (length(resolved_subgroup_specs) == 0L) {
+      "overall only"
+    } else {
+      paste(paste(names(resolved_subgroup_specs), resolved_subgroup_specs, sep = ":"), collapse = "; ")
+    },
+    missing_subgroup_label,
+    collapse_value(sort(unique(analysis_df$site))),
+    as.character(nrow(analysis_df)),
+    as.character(nrow(dataset_list$PNU)),
+    as.character(nrow(dataset_list$SNU)),
+    as.character(nrow(dataset_list$merged))
+  ),
+  stringsAsFactors = FALSE
+)
+
+km_rds_object <- list(
+  step = "Step1_plain_KM",
+  script_name = script_name,
+  script_version = script_version,
+  created_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+  config = list(
+    data_path = data_path,
+    export_path = export_path,
+    site_pnu_values = site_pnu_values,
+    site_snu_values = site_snu_values,
+    time_grid_years = time_grid_years,
+    days_per_year = days_per_year,
+    transition_code = transition_code,
+    right_censor_code = right_censor_code,
+    remission_code = remission_code,
+    conf_type_km = conf_type_km,
+    missing_subgroup_label = missing_subgroup_label,
+    subgroup_specs = resolved_subgroup_specs
+  ),
+  analysis_spec = analysis_spec,
+  raw_data_qc = raw_qc,
+  dataset_qc = dataset_qc,
+  analysis_data = analysis_df,
   km_registry = km_registry,
   km_yearly_summary = km_yearly_summary,
   km_curve_data = km_curve_data,
-  qc_dataset_overview = qc_dataset_overview,
-  qc_status_distribution = qc_status_distribution,
-  qc_missingness = qc_missingness,
+  km_overall = km_fits[overall_curve_ids],
+  km_by_group = km_fits[group_curve_ids],
+  km_fits = km_fits,
   session_info = utils::capture.output(sessionInfo())
 )
 
-## 🟠 Export: CSV, RDS, PNG, manifest 파일 ===============================
+# 🔴 그림: KM 패널 렌더링 ===============================
+## 🟠 작성: 곡선 데이터 기반 PNG 저장 ===============================
+plot_file <- file.path(export_path, "step1_km_panels.png")
 
-readr::write_csv(km_registry, km_registry_csv_path, na = "")
-readr::write_csv(km_yearly_summary, km_yearly_csv_path, na = "")
-readr::write_csv(km_curve_data, km_curve_csv_path, na = "")
-saveRDS(km_bundle, km_bundle_rds_path, version = 3)
+plot_data <- km_curve_data
+plot_data$dataset <- factor(plot_data$dataset, levels = names(dataset_list))
+subgroup_order <- unique(c("overall", names(resolved_subgroup_specs)))
+subgroup_order <- subgroup_order[subgroup_order %in% unique(plot_data$subgroup_name)]
+plot_data$subgroup_name <- factor(plot_data$subgroup_name, levels = subgroup_order)
 
-if (SAVE_PNG) {
-  overall_curve_df <- km_curve_data %>%
-    dplyr::filter(.data$group_var == "overall")
-  
-  if (nrow(overall_curve_df) > 0L) {
-    p_overall <- make_overall_km_plot(overall_curve_df)
-    ggplot2::ggsave(
-      filename = overall_png_path,
-      plot = p_overall,
-      width = 11,
-      height = 7,
-      units = "in",
-      dpi = 300
-    )
-  }
-  
-  subgroup_curve_df <- km_curve_data %>%
-    dplyr::filter(.data$group_var != "overall")
-  
-  if (nrow(subgroup_curve_df) > 0L) {
-    p_subgroup <- make_subgroup_km_plot(subgroup_curve_df)
-    ggplot2::ggsave(
-      filename = subgroup_png_path,
-      plot = p_subgroup,
-      width = 12,
-      height = 8,
-      units = "in",
-      dpi = 300
-    )
-  }
-}
+km_plot <- ggplot2::ggplot(
+  plot_data,
+  ggplot2::aes(
+    x = time_year,
+    y = survival,
+    color = subgroup_level,
+    group = curve_id
+  )
+) +
+  ggplot2::geom_step(linewidth = 0.7, na.rm = TRUE) +
+  ggplot2::facet_grid(subgroup_name ~ dataset, scales = "free_x", labeller = ggplot2::label_both) +
+  ggplot2::labs(
+    title = "Step 1: Plain KM curves",
+    x = "Years since cohort entry",
+    y = "KM survival probability",
+    color = "Curve"
+  ) +
+  ggplot2::theme_bw(base_size = 11) +
+  ggplot2::theme(
+    legend.position = "bottom",
+    panel.grid.minor = ggplot2::element_blank()
+  )
 
-output_manifest <- tibble::tibble(
-  file_path = c(
-    analysis_csv_path,
-    qc_overview_csv_path,
-    qc_status_csv_path,
-    qc_missing_csv_path,
-    km_yearly_csv_path,
-    km_curve_csv_path,
-    km_registry_csv_path,
-    km_bundle_rds_path,
-    if (file.exists(overall_png_path)) overall_png_path else NULL,
-    if (file.exists(subgroup_png_path)) subgroup_png_path else NULL
+plot_width <- max(10, 3.5 * length(dataset_list))
+plot_height <- max(6, 2.6 * length(unique(plot_data$subgroup_name)))
+
+ggplot2::ggsave(
+  filename = plot_file,
+  plot = km_plot,
+  width = plot_width,
+  height = plot_height,
+  dpi = plot_dpi
+)
+
+# 🔴 저장: Step1 산출물 내보내기 ===============================
+## 🟠 기록: CSV, RDS, manifest 저장 ===============================
+analysis_spec_file <- file.path(export_path, "step1_analysis_spec.csv")
+data_qc_file <- file.path(export_path, "step1_data_qc.csv")
+km_registry_file <- file.path(export_path, "step1_km_registry.csv")
+km_yearly_file <- file.path(export_path, "step1_km_yearly_summary.csv")
+km_curve_data_file <- file.path(export_path, "step1_km_curve_data.csv")
+km_rds_file <- file.path(export_path, "step1_km_objects.rds")
+manifest_file <- file.path(export_path, "step1_export_manifest.csv")
+
+write_csv_utf8(analysis_spec, analysis_spec_file)
+write_csv_utf8(dataset_qc, data_qc_file)
+write_csv_utf8(km_registry, km_registry_file)
+write_csv_utf8(km_yearly_summary, km_yearly_file)
+write_csv_utf8(km_curve_data, km_curve_data_file)
+saveRDS(km_rds_object, file = km_rds_file)
+
+export_manifest <- data.frame(
+  file_name = c(
+    basename(analysis_spec_file),
+    basename(data_qc_file),
+    basename(km_registry_file),
+    basename(km_yearly_file),
+    basename(km_curve_data_file),
+    basename(km_rds_file),
+    basename(plot_file)
   ),
-  file_type = c(
-    "csv",
-    "csv",
-    "csv",
-    "csv",
-    "csv",
-    "csv",
-    "csv",
-    "rds",
-    if (file.exists(overall_png_path)) "png" else NULL,
-    if (file.exists(subgroup_png_path)) "png" else NULL
+  file_path = c(
+    analysis_spec_file,
+    data_qc_file,
+    km_registry_file,
+    km_yearly_file,
+    km_curve_data_file,
+    km_rds_file,
+    plot_file
   ),
   description = c(
-    "Step1 analysis-ready dataset with transition-only endpoint coding",
-    "QC overview by dataset branch",
-    "QC status distribution by dataset branch",
-    "QC missingness table",
-    "Plain KM yearly summary at 1-10 years",
-    "Plain KM curve data used for PNG generation",
-    "Plain KM registry for later bundle loading",
-    "Plain KM bundle RDS with survfit objects and exported tables",
-    if (file.exists(overall_png_path)) "Overall cohort KM curves generated from km_curve_data" else NULL,
-    if (file.exists(subgroup_png_path)) "Subgroup KM curves generated from km_curve_data" else NULL
-  )
-) %>%
-  dplyr::mutate(file_path = normalizePath(.data$file_path, winslash = "/", mustWork = FALSE))
+    "Step1 분석 명세",
+    "원자료 및 데이터셋 분기 QC",
+    "KM curve registry",
+    "1-10년 KM 요약표",
+    "KM step curve plotting/source data",
+    "KM survfit objects and reusable registry",
+    "KM panel figure generated from step1_km_curve_data.csv"
+  ),
+  n_rows = c(
+    nrow(analysis_spec),
+    nrow(dataset_qc),
+    nrow(km_registry),
+    nrow(km_yearly_summary),
+    nrow(km_curve_data),
+    length(km_fits),
+    NA_integer_
+  ),
+  created_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+  stringsAsFactors = FALSE
+)
 
-readr::write_csv(output_manifest, manifest_csv_path, na = "")
+write_csv_utf8(export_manifest, manifest_file)

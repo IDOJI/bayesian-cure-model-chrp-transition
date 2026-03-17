@@ -1,88 +1,310 @@
-# 🔴 Configure: paths and analysis options ===============================
-DATA_PATH <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
-EXPORT_PATH <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦4.Step4_Non-cure benchmark models/attachments'
+# 🔴 설정: 경로와 Step4 옵션 ===============================
+data_path <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
+export_path <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦4.Step4_Non-cure benchmark models/attachments'
 
-INSTALL_MISSING_PACKAGES <- FALSE
-RANDOM_SEED <- 20260301L
+file_prefix <- "step4_nocure"
+age_var_preferred <- "age_exact_entry"   # 없으면 age_int로 자동 대체
+site_reference <- "PNU"
+prediction_years <- 1:10
+days_per_year <- 365.25
+time_zero_correction_days <- 0.5         # survreg용 0일 추적 보정
+survreg_maxiter <- 100
+cox_ties <- "efron"
 
-ANALYSIS_BRANCHES <- c("merged", "PNU", "SNU")
-PREDICTION_HORIZONS_YEARS <- 1:10
+options(stringsAsFactors = FALSE, scipen = 999)
 
-CANDIDATE_MODELS <- c(
-  "weibull",
-  "lnorm",
-  "llogis",
-  "gengamma",
-  "flexsurvspline_k1"
-)
+if (!dir.exists(export_path)) {
+  dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
+}
 
-FLEXSURVSPLINE_K <- 1L
-FLEXSURVSPLINE_SCALE <- "hazard"
+analysis_data_file <- file.path(export_path, paste0(file_prefix, "_analysis_data.csv"))
+model_registry_file <- file.path(export_path, paste0(file_prefix, "_model_registry.csv"))
+subject_predictions_file <- file.path(export_path, paste0(file_prefix, "_subject_yearly_predictions.csv"))
+mean_predictions_file <- file.path(export_path, paste0(file_prefix, "_mean_yearly_predictions.csv"))
+performance_yearly_file <- file.path(export_path, paste0(file_prefix, "_performance_yearly.csv"))
+performance_summary_file <- file.path(export_path, paste0(file_prefix, "_performance_summary.csv"))
+fit_bundle_file <- file.path(export_path, paste0(file_prefix, "_fit_bundle.rds"))
+manifest_file <- file.path(export_path, paste0(file_prefix, "_manifest.csv"))
 
-BASELINE_COVARIATES <- c("age_model_c", "sex_fact", "site")
-MIN_ROWS_PER_ANALYSIS <- 30L
-MIN_EVENTS_PER_ANALYSIS <- 5L
-TIME_SCALE_DENOMINATOR <- 365.25
-EPSILON_TIME <- 1e-08
-MIN_GHAT <- 1e-06
+# 🟠 확인: 패키지와 기본 환경 ===============================
+required_packages <- c("survival")
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_packages) > 0) {
+  stop("다음 패키지가 필요합니다: ", paste(missing_packages, collapse = ", "))
+}
+library(survival)
 
-# 🟠 Attach: packages and startup checks ===============================
-required_pkgs <- c("survival", "flexsurv", "dplyr", "tidyr", "purrr", "timeROC")
-
-load_or_install_packages <- function(pkgs, install_missing = FALSE) {
-  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing_pkgs) > 0 && install_missing) {
-    install.packages(missing_pkgs)
+# 🟠 정의: 공통 헬퍼 함수 ===============================
+bind_rows_safe <- function(x) {
+  x <- x[!vapply(x, is.null, logical(1))]
+  if (length(x) == 0) {
+    return(data.frame())
   }
-  still_missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(still_missing) > 0) {
-    stop(
-      "다음 패키지가 설치되어 있지 않습니다: ",
-      paste(still_missing, collapse = ", "),
-      "\nINSTALL_MISSING_PACKAGES <- TRUE 로 바꾸거나 직접 설치한 뒤 다시 실행하세요."
+  out <- do.call(rbind, x)
+  rownames(out) <- NULL
+  out
+}
+
+# 🟡 정규화: 사이트와 기본 변수 ===============================
+normalize_site <- function(x) {
+  y <- as.character(x)
+  y <- trimws(y)
+  y <- toupper(y)
+  y <- gsub("[[:space:]_\\-]", "", y)
+  
+  out <- ifelse(y == "PNU", "PNU",
+                ifelse(y %in% c("SNU", "CHRP"), "SNU", NA_character_))
+  
+  uniq <- unique(y[!is.na(y)])
+  if (any(is.na(out)) && length(uniq) == 2 && "PNU" %in% uniq) {
+    other <- setdiff(uniq, "PNU")
+    out[y == other] <- "SNU"
+  }
+  out
+}
+
+choose_age_var <- function(colnames_raw, preferred = "age_exact_entry") {
+  candidates <- c(preferred, "age_exact_entry", "age_int")
+  candidates <- unique(candidates)
+  hit <- candidates[candidates %in% colnames_raw]
+  if (length(hit) == 0) {
+    stop("age 변수를 찾을 수 없습니다. age_exact_entry 또는 age_int가 필요합니다.")
+  }
+  hit[1]
+}
+
+validate_binary <- function(x, var_name) {
+  ok <- unique(x[!is.na(x)])
+  if (!all(ok %in% c(0, 1))) {
+    stop(var_name, " 는 0/1 binary coding 이어야 합니다.")
+  }
+  invisible(TRUE)
+}
+
+derive_status_num <- function(raw) {
+  if ("status_num" %in% names(raw)) {
+    return(as.integer(raw$status_num))
+  }
+  if (!"status" %in% names(raw)) {
+    stop("status_num 또는 status 컬럼이 필요합니다.")
+  }
+  status_chr <- tolower(trimws(as.character(raw$status)))
+  out <- ifelse(status_chr == "transition", 1L,
+                ifelse(status_chr == "remission", 2L,
+                       ifelse(status_chr == "right_censoring", 0L, NA_integer_)))
+  as.integer(out)
+}
+
+derive_sex_num <- function(raw) {
+  if ("sex_num" %in% names(raw)) {
+    return(as.integer(raw$sex_num))
+  }
+  if (!"sex_fact" %in% names(raw)) {
+    stop("sex_num 또는 sex_fact 컬럼이 필요합니다.")
+  }
+  sex_chr <- tolower(trimws(as.character(raw$sex_fact)))
+  out <- ifelse(sex_chr == "female", 0L,
+                ifelse(sex_chr == "male", 1L, NA_integer_))
+  as.integer(out)
+}
+
+prepare_base_data <- function(raw,
+                              age_var_preferred,
+                              days_per_year,
+                              time_zero_correction_days,
+                              site_reference) {
+  age_var_used <- choose_age_var(names(raw), preferred = age_var_preferred)
+  
+  id_chr <- as.character(raw$id)
+  site_std <- normalize_site(raw$site)
+  age_raw <- suppressWarnings(as.numeric(raw[[age_var_used]]))
+  sex_num <- suppressWarnings(as.integer(derive_sex_num(raw)))
+  status_num <- suppressWarnings(as.integer(derive_status_num(raw)))
+  days_followup <- suppressWarnings(as.numeric(raw$days_followup))
+  
+  status_label <- if ("status" %in% names(raw)) {
+    as.character(raw$status)
+  } else {
+    ifelse(status_num == 1L, "transition",
+           ifelse(status_num == 2L, "remission", "right_censoring"))
+  }
+  
+  keep <- !is.na(id_chr) &
+    nzchar(id_chr) &
+    !is.na(site_std) &
+    is.finite(age_raw) &
+    !is.na(sex_num) &
+    !is.na(status_num) &
+    is.finite(days_followup)
+  
+  dat <- data.frame(
+    id = id_chr[keep],
+    site_raw = as.character(raw$site[keep]),
+    site = site_std[keep],
+    age_raw = age_raw[keep],
+    sex_num = sex_num[keep],
+    status_num = status_num[keep],
+    status = status_label[keep],
+    days_followup = days_followup[keep],
+    age_var_used = age_var_used,
+    stringsAsFactors = FALSE
+  )
+  
+  if (nrow(dat) == 0) {
+    stop("분석 가능한 행이 없습니다.")
+  }
+  
+  if (any(dat$days_followup < 0, na.rm = TRUE)) {
+    stop("days_followup 에 음수가 존재합니다.")
+  }
+  
+  validate_binary(dat$sex_num, "sex_num")
+  
+  if (any(!dat$status_num %in% c(0L, 1L, 2L))) {
+    stop("status_num 은 0/1/2 coding 이어야 합니다.")
+  }
+  
+  dat$event_transition <- as.integer(dat$status_num == 1L)
+  dat$time_years_raw <- dat$days_followup / days_per_year
+  dat$time_was_zero_adjusted <- as.integer(dat$time_years_raw <= 0)
+  dat$time_years_model <- ifelse(
+    dat$time_years_raw <= 0,
+    time_zero_correction_days / days_per_year,
+    dat$time_years_raw
+  )
+  
+  all_site_levels <- unique(c(site_reference, sort(unique(dat$site))))
+  dat$site <- factor(dat$site, levels = all_site_levels)
+  dat$subject_uid <- paste0(as.character(dat$site), "::", dat$id)
+  
+  if (anyDuplicated(dat$subject_uid) > 0) {
+    dup_ids <- unique(dat$subject_uid[duplicated(dat$subject_uid)])
+    stop("site + id 기준 중복 행이 존재합니다: ", paste(head(dup_ids, 10), collapse = ", "))
+  }
+  
+  dat
+}
+
+# 🟡 준비: 브랜치 분석 데이터 ===============================
+prepare_branch_data <- function(base_dat, dataset_id, site_reference) {
+  if (dataset_id == "merged") {
+    dat <- base_dat
+  } else {
+    dat <- base_dat[as.character(base_dat$site) == dataset_id, , drop = FALSE]
+  }
+  
+  if (nrow(dat) == 0) {
+    stop(dataset_id, " 브랜치 데이터가 비어 있습니다.")
+  }
+  
+  dat <- dat[order(dat$subject_uid), , drop = FALSE]
+  
+  age_center <- mean(dat$age_raw, na.rm = TRUE)
+  age_sd <- stats::sd(dat$age_raw, na.rm = TRUE)
+  
+  if (!is.finite(age_sd) || age_sd <= 0) {
+    stop(dataset_id, " 브랜치에서 age SD가 0 또는 비정상입니다.")
+  }
+  
+  dat$dataset_id <- dataset_id
+  dat$subgroup_id <- "overall"
+  dat$age_center_branch <- age_center
+  dat$age_scale_2sd_branch <- 2 * age_sd
+  dat$age_s <- (dat$age_raw - age_center) / (2 * age_sd)
+  
+  if (dataset_id == "merged") {
+    dat$site <- factor(as.character(dat$site))
+    if (site_reference %in% levels(dat$site)) {
+      dat$site <- stats::relevel(dat$site, ref = site_reference)
+    }
+  } else {
+    dat$site <- droplevels(factor(as.character(dat$site)))
+  }
+  
+  dat
+}
+
+build_branch_list <- function(base_dat, site_reference) {
+  out <- list(
+    PNU = prepare_branch_data(base_dat, "PNU", site_reference = site_reference),
+    SNU = prepare_branch_data(base_dat, "SNU", site_reference = site_reference),
+    merged = prepare_branch_data(base_dat, "merged", site_reference = site_reference)
+  )
+  out
+}
+
+# 🟡 생성: no-cure 모델 그리드 ===============================
+build_nocure_specs <- function(dataset_id) {
+  if (dataset_id %in% c("PNU", "SNU")) {
+    return(list(
+      N0 = list(rhs = "age_s + sex_num", interaction_flag = 0L, site_flag = 0L),
+      N1 = list(rhs = "age_s * sex_num", interaction_flag = 1L, site_flag = 0L)
+    ))
+  }
+  
+  if (dataset_id == "merged") {
+    return(list(
+      N0S0 = list(rhs = "age_s + sex_num", interaction_flag = 0L, site_flag = 0L),
+      N1S0 = list(rhs = "age_s * sex_num", interaction_flag = 1L, site_flag = 0L),
+      N0S1 = list(rhs = "age_s + sex_num + site", interaction_flag = 0L, site_flag = 1L),
+      N1S1 = list(rhs = "age_s * sex_num + site", interaction_flag = 1L, site_flag = 1L)
+    ))
+  }
+  
+  stop("알 수 없는 dataset_id: ", dataset_id)
+}
+
+build_nocure_grid <- function(dataset_id) {
+  specs <- build_nocure_specs(dataset_id)
+  aft_families <- c("exponential", "weibull", "loglogistic", "lognormal")
+  
+  rows <- list()
+  idx <- 1L
+  
+  for (spec_name in names(specs)) {
+    spec <- specs[[spec_name]]
+    
+    for (fam in aft_families) {
+      model_id <- paste(dataset_id, "AFT_param", fam, spec_name, sep = "__")
+      rows[[idx]] <- data.frame(
+        dataset_id = dataset_id,
+        lane = "AFT_param",
+        family = fam,
+        cov_spec = spec_name,
+        formula_rhs = spec$rhs,
+        interaction_flag = spec$interaction_flag,
+        site_flag = spec$site_flag,
+        model_id = model_id,
+        stringsAsFactors = FALSE
+      )
+      idx <- idx + 1L
+    }
+    
+    model_id <- paste(dataset_id, "PH_semiparam", "coxph", spec_name, sep = "__")
+    rows[[idx]] <- data.frame(
+      dataset_id = dataset_id,
+      lane = "PH_semiparam",
+      family = "coxph",
+      cov_spec = spec_name,
+      formula_rhs = spec$rhs,
+      interaction_flag = spec$interaction_flag,
+      site_flag = spec$site_flag,
+      model_id = model_id,
+      stringsAsFactors = FALSE
     )
+    idx <- idx + 1L
   }
-  invisible(lapply(pkgs, function(pkg) {
-    suppressPackageStartupMessages(library(pkg, character.only = TRUE))
-  }))
+  
+  out <- bind_rows_safe(rows)
+  rownames(out) <- NULL
+  out
 }
 
-set.seed(RANDOM_SEED)
-options(stringsAsFactors = FALSE)
-if (!dir.exists(EXPORT_PATH)) dir.create(EXPORT_PATH, recursive = TRUE, showWarnings = FALSE)
-if (!file.exists(DATA_PATH)) stop("DATA_PATH에 지정한 파일이 존재하지 않습니다: ", DATA_PATH)
-
-load_or_install_packages(required_pkgs, install_missing = INSTALL_MISSING_PACKAGES)
-
-# 🔴 Define: helper utilities ===============================
-## 🟠 Build: reusable functions for step4 ===============================
-choose_age_source <- function(df) {
-  candidates <- c("age_exact_entry", "age_int")
-  picked <- candidates[candidates %in% names(df)]
-  if (length(picked) == 0) return(NA_character_)
-  picked[1]
-}
-
-standardize_status_to_transition <- function(df) {
-  if ("status_num" %in% names(df)) {
-    status_num_chr <- as.character(df$status_num)
-    suppressWarnings(status_num_num <- as.numeric(status_num_chr))
-    event_transition <- ifelse(!is.na(status_num_num), as.integer(status_num_num == 1), NA_integer_)
-    return(event_transition)
-  }
-  if ("status" %in% names(df)) {
-    status_chr <- tolower(trimws(as.character(df$status)))
-    event_transition <- ifelse(status_chr == "transition", 1L,
-                               ifelse(status_chr %in% c("right_censoring", "remission"), 0L, NA_integer_))
-    return(event_transition)
-  }
-  stop("status_num 또는 status 컬럼이 필요합니다.")
-}
-
-capture_warnings <- function(expr) {
+# 🟡 적합: AFT 및 Cox 모형 ===============================
+collect_warnings <- function(expr) {
   warnings <- character(0)
   result <- withCallingHandlers(
-    expr,
+    tryCatch(expr, error = function(e) e),
     warning = function(w) {
       warnings <<- c(warnings, conditionMessage(w))
       invokeRestart("muffleWarning")
@@ -91,734 +313,685 @@ capture_warnings <- function(expr) {
   list(result = result, warnings = unique(warnings))
 }
 
-safe_fit_noncure_model <- function(model_key, surv_formula, dat) {
-  fit_attempt <- capture_warnings(
-    tryCatch(
-      {
-        if (identical(model_key, "flexsurvspline_k1")) {
-          flexsurv::flexsurvspline(
-            formula = surv_formula,
-            data = dat,
-            k = FLEXSURVSPLINE_K,
-            scale = FLEXSURVSPLINE_SCALE
-          )
-        } else {
-          flexsurv::flexsurvreg(
-            formula = surv_formula,
-            data = dat,
-            dist = model_key
-          )
-        }
-      },
-      error = function(e) e
+fit_survreg_model <- function(formula_obj, data, dist_name, maxiter) {
+  fit_res <- collect_warnings(
+    survival::survreg(
+      formula = formula_obj,
+      data = data,
+      dist = dist_name,
+      control = survival::survreg.control(maxiter = maxiter),
+      model = TRUE,
+      x = TRUE,
+      y = TRUE
     )
   )
   
-  if (inherits(fit_attempt$result, "error")) {
-    return(list(
-      success = FALSE,
-      fit = NULL,
-      error_message = conditionMessage(fit_attempt$result),
-      warning_message = paste(fit_attempt$warnings, collapse = " | ")
-    ))
+  if (inherits(fit_res$result, "error")) {
+    return(list(fit = NULL, error_message = conditionMessage(fit_res$result), warnings = fit_res$warnings))
+  }
+  
+  list(fit = fit_res$result, error_message = NA_character_, warnings = fit_res$warnings)
+}
+
+fit_coxph_model <- function(formula_obj, data, ties) {
+  fit_res <- collect_warnings(
+    survival::coxph(
+      formula = formula_obj,
+      data = data,
+      ties = ties,
+      x = TRUE,
+      y = TRUE,
+      model = TRUE,
+      singular.ok = TRUE
+    )
+  )
+  
+  if (inherits(fit_res$result, "error")) {
+    return(list(fit = NULL, error_message = conditionMessage(fit_res$result), warnings = fit_res$warnings))
+  }
+  
+  list(fit = fit_res$result, error_message = NA_character_, warnings = fit_res$warnings)
+}
+
+safe_vcov_diagnostics <- function(fit, warnings, dist_name = NA_character_) {
+  vc <- tryCatch(stats::vcov(fit), error = function(e) NULL)
+  singular_flag <- FALSE
+  
+  if (is.null(vc) || any(!is.finite(vc))) {
+    singular_flag <- TRUE
+  } else if (length(vc) > 0) {
+    eigvals <- tryCatch(
+      eigen((vc + t(vc)) / 2, symmetric = TRUE, only.values = TRUE)$values,
+      error = function(e) NA_real_
+    )
+    singular_flag <- any(!is.finite(eigvals)) || min(abs(eigvals)) < 1e-12
+  }
+  
+  boundary_flag <- any(grepl("boundary|infinite|monotone likelihood", warnings, ignore.case = TRUE))
+  if (!is.na(dist_name) && inherits(fit, "survreg")) {
+    if (dist_name != "exponential" && is.finite(fit$scale)) {
+      boundary_flag <- boundary_flag || (fit$scale < 1e-06) || (fit$scale > 1e+06)
+    }
   }
   
   list(
-    success = TRUE,
-    fit = fit_attempt$result,
-    error_message = NA_character_,
-    warning_message = if (length(fit_attempt$warnings) == 0) NA_character_ else paste(fit_attempt$warnings, collapse = " | ")
+    singular_hessian_flag = singular_flag,
+    boundary_flag = boundary_flag
   )
 }
 
-extract_fit_metrics <- function(fit_obj) {
-  out <- list(
-    logLik = NA_real_,
-    AIC = NA_real_,
-    BIC = NA_real_,
-    npar = NA_real_
-  )
-  ll <- tryCatch(logLik(fit_obj), error = function(e) NULL)
-  if (!is.null(ll)) {
-    out$logLik <- as.numeric(ll)
-    out$npar <- attr(ll, "df")
-  }
-  out$AIC <- tryCatch(AIC(fit_obj), error = function(e) NA_real_)
-  out$BIC <- tryCatch(BIC(fit_obj), error = function(e) NA_real_)
-  out
-}
-
-extract_one_subject_survival <- function(fit_obj, one_row_df, times) {
-  pred_try <- tryCatch(
-    predict(
-      fit_obj,
-      newdata = one_row_df,
-      type = "survival",
-      times = times,
-      ci = FALSE,
-      se.fit = FALSE
-    ),
-    error = function(e) NULL
+# 🟡 예측: 생존확률과 위험도 ===============================
+build_linear_predictor <- function(fit, newdata) {
+  term_obj <- if (!is.null(fit$terms)) fit$terms else stats::terms(fit)
+  mm <- stats::model.matrix(
+    object = stats::delete.response(term_obj),
+    data = newdata,
+    xlev = fit$xlevels
   )
   
-  if (!is.null(pred_try)) {
-    pred_vec <- as.numeric(pred_try)
-    if (length(pred_vec) == length(times)) {
-      return(pmin(pmax(pred_vec, 0), 1))
-    }
+  coef_vec <- stats::coef(fit)
+  
+  if ("(Intercept)" %in% colnames(mm) && !("(Intercept)" %in% names(coef_vec))) {
+    mm <- mm[, colnames(mm) != "(Intercept)", drop = FALSE]
   }
   
-  sum_try <- tryCatch(
-    summary(
-      fit_obj,
-      newdata = one_row_df,
-      type = "survival",
-      t = times,
-      ci = FALSE
-    ),
-    error = function(e) NULL
-  )
-  
-  if (is.data.frame(sum_try) && "est" %in% names(sum_try)) {
-    est <- as.numeric(sum_try$est)
-    if (length(est) == length(times)) return(pmin(pmax(est, 0), 1))
-  }
-  
-  if (is.list(sum_try) && length(sum_try) >= 1) {
-    first_obj <- sum_try[[1]]
-    if (is.data.frame(first_obj) && "est" %in% names(first_obj)) {
-      est <- as.numeric(first_obj$est)
-      if (length(est) == length(times)) return(pmin(pmax(est, 0), 1))
-    }
-    if (is.list(first_obj) && !is.null(first_obj$est)) {
-      est <- as.numeric(first_obj$est)
-      if (length(est) == length(times)) return(pmin(pmax(est, 0), 1))
-    }
-  }
-  
-  stop("flexsurv 예측값 파싱에 실패했습니다.")
-}
-
-predict_survival_matrix <- function(fit_obj, newdata_df, times) {
-  pred_try <- tryCatch(
-    predict(
-      fit_obj,
-      newdata = newdata_df,
-      type = "survival",
-      times = times,
-      ci = FALSE,
-      se.fit = FALSE
-    ),
-    error = function(e) NULL
-  )
-  
-  if (!is.null(pred_try)) {
-    pred_mat <- as.matrix(pred_try)
-    if (nrow(pred_mat) == nrow(newdata_df) && ncol(pred_mat) == length(times)) {
-      pred_mat <- pmin(pmax(pred_mat, 0), 1)
-      colnames(pred_mat) <- paste0("year_", times)
-      rownames(pred_mat) <- newdata_df$site_id
-      return(pred_mat)
-    }
-    if (nrow(pred_mat) == length(times) && ncol(pred_mat) == nrow(newdata_df)) {
-      pred_mat <- t(pred_mat)
-      pred_mat <- pmin(pmax(pred_mat, 0), 1)
-      colnames(pred_mat) <- paste0("year_", times)
-      rownames(pred_mat) <- newdata_df$site_id
-      return(pred_mat)
-    }
-  }
-  
-  out <- matrix(NA_real_, nrow = nrow(newdata_df), ncol = length(times))
-  for (i in seq_len(nrow(newdata_df))) {
-    out[i, ] <- extract_one_subject_survival(
-      fit_obj = fit_obj,
-      one_row_df = newdata_df[i, , drop = FALSE],
-      times = times
+  missing_cols <- setdiff(names(coef_vec), colnames(mm))
+  if (length(missing_cols) > 0) {
+    zero_block <- matrix(
+      0,
+      nrow = nrow(mm),
+      ncol = length(missing_cols),
+      dimnames = list(NULL, missing_cols)
     )
+    mm <- cbind(mm, zero_block)
   }
-  out <- pmin(pmax(out, 0), 1)
+  
+  mm <- mm[, names(coef_vec), drop = FALSE]
+  as.numeric(mm %*% coef_vec)
+}
+
+predict_survreg_survival <- function(fit, newdata, times, dist_name) {
+  lp <- build_linear_predictor(fit, newdata)
+  scale_param <- if (dist_name == "exponential") 1 else fit$scale
+  
+  out <- matrix(NA_real_, nrow = nrow(newdata), ncol = length(times))
   colnames(out) <- paste0("year_", times)
-  rownames(out) <- newdata_df$site_id
-  out
-}
-
-make_censoring_survival_evaluator <- function(time, event) {
-  censor_event <- 1L - as.integer(event)
-  if (sum(censor_event, na.rm = TRUE) == 0L) {
-    return(function(t, left_limit = FALSE) rep(1, length(t)))
+  
+  for (j in seq_along(times)) {
+    tt <- pmax(times[j], .Machine$double.eps)
+    
+    if (dist_name %in% c("weibull", "exponential")) {
+      out[, j] <- exp(- (tt / exp(lp))^(1 / scale_param))
+    } else if (dist_name == "lognormal") {
+      out[, j] <- 1 - stats::pnorm((log(tt) - lp) / scale_param)
+    } else if (dist_name == "loglogistic") {
+      out[, j] <- 1 / (1 + exp((log(tt) - lp) / scale_param))
+    } else {
+      stop("지원하지 않는 survreg 분포입니다: ", dist_name)
+    }
   }
   
-  sf_cens <- survival::survfit(survival::Surv(time, censor_event) ~ 1)
+  pmin(pmax(out, 0), 1)
+}
+
+prepare_basehaz_fun <- function(cox_fit) {
+  bh <- survival::basehaz(cox_fit, centered = FALSE)
+  if (nrow(bh) == 0) {
+    return(function(t) rep(0, length(t)))
+  }
   
-  function(t, left_limit = FALSE) {
-    tt <- as.numeric(t)
-    if (left_limit) tt <- pmax(tt - EPSILON_TIME, 0)
-    surv_vals <- summary(sf_cens, times = tt, extend = TRUE)$surv
-    if (length(surv_vals) == 0L) surv_vals <- rep(1, length(tt))
-    surv_vals[is.na(surv_vals)] <- 1
-    pmax(as.numeric(surv_vals), MIN_GHAT)
+  bh <- bh[order(bh$time), c("time", "hazard")]
+  bh <- bh[!duplicated(bh$time, fromLast = TRUE), , drop = FALSE]
+  
+  function(t) {
+    idx <- findInterval(t, bh$time)
+    ifelse(idx <= 0, 0, bh$hazard[idx])
   }
 }
 
-compute_ipcw_brier <- function(time, event, surv_pred_t, horizon_t, Gfun) {
-  time <- as.numeric(time)
-  event <- as.integer(event)
-  surv_pred_t <- as.numeric(surv_pred_t)
-  
-  G_t <- Gfun(horizon_t, left_limit = FALSE)
-  G_y_minus <- Gfun(time, left_limit = TRUE)
-  
-  obs_surv_status <- ifelse(time > horizon_t, 1,
-                            ifelse(time <= horizon_t & event == 1L, 0, NA_real_))
-  
-  weights <- ifelse(time <= horizon_t & event == 1L, 1 / G_y_minus,
-                    ifelse(time > horizon_t, 1 / G_t, NA_real_))
-  
-  brier_val <- mean(weights * (obs_surv_status - surv_pred_t)^2, na.rm = TRUE)
-  as.numeric(brier_val)
+predict_cox_survival <- function(fit, newdata, times) {
+  lp <- build_linear_predictor(fit, newdata)
+  H0_fun <- prepare_basehaz_fun(fit)
+  H0_vals <- H0_fun(times)
+  out <- exp(-outer(exp(lp), H0_vals, `*`))
+  colnames(out) <- paste0("year_", times)
+  pmin(pmax(out, 0), 1)
 }
 
-compute_auc_at_time <- function(time, event, risk_pred_t, horizon_t) {
-  time <- as.numeric(time)
-  event <- as.integer(event)
-  risk_pred_t <- as.numeric(risk_pred_t)
+# 🟡 계산: IPCW 성능 지표 ===============================
+fit_censoring_km <- function(time, event) {
+  fit <- survival::survfit(survival::Surv(time, 1 - event) ~ 1)
+  ctime <- fit$time
+  csurv <- fit$surv
   
-  n_cases <- sum(time <= horizon_t & event == 1L, na.rm = TRUE)
-  n_controls <- sum(time > horizon_t, na.rm = TRUE)
+  eval_fun <- function(tvals, left = FALSE) {
+    tt <- as.numeric(tvals)
+    if (left) {
+      tt <- pmax(tt - 1e-10, 0)
+    }
+    idx <- findInterval(tt, ctime)
+    ifelse(idx <= 0, 1, csurv[idx])
+  }
   
-  if (n_cases < 1L || n_controls < 1L) return(NA_real_)
-  
-  if (sd(risk_pred_t, na.rm = TRUE) == 0) return(0.5)
-  
-  roc_obj <- tryCatch(
-    timeROC::timeROC(
-      T = time,
-      delta = event,
-      marker = risk_pred_t,
-      cause = 1,
-      weighting = "marginal",
-      times = horizon_t,
-      iid = FALSE
-    ),
-    error = function(e) NULL
-  )
-  
-  if (is.null(roc_obj)) return(NA_real_)
-  auc_val <- roc_obj$AUC
-  if (length(auc_val) == 0L) return(NA_real_)
-  as.numeric(auc_val[1])
+  list(time = ctime, surv = csurv, eval = eval_fun)
 }
 
-trapz_scalar <- function(x, y) {
-  x <- as.numeric(x)
-  y <- as.numeric(y)
-  ok <- is.finite(x) & is.finite(y)
-  x <- x[ok]
-  y <- y[ok]
-  if (length(x) == 0L) return(NA_real_)
-  if (length(x) == 1L) return(y[1])
+weighted_auc_cd <- function(marker, case_w, control_w) {
+  keep_case <- is.finite(marker) & is.finite(case_w) & (case_w > 0)
+  keep_ctrl <- is.finite(marker) & is.finite(control_w) & (control_w > 0)
+  
+  if (sum(keep_case) == 0 || sum(keep_ctrl) == 0) {
+    return(NA_real_)
+  }
+  
+  m_case <- marker[keep_case]
+  w_case <- case_w[keep_case]
+  m_ctrl <- marker[keep_ctrl]
+  w_ctrl <- control_w[keep_ctrl]
+  
+  ctrl_key <- signif(m_ctrl, 12)
+  ctrl_agg <- stats::aggregate(w_ctrl, by = list(marker = ctrl_key), FUN = sum)
+  ctrl_agg <- ctrl_agg[order(ctrl_agg$marker), , drop = FALSE]
+  rownames(ctrl_agg) <- NULL
+  
+  cum_le <- cumsum(ctrl_agg$x)
+  case_key <- signif(m_case, 12)
+  
+  idx_le <- findInterval(case_key, ctrl_agg$marker)
+  idx_eq <- match(case_key, ctrl_agg$marker)
+  
+  weight_le <- ifelse(idx_le <= 0, 0, cum_le[idx_le])
+  weight_eq <- ifelse(is.na(idx_eq), 0, ctrl_agg$x[idx_eq])
+  weight_lt <- weight_le - weight_eq
+  
+  auc_num <- sum(w_case * (weight_lt + 0.5 * weight_eq))
+  auc_den <- sum(w_case) * sum(w_ctrl)
+  
+  if (!is.finite(auc_den) || auc_den <= 0) {
+    return(NA_real_)
+  }
+  
+  auc_num / auc_den
+}
+
+brier_ipcw <- function(surv_prob, time, event, t_eval, Gfit) {
+  g_t <- Gfit$eval(t_eval, left = FALSE)
+  g_y_left <- Gfit$eval(time, left = TRUE)
+  
+  invalid_case <- (event == 1 & time <= t_eval) & (!is.finite(g_y_left) | g_y_left <= 0)
+  if (!is.finite(g_t) || g_t <= 0 || any(invalid_case)) {
+    return(NA_real_)
+  }
+  
+  term_event <- ifelse(event == 1 & time <= t_eval, (surv_prob^2) / g_y_left, 0)
+  term_survive <- ifelse(time > t_eval, ((1 - surv_prob)^2) / g_t, 0)
+  
+  mean(term_event + term_survive)
+}
+
+trapz_mean <- function(x, y) {
+  if (length(x) < 2 || length(y) < 2) {
+    return(NA_real_)
+  }
   ord <- order(x)
   x <- x[ord]
   y <- y[ord]
-  sum(diff(x) * (head(y, -1L) + tail(y, -1L)) / 2)
-}
-
-build_branch_data <- function(df, branch_name) {
-  if (identical(branch_name, "merged")) return(df)
-  df[df$site == branch_name, , drop = FALSE]
-}
-
-build_model_frame <- function(df_branch) {
-  usable_covars <- BASELINE_COVARIATES[BASELINE_COVARIATES %in% names(df_branch)]
-  
-  if ("site" %in% usable_covars && length(unique(df_branch$site[!is.na(df_branch$site)])) <= 1L) {
-    usable_covars <- setdiff(usable_covars, "site")
+  if (max(x) <= min(x)) {
+    return(NA_real_)
   }
-  
-  non_constant <- usable_covars[
-    vapply(
-      usable_covars,
-      function(v) length(unique(df_branch[[v]][!is.na(df_branch[[v]])])) > 1L,
-      logical(1)
-    )
-  ]
-  
-  keep_vars <- unique(c("site_id", "site", "id", "time_years", "event_transition", non_constant))
-  dat_cc <- df_branch[, keep_vars, drop = FALSE]
-  cc_flag <- complete.cases(dat_cc)
-  dat_cc <- dat_cc[cc_flag, , drop = FALSE]
-  
-  non_constant_after_cc <- non_constant[
-    vapply(
-      non_constant,
-      function(v) length(unique(dat_cc[[v]][!is.na(dat_cc[[v]])])) > 1L,
-      logical(1)
-    )
-  ]
-  
-  rhs <- if (length(non_constant_after_cc) == 0L) "1" else paste(non_constant_after_cc, collapse = " + ")
-  surv_formula <- as.formula(paste0("survival::Surv(time_years, event_transition) ~ ", rhs))
-  
-  list(
-    data = dat_cc,
-    formula = surv_formula,
-    used_covariates = non_constant_after_cc,
-    excluded_due_to_missing = sum(!cc_flag)
-  )
+  sum(diff(x) * (y[-length(y)] + y[-1]) / 2) / (max(x) - min(x))
 }
 
-# 🔴 Import: merged cohort and prepare transition endpoint ===============================
-## 🟠 Read: raw csv and validate schema ===============================
-raw_df <- read.csv(
-  file = DATA_PATH,
-  stringsAsFactors = FALSE,
-  check.names = FALSE,
-  fileEncoding = "UTF-8"
-)
-
-required_any_of <- list(
-  id_site = c("id", "site"),
-  followup = c("days_followup"),
-  status = c("status_num", "status")
-)
-
-missing_core <- c(
-  setdiff(required_any_of$id_site, names(raw_df)),
-  setdiff(required_any_of$followup, names(raw_df))
-)
-if (length(intersect(required_any_of$status, names(raw_df))) == 0L) {
-  missing_core <- c(missing_core, "status_num/status")
-}
-if (length(missing_core) > 0L) {
-  stop("필수 컬럼이 없습니다: ", paste(unique(missing_core), collapse = ", "))
-}
-
-## 🟠 Transform: transition-only analysis dataset ===============================
-analysis_df <- raw_df
-
-analysis_df$site <- trimws(as.character(analysis_df$site))
-analysis_df$id <- as.character(analysis_df$id)
-analysis_df$site_id <- paste0(analysis_df$site, "__", analysis_df$id)
-
-analysis_df$days_followup <- suppressWarnings(as.numeric(as.character(analysis_df$days_followup)))
-analysis_df$event_transition <- standardize_status_to_transition(analysis_df)
-
-age_source <- choose_age_source(analysis_df)
-if (!is.na(age_source)) {
-  analysis_df$age_model <- suppressWarnings(as.numeric(as.character(analysis_df[[age_source]])))
-} else {
-  analysis_df$age_model <- NA_real_
-}
-analysis_df$age_model_c <- analysis_df$age_model - mean(analysis_df$age_model, na.rm = TRUE)
-
-if (!("sex_fact" %in% names(analysis_df))) {
-  if ("sex_num" %in% names(analysis_df)) {
-    sex_num_tmp <- suppressWarnings(as.numeric(as.character(analysis_df$sex_num)))
-    analysis_df$sex_fact <- ifelse(sex_num_tmp == 0, "Female",
-                                   ifelse(sex_num_tmp == 1, "Male", NA_character_))
-  } else {
-    analysis_df$sex_fact <- NA_character_
-  }
-}
-analysis_df$sex_fact <- factor(analysis_df$sex_fact, levels = c("Female", "Male"))
-analysis_df$site <- factor(analysis_df$site)
-
-analysis_df$time_years <- analysis_df$days_followup / TIME_SCALE_DENOMINATOR
-
-initial_exclusion_df <- data.frame(
-  row_index = seq_len(nrow(analysis_df)),
-  site_id = analysis_df$site_id,
-  exclude_reason = NA_character_,
-  stringsAsFactors = FALSE
-)
-
-initial_exclusion_df$exclude_reason[is.na(analysis_df$id) | trimws(analysis_df$id) == ""] <- "missing_id"
-initial_exclusion_df$exclude_reason[is.na(initial_exclusion_df$exclude_reason) & (is.na(analysis_df$site) | trimws(as.character(analysis_df$site)) == "")] <- "missing_site"
-initial_exclusion_df$exclude_reason[is.na(initial_exclusion_df$exclude_reason) & is.na(analysis_df$days_followup)] <- "missing_days_followup"
-initial_exclusion_df$exclude_reason[is.na(initial_exclusion_df$exclude_reason) & analysis_df$days_followup < 0] <- "negative_days_followup"
-initial_exclusion_df$exclude_reason[is.na(initial_exclusion_df$exclude_reason) & is.na(analysis_df$event_transition)] <- "missing_or_invalid_status"
-
-analysis_df_valid <- analysis_df[is.na(initial_exclusion_df$exclude_reason), , drop = FALSE]
-initial_exclusion_df <- initial_exclusion_df[!is.na(initial_exclusion_df$exclude_reason), , drop = FALSE]
-
-# 🔴 Fit: Step4 non-cure benchmark models ===============================
-## 🟠 Partition: dataset branches for modeling ===============================
-analysis_registry_rows <- list()
-fit_message_rows <- list()
-pred_subject_rows <- list()
-pred_mean_rows <- list()
-perf_time_rows <- list()
-perf_overall_rows <- list()
-fit_nc_list <- list()
-fit_nc_best <- list()
-
-for (branch_name in ANALYSIS_BRANCHES) {
-  branch_df_raw <- build_branch_data(analysis_df_valid, branch_name)
-  analysis_id <- paste(branch_name, "overall", sep = "__")
+evaluate_model_performance <- function(time, event, surv_mat, risk_mat, times, Gfit) {
+  yearly_rows <- vector("list", length(times))
   
-  if (nrow(branch_df_raw) == 0L) {
-    fit_message_rows[[length(fit_message_rows) + 1L]] <- data.frame(
-      analysis_id = analysis_id,
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      model_name = NA_character_,
-      message_type = "skip",
-      message_text = "분석 대상 행이 0개라서 건너뜀",
-      stringsAsFactors = FALSE
-    )
-    next
-  }
-  
-  model_frame_info <- build_model_frame(branch_df_raw)
-  branch_df <- model_frame_info$data
-  
-  if (nrow(branch_df) < MIN_ROWS_PER_ANALYSIS) {
-    fit_message_rows[[length(fit_message_rows) + 1L]] <- data.frame(
-      analysis_id = analysis_id,
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      model_name = NA_character_,
-      message_type = "skip",
-      message_text = paste0("완전케이스 기준 행 수가 ", nrow(branch_df), "개로 최소 기준 미만이라 건너뜀"),
-      stringsAsFactors = FALSE
-    )
-    next
-  }
-  
-  if (sum(branch_df$event_transition, na.rm = TRUE) < MIN_EVENTS_PER_ANALYSIS) {
-    fit_message_rows[[length(fit_message_rows) + 1L]] <- data.frame(
-      analysis_id = analysis_id,
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      model_name = NA_character_,
-      message_type = "skip",
-      message_text = paste0("event 수가 ", sum(branch_df$event_transition, na.rm = TRUE), "개로 최소 기준 미만이라 건너뜀"),
-      stringsAsFactors = FALSE
-    )
-    next
-  }
-  
-  fit_nc_list[[analysis_id]] <- list()
-  surv_formula <- model_frame_info$formula
-  formula_chr <- paste(deparse(surv_formula), collapse = " ")
-  
-  Gfun <- make_censoring_survival_evaluator(
-    time = branch_df$time_years,
-    event = branch_df$event_transition
-  )
-  
-  branch_max_followup <- max(branch_df$time_years, na.rm = TRUE)
-  branch_last_event <- if (sum(branch_df$event_transition, na.rm = TRUE) > 0L) {
-    max(branch_df$time_years[branch_df$event_transition == 1L], na.rm = TRUE)
-  } else {
-    NA_real_
-  }
-  
-  for (model_key in CANDIDATE_MODELS) {
-    fit_res <- safe_fit_noncure_model(
-      model_key = model_key,
-      surv_formula = surv_formula,
-      dat = branch_df
-    )
+  for (j in seq_along(times)) {
+    t_eval <- times[j]
+    g_t <- Gfit$eval(t_eval, left = FALSE)
+    g_y_left <- Gfit$eval(time, left = TRUE)
     
-    if (!fit_res$success) {
-      analysis_registry_rows[[length(analysis_registry_rows) + 1L]] <- data.frame(
-        analysis_id = analysis_id,
-        dataset_branch = branch_name,
-        subgroup = "overall",
-        model_name = model_key,
-        formula = formula_chr,
-        used_covariates = paste(model_frame_info$used_covariates, collapse = " + "),
-        n = nrow(branch_df),
-        n_event = sum(branch_df$event_transition, na.rm = TRUE),
-        n_censor = sum(branch_df$event_transition == 0L, na.rm = TRUE),
-        excluded_due_to_missing_covariates = model_frame_info$excluded_due_to_missing,
-        max_followup_years = branch_max_followup,
-        last_event_years = branch_last_event,
-        logLik = NA_real_,
-        AIC = NA_real_,
-        BIC = NA_real_,
-        npar = NA_real_,
-        fit_success = FALSE,
-        error_message = fit_res$error_message,
-        warning_message = fit_res$warning_message,
-        stringsAsFactors = FALSE
+    case_w <- ifelse(event == 1 & time <= t_eval, 1 / g_y_left, 0)
+    control_w <- ifelse(time > t_eval, 1 / g_t, 0)
+    
+    if (!is.finite(g_t) || g_t <= 0 || any((event == 1 & time <= t_eval) & (!is.finite(g_y_left) | g_y_left <= 0))) {
+      auc_t <- NA_real_
+      brier_t <- NA_real_
+      evaluable <- FALSE
+    } else {
+      auc_t <- weighted_auc_cd(risk_mat[, j], case_w, control_w)
+      brier_t <- brier_ipcw(surv_mat[, j], time, event, t_eval, Gfit)
+      evaluable <- is.finite(auc_t) && is.finite(brier_t)
+    }
+    
+    yearly_rows[[j]] <- data.frame(
+      year = t_eval,
+      auc_cd = auc_t,
+      brier = brier_t,
+      n_cases = sum(event == 1 & time <= t_eval),
+      n_controls = sum(time > t_eval),
+      n_censored_before_t = sum(event == 0 & time <= t_eval),
+      censor_surv_at_t = ifelse(is.finite(g_t), g_t, NA_real_),
+      evaluable = evaluable,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  yearly_df <- bind_rows_safe(yearly_rows)
+  brier_ok <- is.finite(yearly_df$brier)
+  auc_ok <- is.finite(yearly_df$auc_cd)
+  
+  ibs_1to10 <- if (all(brier_ok)) trapz_mean(yearly_df$year, yearly_df$brier) else NA_real_
+  ibs_available <- if (sum(brier_ok) >= 2) trapz_mean(yearly_df$year[brier_ok], yearly_df$brier[brier_ok]) else NA_real_
+  
+  summary_df <- data.frame(
+    ibs_1to10 = ibs_1to10,
+    ibs_available = ibs_available,
+    ibs_available_from = ifelse(any(brier_ok), min(yearly_df$year[brier_ok]), NA_real_),
+    ibs_available_to = ifelse(any(brier_ok), max(yearly_df$year[brier_ok]), NA_real_),
+    auc_mean_available = ifelse(any(auc_ok), mean(yearly_df$auc_cd[auc_ok]), NA_real_),
+    brier_mean_available = ifelse(any(brier_ok), mean(yearly_df$brier[brier_ok]), NA_real_),
+    n_evaluable_years = sum(brier_ok),
+    stringsAsFactors = FALSE
+  )
+  
+  list(yearly = yearly_df, summary = summary_df)
+}
+
+matrix_to_long <- function(surv_mat, data, times, model_meta) {
+  risk_mat <- 1 - surv_mat
+  n_subject <- nrow(data)
+  n_time <- length(times)
+  
+  out <- data.frame(
+    dataset_id = model_meta$dataset_id,
+    subgroup_id = data$subgroup_id,
+    model_id = model_meta$model_id,
+    lane = model_meta$lane,
+    family = model_meta$family,
+    cov_spec = model_meta$cov_spec,
+    subject_uid = rep(data$subject_uid, each = n_time),
+    site = rep(as.character(data$site), each = n_time),
+    sex_num = rep(data$sex_num, each = n_time),
+    age_raw = rep(data$age_raw, each = n_time),
+    age_s = rep(data$age_s, each = n_time),
+    year = rep(times, times = n_subject),
+    predicted_surv = as.vector(t(surv_mat)),
+    predicted_risk = as.vector(t(risk_mat)),
+    is_beyond_max_followup = rep(times > max(data$time_years_model), times = n_subject),
+    is_beyond_last_event = rep(times > max(data$time_years_model[data$event_transition == 1]), times = n_subject),
+    stringsAsFactors = FALSE
+  )
+  
+  rownames(out) <- NULL
+  out
+}
+
+cohort_mean_from_long <- function(pred_long) {
+  if (nrow(pred_long) == 0) {
+    return(data.frame())
+  }
+  
+  grp_cols <- c("dataset_id", "subgroup_id", "model_id", "lane", "family", "cov_spec", "year")
+  
+  surv_mean <- stats::aggregate(
+    predicted_surv ~ dataset_id + subgroup_id + model_id + lane + family + cov_spec + year,
+    data = pred_long,
+    FUN = mean
+  )
+  
+  risk_mean <- stats::aggregate(
+    predicted_risk ~ dataset_id + subgroup_id + model_id + lane + family + cov_spec + year,
+    data = pred_long,
+    FUN = mean
+  )
+  
+  out <- merge(surv_mean, risk_mean, by = grp_cols, all = TRUE)
+  names(out)[names(out) == "predicted_surv"] <- "mean_surv"
+  names(out)[names(out) == "predicted_risk"] <- "mean_risk"
+  out
+}
+
+# 🟠 읽기: 원시 데이터와 브랜치 객체 ===============================
+raw_dat <- utils::read.csv(data_path, check.names = FALSE)
+base_dat <- prepare_base_data(
+  raw = raw_dat,
+  age_var_preferred = age_var_preferred,
+  days_per_year = days_per_year,
+  time_zero_correction_days = time_zero_correction_days,
+  site_reference = site_reference
+)
+
+if (!all(c("PNU", "SNU") %in% unique(as.character(base_dat$site)))) {
+  stop("site 표준화 후 PNU와 SNU 두 브랜치를 모두 찾지 못했습니다.")
+}
+
+branch_list <- build_branch_list(base_dat, site_reference = site_reference)
+
+analysis_data_export <- bind_rows_safe(lapply(names(branch_list), function(dataset_id) {
+  dat <- branch_list[[dataset_id]]
+  data.frame(
+    dataset_id = dataset_id,
+    subgroup_id = dat$subgroup_id,
+    subject_uid = dat$subject_uid,
+    id = dat$id,
+    site = as.character(dat$site),
+    site_raw = dat$site_raw,
+    age_var_used = dat$age_var_used,
+    age_raw = dat$age_raw,
+    age_center_branch = dat$age_center_branch,
+    age_scale_2sd_branch = dat$age_scale_2sd_branch,
+    age_s = dat$age_s,
+    sex_num = dat$sex_num,
+    status_num = dat$status_num,
+    status = dat$status,
+    event_transition = dat$event_transition,
+    days_followup = dat$days_followup,
+    time_years_raw = dat$time_years_raw,
+    time_years_model = dat$time_years_model,
+    time_was_zero_adjusted = dat$time_was_zero_adjusted,
+    stringsAsFactors = FALSE
+  )
+}))
+
+# 🟠 실행: 전체 no-cure 그리드 적합 ===============================
+all_fit_objects <- list()
+registry_rows <- list()
+prediction_long_rows <- list()
+performance_yearly_rows <- list()
+performance_summary_rows <- list()
+model_grid_rows <- list()
+
+for (dataset_id in names(branch_list)) {
+  dat <- branch_list[[dataset_id]]
+  censoring_fit <- fit_censoring_km(dat$time_years_model, dat$event_transition)
+  grid_df <- build_nocure_grid(dataset_id)
+  model_grid_rows[[dataset_id]] <- grid_df
+  
+  branch_n <- nrow(dat)
+  branch_event_n <- sum(dat$event_transition == 1L)
+  branch_censored_n <- sum(dat$event_transition == 0L)
+  branch_max_followup <- max(dat$time_years_model)
+  branch_max_event <- if (branch_event_n > 0) max(dat$time_years_model[dat$event_transition == 1L]) else NA_real_
+  branch_site_levels <- paste(levels(dat$site), collapse = "|")
+  
+  for (i in seq_len(nrow(grid_df))) {
+    spec_row <- grid_df[i, , drop = FALSE]
+    model_id <- spec_row$model_id
+    formula_text <- paste0("survival::Surv(time_years_model, event_transition) ~ ", spec_row$formula_rhs)
+    formula_obj <- stats::as.formula(formula_text)
+    
+    if (spec_row$family != "coxph") {
+      fit_res <- fit_survreg_model(
+        formula_obj = formula_obj,
+        data = dat,
+        dist_name = spec_row$family,
+        maxiter = survreg_maxiter
       )
-      
-      fit_message_rows[[length(fit_message_rows) + 1L]] <- data.frame(
-        analysis_id = analysis_id,
-        dataset_branch = branch_name,
-        subgroup = "overall",
-        model_name = model_key,
-        message_type = "fit_error",
-        message_text = fit_res$error_message,
-        stringsAsFactors = FALSE
+    } else {
+      fit_res <- fit_coxph_model(
+        formula_obj = formula_obj,
+        data = dat,
+        ties = cox_ties
       )
-      next
     }
     
     fit_obj <- fit_res$fit
-    fit_nc_list[[analysis_id]][[model_key]] <- fit_obj
+    error_message <- fit_res$error_message
+    warning_messages <- fit_res$warnings
     
-    fit_metrics <- extract_fit_metrics(fit_obj)
+    convergence_warning_flag <- any(grepl(
+      "did not converge|didn't converge|ran out of iterations|loglik converged before variable|inner loop failed",
+      warning_messages,
+      ignore.case = TRUE
+    ))
     
-    surv_mat <- predict_survival_matrix(
-      fit_obj = fit_obj,
-      newdata_df = branch_df,
-      times = PREDICTION_HORIZONS_YEARS
+    fit_success <- !is.null(fit_obj) && is.na(error_message)
+    convergence_flag <- fit_success && !convergence_warning_flag
+    
+    if (fit_success) {
+      diag_info <- safe_vcov_diagnostics(
+        fit = fit_obj,
+        warnings = warning_messages,
+        dist_name = if (spec_row$family == "coxph") NA_character_ else spec_row$family
+      )
+    } else {
+      diag_info <- list(
+        singular_hessian_flag = NA,
+        boundary_flag = NA
+      )
+    }
+    
+    if (fit_success && spec_row$family != "coxph") {
+      loglik_val <- as.numeric(stats::logLik(fit_obj))
+      n_params <- attr(stats::logLik(fit_obj), "df")
+      aic_val <- -2 * loglik_val + 2 * n_params
+      bic_val <- -2 * loglik_val + log(branch_n) * n_params
+      partial_loglik_val <- NA_real_
+      aic_partial_val <- NA_real_
+      likelihood_type <- "full"
+    } else if (fit_success && spec_row$family == "coxph") {
+      n_params <- sum(is.finite(stats::coef(fit_obj)))
+      partial_loglik_val <- fit_obj$loglik[2]
+      aic_partial_val <- -2 * partial_loglik_val + 2 * n_params
+      loglik_val <- NA_real_
+      aic_val <- NA_real_
+      bic_val <- NA_real_
+      likelihood_type <- "partial"
+    } else {
+      n_params <- NA_real_
+      loglik_val <- NA_real_
+      aic_val <- NA_real_
+      bic_val <- NA_real_
+      partial_loglik_val <- NA_real_
+      aic_partial_val <- NA_real_
+      likelihood_type <- if (spec_row$family == "coxph") "partial" else "full"
+    }
+    
+    registry_row <- data.frame(
+      dataset_id = dataset_id,
+      subgroup_id = "overall",
+      model_id = model_id,
+      model_class = "nocure",
+      lane = spec_row$lane,
+      family = spec_row$family,
+      cov_spec = spec_row$cov_spec,
+      formula_full = formula_text,
+      formula_rhs = spec_row$formula_rhs,
+      interaction_flag = spec_row$interaction_flag,
+      site_flag = spec_row$site_flag,
+      likelihood_type = likelihood_type,
+      fit_success = fit_success,
+      convergence_flag = convergence_flag,
+      singular_hessian_flag = diag_info$singular_hessian_flag,
+      boundary_flag = diag_info$boundary_flag,
+      n_subject = branch_n,
+      n_event = branch_event_n,
+      n_censored = branch_censored_n,
+      max_followup_years = branch_max_followup,
+      max_event_years = branch_max_event,
+      zero_time_adjusted_n = sum(dat$time_was_zero_adjusted),
+      age_var_used = unique(dat$age_var_used),
+      age_center_branch = unique(dat$age_center_branch),
+      age_scale_2sd_branch = unique(dat$age_scale_2sd_branch),
+      site_levels = branch_site_levels,
+      n_params = n_params,
+      logLik_full = loglik_val,
+      AIC = aic_val,
+      BIC = bic_val,
+      partial_logLik = partial_loglik_val,
+      AIC_partial = aic_partial_val,
+      warning_messages = if (length(warning_messages) > 0) paste(unique(warning_messages), collapse = " | ") else NA_character_,
+      error_message = error_message,
+      stringsAsFactors = FALSE
     )
+    
+    registry_rows[[length(registry_rows) + 1L]] <- registry_row
+    
+    all_fit_objects[[model_id]] <- list(
+      meta = registry_row,
+      fit = fit_obj,
+      warnings = warning_messages,
+      error_message = error_message
+    )
+    
+    if (!fit_success) {
+      next
+    }
+    
+    if (spec_row$family != "coxph") {
+      surv_mat <- predict_survreg_survival(
+        fit = fit_obj,
+        newdata = dat,
+        times = prediction_years,
+        dist_name = spec_row$family
+      )
+    } else {
+      surv_mat <- predict_cox_survival(
+        fit = fit_obj,
+        newdata = dat,
+        times = prediction_years
+      )
+    }
+    
     risk_mat <- 1 - surv_mat
     
-    subject_pred_df <- data.frame(
-      site_id = rep(branch_df$site_id, each = length(PREDICTION_HORIZONS_YEARS)),
-      site = rep(as.character(branch_df$site), each = length(PREDICTION_HORIZONS_YEARS)),
-      id = rep(branch_df$id, each = length(PREDICTION_HORIZONS_YEARS)),
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      analysis_id = analysis_id,
-      model_name = model_key,
-      year = rep(PREDICTION_HORIZONS_YEARS, times = nrow(branch_df)),
-      surv_prob = as.numeric(t(surv_mat)),
-      risk_prob = as.numeric(t(risk_mat)),
-      stringsAsFactors = FALSE
+    model_meta <- list(
+      dataset_id = dataset_id,
+      model_id = model_id,
+      lane = spec_row$lane,
+      family = spec_row$family,
+      cov_spec = spec_row$cov_spec
     )
-    pred_subject_rows[[length(pred_subject_rows) + 1L]] <- subject_pred_df
     
-    mean_pred_df <- data.frame(
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      analysis_id = analysis_id,
-      model_name = model_key,
-      year = PREDICTION_HORIZONS_YEARS,
-      mean_surv_prob = colMeans(surv_mat, na.rm = TRUE),
-      mean_risk_prob = colMeans(risk_mat, na.rm = TRUE),
-      prediction_source = "mean_subject_prediction",
-      stringsAsFactors = FALSE
+    pred_long <- matrix_to_long(
+      surv_mat = surv_mat,
+      data = dat,
+      times = prediction_years,
+      model_meta = model_meta
     )
-    pred_mean_rows[[length(pred_mean_rows) + 1L]] <- mean_pred_df
     
-    perf_by_time_one_model <- lapply(seq_along(PREDICTION_HORIZONS_YEARS), function(j) {
-      horizon_t <- PREDICTION_HORIZONS_YEARS[j]
-      risk_t <- risk_mat[, j]
-      surv_t <- surv_mat[, j]
-      
-      n_cases_t <- sum(branch_df$time_years <= horizon_t & branch_df$event_transition == 1L, na.rm = TRUE)
-      n_controls_t <- sum(branch_df$time_years > horizon_t, na.rm = TRUE)
-      
-      auc_t <- if (horizon_t <= branch_max_followup) {
-        compute_auc_at_time(
-          time = branch_df$time_years,
-          event = branch_df$event_transition,
-          risk_pred_t = risk_t,
-          horizon_t = horizon_t
-        )
-      } else {
-        NA_real_
-      }
-      
-      brier_t <- if (horizon_t <= branch_max_followup) {
-        compute_ipcw_brier(
-          time = branch_df$time_years,
-          event = branch_df$event_transition,
-          surv_pred_t = surv_t,
-          horizon_t = horizon_t,
-          Gfun = Gfun
-        )
-      } else {
-        NA_real_
-      }
-      
+    prediction_long_rows[[length(prediction_long_rows) + 1L]] <- pred_long
+    
+    perf_list <- evaluate_model_performance(
+      time = dat$time_years_model,
+      event = dat$event_transition,
+      surv_mat = surv_mat,
+      risk_mat = risk_mat,
+      times = prediction_years,
+      Gfit = censoring_fit
+    )
+    
+    perf_yearly <- cbind(
       data.frame(
-        dataset_branch = branch_name,
-        subgroup = "overall",
-        analysis_id = analysis_id,
-        model_name = model_key,
-        year = horizon_t,
-        n_cases_t = n_cases_t,
-        n_controls_t = n_controls_t,
-        max_followup_years = branch_max_followup,
-        auc_t = auc_t,
-        brier_t = brier_t,
-        metric_in_observed_support = horizon_t <= branch_max_followup,
+        dataset_id = dataset_id,
+        subgroup_id = "overall",
+        model_id = model_id,
+        lane = spec_row$lane,
+        family = spec_row$family,
+        cov_spec = spec_row$cov_spec,
+        performance_set = "apparent",
         stringsAsFactors = FALSE
-      )
-    })
-    perf_by_time_one_model <- dplyr::bind_rows(perf_by_time_one_model)
-    perf_time_rows[[length(perf_time_rows) + 1L]] <- perf_by_time_one_model
-    
-    valid_brier_df <- perf_by_time_one_model[is.finite(perf_by_time_one_model$brier_t), , drop = FALSE]
-    ibs_grid <- if (nrow(valid_brier_df) == 0L) {
-      NA_real_
-    } else if (nrow(valid_brier_df) == 1L) {
-      valid_brier_df$brier_t[1]
-    } else {
-      trapz_scalar(valid_brier_df$year, valid_brier_df$brier_t) /
-        (max(valid_brier_df$year) - min(valid_brier_df$year))
-    }
-    
-    perf_overall_rows[[length(perf_overall_rows) + 1L]] <- data.frame(
-      analysis_id = analysis_id,
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      model_name = model_key,
-      formula = formula_chr,
-      used_covariates = paste(model_frame_info$used_covariates, collapse = " + "),
-      n = nrow(branch_df),
-      n_event = sum(branch_df$event_transition, na.rm = TRUE),
-      n_censor = sum(branch_df$event_transition == 0L, na.rm = TRUE),
-      excluded_due_to_missing_covariates = model_frame_info$excluded_due_to_missing,
-      max_followup_years = branch_max_followup,
-      last_event_years = branch_last_event,
-      logLik = fit_metrics$logLik,
-      AIC = fit_metrics$AIC,
-      BIC = fit_metrics$BIC,
-      npar = fit_metrics$npar,
-      IBS_grid_1to10y = ibs_grid,
-      fit_success = TRUE,
-      warning_message = fit_res$warning_message,
-      stringsAsFactors = FALSE
+      )[rep(1, nrow(perf_list$yearly)), , drop = FALSE],
+      perf_list$yearly
     )
     
-    analysis_registry_rows[[length(analysis_registry_rows) + 1L]] <- data.frame(
-      analysis_id = analysis_id,
-      dataset_branch = branch_name,
-      subgroup = "overall",
-      model_name = model_key,
-      formula = formula_chr,
-      used_covariates = paste(model_frame_info$used_covariates, collapse = " + "),
-      n = nrow(branch_df),
-      n_event = sum(branch_df$event_transition, na.rm = TRUE),
-      n_censor = sum(branch_df$event_transition == 0L, na.rm = TRUE),
-      excluded_due_to_missing_covariates = model_frame_info$excluded_due_to_missing,
-      max_followup_years = branch_max_followup,
-      last_event_years = branch_last_event,
-      logLik = fit_metrics$logLik,
-      AIC = fit_metrics$AIC,
-      BIC = fit_metrics$BIC,
-      npar = fit_metrics$npar,
-      fit_success = TRUE,
-      error_message = NA_character_,
-      warning_message = fit_res$warning_message,
-      stringsAsFactors = FALSE
+    perf_summary <- cbind(
+      data.frame(
+        dataset_id = dataset_id,
+        subgroup_id = "overall",
+        model_id = model_id,
+        lane = spec_row$lane,
+        family = spec_row$family,
+        cov_spec = spec_row$cov_spec,
+        performance_set = "apparent",
+        stringsAsFactors = FALSE
+      ),
+      perf_list$summary
     )
+    
+    performance_yearly_rows[[length(performance_yearly_rows) + 1L]] <- perf_yearly
+    performance_summary_rows[[length(performance_summary_rows) + 1L]] <- perf_summary
   }
 }
 
-## 🟠 Select: best models by information criteria ===============================
-analysis_registry_df <- dplyr::bind_rows(analysis_registry_rows)
-fit_messages_df <- dplyr::bind_rows(fit_message_rows)
-pred_subject_nc <- dplyr::bind_rows(pred_subject_rows)
-pred_mean_nc <- dplyr::bind_rows(pred_mean_rows)
-perf_nc_time <- dplyr::bind_rows(perf_time_rows)
-perf_nc_overall <- dplyr::bind_rows(perf_overall_rows)
+model_registry_df <- bind_rows_safe(registry_rows)
+subject_predictions_df <- bind_rows_safe(prediction_long_rows)
+mean_predictions_df <- cohort_mean_from_long(subject_predictions_df)
+performance_yearly_df <- bind_rows_safe(performance_yearly_rows)
+performance_summary_df <- bind_rows_safe(performance_summary_rows)
+model_grid_df <- bind_rows_safe(model_grid_rows)
 
-if (nrow(analysis_registry_df) > 0L) {
-  analysis_registry_df <- analysis_registry_df %>%
-    dplyr::group_by(analysis_id) %>%
-    dplyr::mutate(
-      best_by_AIC = fit_success & is.finite(AIC) & (AIC == min(AIC[fit_success & is.finite(AIC)], na.rm = TRUE)),
-      best_by_BIC = fit_success & is.finite(BIC) & (BIC == min(BIC[fit_success & is.finite(BIC)], na.rm = TRUE))
-    ) %>%
-    dplyr::ungroup()
-  
-  perf_nc_overall <- perf_nc_overall %>%
-    dplyr::left_join(
-      analysis_registry_df %>%
-        dplyr::select(analysis_id, model_name, best_by_AIC, best_by_BIC),
-      by = c("analysis_id", "model_name")
-    )
-  
-  successful_best_aic <- analysis_registry_df %>%
-    dplyr::filter(fit_success, best_by_AIC) %>%
-    dplyr::select(analysis_id, model_name)
-  
-  if (nrow(successful_best_aic) > 0L) {
-    for (i in seq_len(nrow(successful_best_aic))) {
-      aid <- successful_best_aic$analysis_id[i]
-      mname <- successful_best_aic$model_name[i]
-      fit_nc_best[[aid]] <- fit_nc_list[[aid]][[mname]]
-    }
-  }
-}
-
-# 🔴 Export: Step4 artifacts and reusable objects ===============================
-## 🟠 Write: csv summaries and rds bundle ===============================
-step4_bundle <- list(
-  meta = list(
-    step = "Step4_non_cure_benchmark_MLE",
-    data_path = DATA_PATH,
-    export_path = EXPORT_PATH,
-    analysis_branches = ANALYSIS_BRANCHES,
-    prediction_horizons_years = PREDICTION_HORIZONS_YEARS,
-    candidate_models = CANDIDATE_MODELS,
-    remission_handling = "remission_as_censoring",
-    time_unit = "years_from_days_followup_div_365.25",
-    age_source = age_source,
-    random_seed = RANDOM_SEED
+# 🟠 정리: 결과 객체와 요약 테이블 ===============================
+fit_bundle <- list(
+  script_stage = "Step4_no_cure_full_grid",
+  config = list(
+    data_path = data_path,
+    export_path = export_path,
+    file_prefix = file_prefix,
+    age_var_preferred = age_var_preferred,
+    age_var_resolved = unique(base_dat$age_var_used),
+    site_reference = site_reference,
+    prediction_years = prediction_years,
+    days_per_year = days_per_year,
+    time_zero_correction_days = time_zero_correction_days,
+    survreg_maxiter = survreg_maxiter,
+    cox_ties = cox_ties
   ),
-  analysis_data_prepared = analysis_df_valid,
-  initial_exclusions = initial_exclusion_df,
-  fit_nc_list = fit_nc_list,
-  fit_nc_best = fit_nc_best,
-  analysis_registry = analysis_registry_df,
-  pred_subject_nc = pred_subject_nc,
-  pred_mean_nc = pred_mean_nc,
-  perf_nc_time = perf_nc_time,
-  perf_nc_overall = perf_nc_overall,
-  fit_messages = fit_messages_df
+  analysis_data = analysis_data_export,
+  model_grid = model_grid_df,
+  model_registry = model_registry_df,
+  fit_objects = all_fit_objects,
+  subject_yearly_predictions = subject_predictions_df,
+  mean_yearly_predictions = mean_predictions_df,
+  performance_yearly = performance_yearly_df,
+  performance_summary = performance_summary_df,
+  session_info = paste(capture.output(sessionInfo()), collapse = "\n"),
+  created_at = as.character(Sys.time())
 )
 
-saveRDS(
-  object = step4_bundle,
-  file = file.path(EXPORT_PATH, "step4_noncure_bundle.rds")
+# 🟠 저장: CSV와 RDS 산출물 ===============================
+utils::write.csv(analysis_data_export, analysis_data_file, row.names = FALSE, na = "")
+utils::write.csv(model_registry_df, model_registry_file, row.names = FALSE, na = "")
+utils::write.csv(subject_predictions_df, subject_predictions_file, row.names = FALSE, na = "")
+utils::write.csv(mean_predictions_df, mean_predictions_file, row.names = FALSE, na = "")
+utils::write.csv(performance_yearly_df, performance_yearly_file, row.names = FALSE, na = "")
+utils::write.csv(performance_summary_df, performance_summary_file, row.names = FALSE, na = "")
+saveRDS(fit_bundle, fit_bundle_file)
+
+manifest_df <- data.frame(
+  file_name = c(
+    basename(analysis_data_file),
+    basename(model_registry_file),
+    basename(subject_predictions_file),
+    basename(mean_predictions_file),
+    basename(performance_yearly_file),
+    basename(performance_summary_file),
+    basename(fit_bundle_file),
+    basename(manifest_file)
+  ),
+  file_path = c(
+    analysis_data_file,
+    model_registry_file,
+    subject_predictions_file,
+    mean_predictions_file,
+    performance_yearly_file,
+    performance_summary_file,
+    fit_bundle_file,
+    manifest_file
+  ),
+  description = c(
+    "브랜치별(PNU/SNU/merged) Step4 분석 데이터와 전처리 결과",
+    "모형별 적합 상태, formula, fit 통계량, 경고/오류 요약",
+    "모형별/개체별/연도별 예측 생존확률 및 위험도",
+    "모형별/연도별 cohort-average mean survival/risk",
+    "모형별/연도별 cumulative-dynamic AUC 및 Brier score",
+    "모형별 IBS(가능 범위), 평균 AUC/Brier 요약",
+    "적합 객체와 모든 핵심 산출물을 담은 RDS 번들",
+    "export된 파일 목록"
+  ),
+  stringsAsFactors = FALSE
 )
 
-utils::write.csv(
-  analysis_registry_df,
-  file = file.path(EXPORT_PATH, "step4_noncure_fit_registry.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  perf_nc_time,
-  file = file.path(EXPORT_PATH, "step4_noncure_performance_by_time.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  perf_nc_overall,
-  file = file.path(EXPORT_PATH, "step4_noncure_performance_overall.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  pred_mean_nc,
-  file = file.path(EXPORT_PATH, "step4_noncure_mean_predictions_by_time.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  pred_subject_nc,
-  file = file.path(EXPORT_PATH, "step4_noncure_subject_predictions_long.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  initial_exclusion_df,
-  file = file.path(EXPORT_PATH, "step4_noncure_initial_exclusions.csv"),
-  row.names = FALSE,
-  na = ""
-)
-
-utils::write.csv(
-  fit_messages_df,
-  file = file.path(EXPORT_PATH, "step4_noncure_fit_messages.csv"),
-  row.names = FALSE,
-  na = ""
-)
+utils::write.csv(manifest_df, manifest_file, row.names = FALSE, na = "")
+manifest_df$file_size_bytes <- unname(file.info(manifest_df$file_path)$size)
+utils::write.csv(manifest_df, manifest_file, row.names = FALSE, na = "")
