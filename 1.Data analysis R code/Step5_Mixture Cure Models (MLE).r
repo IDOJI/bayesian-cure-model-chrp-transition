@@ -1,1847 +1,2459 @@
-# 🔴 Rebuild: Step5 MLE cure script after anomaly detection ===============================
-# Prior outputs showed clear anomalies:
-# 1) fit_registry$success was FALSE for all 80 models despite 78 converged fits
-# 2) cure_only.csv and latency_summary.csv were empty
-# 3) mean_predictions and subject_predictions contained only Cox-latency models
-# 4) flexsurvcure prediction export failed with summary parsing errors
-# This rewritten script fixes those issues and adds strict post-fit validation.
+# 🔴 Configure: paths and execution switches ===============================
 
-# 🔴 Configure: paths and run switches ===============================
+## 🟠 Define: data path and export location ===============================
+data_path <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
+export_path <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦5.Step5_MLE MCM/attachments'
 
-DATA_PATH <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
-EXPORT_DIR <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦5.Step5_MLE MCM/attachments'
+## 🟠 Set: user-facing analysis parameters ===============================
+script_version <- "step5_mle_cure_grid_v2_0"
+random_seed <- 20260317L
 
-REFIT_MODELS <- TRUE
-AUTO_INSTALL_PACKAGES <- FALSE
-EXPORT_SUBJECT_PREDICTIONS <- TRUE
-STOP_IF_ANY_PREDICTION_FAILURE <- FALSE
+age_var_preferred <- "age_exact_entry"
+id_var <- "id"
+site_var <- "site"
+sex_var <- "sex_num"
+time_var <- "days_followup"
+status_var <- "status_num"
 
-SEED <- 20260317L
-SCRIPT_VERSION <- "step5_mle_cure_rebuild_v2"
+pnu_site_label <- "PNU"
+snu_site_label <- "SNU"
+site_reference_label <- "PNU"
 
-PNU_SITE_VALUE <- "PNU"
-SNU_SITE_VALUE <- "SNU"
-DATASETS_TO_RUN <- c("PNU", "SNU", "MERGED")
-SITE_REFERENCE <- PNU_SITE_VALUE
+days_per_year <- 365.25
+time_zero_epsilon_days <- 0.5
+prediction_years <- 1:10
+prob_floor <- 1e-12
+boundary_prob_threshold <- 1e-4
+big_nll <- 1e20
 
-ID_VAR <- "id"
-SITE_VAR <- "site"
-SEX_VAR <- "sex_num"
-AGE_VAR <- "age_exact_entry"
-AGE_FALLBACK_VAR <- "age_int"
-TIME_VAR <- "days_followup"
-STATUS_VAR <- "status_num"
+reuse_existing_model_rds <- TRUE
+overwrite_model_rds <- FALSE
+force_refit_if_script_version_mismatch <- TRUE
 
-EVENT_CODE <- 1L
-RIGHT_CENSOR_CODES <- c(0L, 2L)
+parametric_maxit <- 2000L
+parametric_reltol <- 1e-10
+parametric_gamma_intercept_shifts <- c(0, 1.5, -1.5)
+parametric_gamma_mean_uncured_starts <- c(0.50, 0.80, 0.95)
 
-TIME_UNIT_DIVISOR <- 365.25
-TIME_EPS_YEARS <- 1e-08
-PREDICTION_YEARS <- 1:10
-BOUNDARY_EPS <- 1e-04
+em_max_iter <- 200L
+em_tol <- 1e-6
+coxph_iter_max <- 50L
 
-PARAMETRIC_FAMILIES <- c("exp", "weibull", "llogis", "lnorm")
-FLEXSURVCURE_LINK <- "logistic"
-FLEXSURV_MAXIT <- 5000L
+write_subject_level_predictions <- TRUE
+write_mean_level_predictions <- TRUE
+write_param_estimates <- TRUE
+write_cure_summary <- TRUE
+write_vcov_long <- TRUE
+write_cox_baseline_curve <- TRUE
+write_fit_diagnostics <- TRUE
+write_perf_metrics <- TRUE
 
-SMCURE_LINK <- "logit"
-SMCURE_VAR <- FALSE
-SMCURE_NBOOT <- 0L
-SMCURE_EMMAX <- 200L
-SMCURE_EPS <- 1e-07
+# 🔴 Initialize: packages and global options ===============================
 
-MASTER_RDS_NAME <- "step5_mle_cure_master.rds"
-MODEL_GRID_CSV_NAME <- "step5_mle_cure_model_grid.csv"
-PREPROC_CSV_NAME <- "step5_mle_cure_preprocessing.csv"
-ANALYSIS_SPEC_CSV_NAME <- "step5_mle_cure_analysis_spec.csv"
-FIT_REGISTRY_CSV_NAME <- "step5_mle_cure_fit_registry.csv"
-COEFFICIENTS_CSV_NAME <- "step5_mle_cure_coefficients.csv"
-CURE_ONLY_CSV_NAME <- "step5_mle_cure_cure_only.csv"
-MEAN_PRED_CSV_NAME <- "step5_mle_cure_mean_predictions.csv"
-LATENCY_SUMMARY_CSV_NAME <- "step5_mle_cure_latency_summary.csv"
-SUBJECT_PRED_CSV_NAME <- "step5_mle_cure_subject_predictions.csv"
-MANIFEST_CSV_NAME <- "step5_mle_cure_manifest.csv"
-
-# 🔴 Initialize: session and file map ===============================
-
-options(stringsAsFactors = FALSE)
-set.seed(SEED)
-
-DATA_PATH <- path.expand(DATA_PATH)
-EXPORT_DIR <- path.expand(EXPORT_DIR)
-
-if (!dir.exists(EXPORT_DIR)) {
-  dir.create(EXPORT_DIR, recursive = TRUE, showWarnings = FALSE)
+## 🟠 Resolve: dependencies and options ===============================
+required_pkgs <- c("survival")
+missing_pkgs <- required_pkgs[!vapply(required_pkgs, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing_pkgs) > 0L) {
+  stop("다음 패키지를 먼저 설치해 주세요: ", paste(missing_pkgs, collapse = ", "))
 }
 
-MASTER_RDS_PATH <- file.path(EXPORT_DIR, MASTER_RDS_NAME)
-MODEL_GRID_CSV_PATH <- file.path(EXPORT_DIR, MODEL_GRID_CSV_NAME)
-PREPROC_CSV_PATH <- file.path(EXPORT_DIR, PREPROC_CSV_NAME)
-ANALYSIS_SPEC_CSV_PATH <- file.path(EXPORT_DIR, ANALYSIS_SPEC_CSV_NAME)
-FIT_REGISTRY_CSV_PATH <- file.path(EXPORT_DIR, FIT_REGISTRY_CSV_NAME)
-COEFFICIENTS_CSV_PATH <- file.path(EXPORT_DIR, COEFFICIENTS_CSV_NAME)
-CURE_ONLY_CSV_PATH <- file.path(EXPORT_DIR, CURE_ONLY_CSV_NAME)
-MEAN_PRED_CSV_PATH <- file.path(EXPORT_DIR, MEAN_PRED_CSV_NAME)
-LATENCY_SUMMARY_CSV_PATH <- file.path(EXPORT_DIR, LATENCY_SUMMARY_CSV_NAME)
-SUBJECT_PRED_CSV_PATH <- file.path(EXPORT_DIR, SUBJECT_PRED_CSV_NAME)
-MANIFEST_CSV_PATH <- file.path(EXPORT_DIR, MANIFEST_CSV_NAME)
+set.seed(random_seed)
+options(stringsAsFactors = FALSE, scipen = 999)
 
-# 🔴 Check: packages and utility operators ===============================
+if (!dir.exists(export_path)) {
+  dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
+}
 
-## 🟠 Ensure: package availability ===============================
+# 🔴 Build: helper utilities for fitting and export ===============================
 
-ensure_packages <- function(pkgs, auto_install = FALSE) {
-  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-  if (length(missing_pkgs) > 0L) {
-    if (isTRUE(auto_install)) {
-      install.packages(missing_pkgs)
-    } else {
-      stop(
-        "Missing required packages: ",
-        paste(missing_pkgs, collapse = ", "),
-        ". Set AUTO_INSTALL_PACKAGES <- TRUE to install automatically."
-      )
+## 🟠 Create: small utilities and safe wrappers ===============================
+`%||%` <- function(x, y) {
+  if (is.null(x) || length(x) == 0L) y else x
+}
+
+sanitize_filename <- function(x) {
+  x <- gsub("[^A-Za-z0-9_\\-]+", "_", x)
+  x <- gsub("_+", "_", x)
+  x <- gsub("^_|_$", "", x)
+  x
+}
+
+collapse_terms <- function(x) {
+  if (length(x) == 0L) "(none)" else paste(x, collapse = " + ")
+}
+
+write_csv_utf8 <- function(x, path) {
+  utils::write.csv(x, file = path, row.names = FALSE, na = "", fileEncoding = "UTF-8")
+  invisible(path)
+}
+
+bind_rows_or_template <- function(lst, template_df) {
+  if (length(lst) == 0L) template_df else do.call(rbind, lst)
+}
+
+capture_warnings <- function(expr) {
+  warns <- character()
+  value <- withCallingHandlers(
+    expr,
+    warning = function(w) {
+      warns <<- unique(c(warns, conditionMessage(w)))
+      invokeRestart("muffleWarning")
     }
-  }
-  invisible(TRUE)
+  )
+  list(value = value, warnings = warns)
 }
 
-required_pkgs <- c("survival", "flexsurv", "flexsurvcure", "smcure")
-ensure_packages(required_pkgs, auto_install = AUTO_INSTALL_PACKAGES)
-
-suppressPackageStartupMessages({
-  library(survival)
-  library(flexsurv)
-  library(flexsurvcure)
-  library(smcure)
-})
-
-`%||%` <- function(x, y) if (is.null(x) || length(x) == 0L) y else x
-
-# 🔴 Define: empty templates and helper utilities ===============================
-
-## 🟠 Build: empty export tables ===============================
-
-empty_coeff_df <- function() {
-  data.frame(
-    dataset = character(),
-    fit_id = character(),
-    component = character(),
-    term = character(),
-    estimate = numeric(),
-    std_error = numeric(),
-    zvalue = numeric(),
-    pvalue = numeric(),
-    lower95 = numeric(),
-    upper95 = numeric(),
-    source_scale = character(),
+record_manifest_row <- function(manifest_list, file_name, file_type, n_rows = NA_integer_, note = NA_character_, model_id = NA_character_) {
+  manifest_list[[length(manifest_list) + 1L]] <- data.frame(
+    file_name = file_name,
+    file_type = file_type,
+    n_rows = n_rows,
+    model_id = model_id,
+    note = note,
     stringsAsFactors = FALSE
   )
+  manifest_list
 }
 
-empty_cure_only_df <- function() {
-  data.frame(
-    dataset = character(),
-    fit_id = character(),
-    lane = character(),
-    family = character(),
-    incidence_target = character(),
-    cure_fraction_mean = numeric(),
-    cure_fraction_median = numeric(),
-    cure_fraction_min = numeric(),
-    cure_fraction_max = numeric(),
-    uncured_probability_mean = numeric(),
-    boundary_flag = logical(),
-    stringsAsFactors = FALSE
+trapz_base <- function(x, y) {
+  x <- as.numeric(x)
+  y <- as.numeric(y)
+  ok <- is.finite(x) & is.finite(y)
+  x <- x[ok]
+  y <- y[ok]
+  if (length(x) < 2L) return(NA_real_)
+  ord <- order(x)
+  x <- x[ord]
+  y <- y[ord]
+  sum(diff(x) * (head(y, -1L) + tail(y, -1L)) / 2)
+}
+
+safe_inverse_hessian <- function(h, tol = 1e-8) {
+  out <- list(
+    vcov = if (is.null(h)) matrix(NA_real_, 0L, 0L) else matrix(NA_real_, nrow(h), ncol(h)),
+    singular = TRUE,
+    condition_number = NA_real_
   )
-}
-
-empty_mean_pred_df <- function() {
-  data.frame(
-    dataset = character(),
-    fit_id = character(),
-    year = integer(),
-    meanS = numeric(),
-    meanRisk = numeric(),
-    stringsAsFactors = FALSE
-  )
-}
-
-empty_latency_summary_df <- function() {
-  data.frame(
-    dataset = character(),
-    fit_id = character(),
-    year = integer(),
-    meanSu = numeric(),
-    medianSu = numeric(),
-    minSu = numeric(),
-    maxSu = numeric(),
-    stringsAsFactors = FALSE
-  )
-}
-
-empty_subject_pred_df <- function() {
-  data.frame(
-    dataset = character(),
-    fit_id = character(),
-    subject_uid = character(),
-    subject_rowid_dataset = integer(),
-    site_id = character(),
-    site = character(),
-    id = character(),
-    year = integer(),
-    Shat_pop = numeric(),
-    Riskhat_pop = numeric(),
-    Shat_uncured = numeric(),
-    Riskhat_uncured = numeric(),
-    cure_fraction = numeric(),
-    uncured_probability = numeric(),
-    stringsAsFactors = FALSE
-  )
-}
-
-## 🟠 Create: generic helpers ===============================
-
-collapse_messages <- function(x) {
-  x <- unique(stats::na.omit(as.character(x)))
-  if (length(x) == 0L) "" else paste(x, collapse = " | ")
-}
-
-combine_rows <- function(x, empty_df_fun = NULL) {
-  if (length(x) == 0L) {
-    if (is.null(empty_df_fun)) {
-      return(data.frame(stringsAsFactors = FALSE))
+  
+  if (is.null(h) || length(h) == 0L || any(!is.finite(h))) {
+    return(out)
+  }
+  
+  hs <- (h + t(h)) / 2
+  out$condition_number <- tryCatch(kappa(hs), error = function(e) NA_real_)
+  eigvals <- tryCatch(eigen(hs, symmetric = TRUE, only.values = TRUE)$values, error = function(e) rep(NA_real_, nrow(hs)))
+  
+  if (all(is.finite(eigvals)) && all(eigvals > tol)) {
+    vc <- tryCatch(solve(hs), error = function(e) NULL)
+    if (!is.null(vc) && all(is.finite(diag(vc)))) {
+      out$vcov <- vc
+      out$singular <- FALSE
     }
-    return(empty_df_fun())
-  }
-  out <- do.call(rbind, x)
-  rownames(out) <- NULL
-  out
-}
-
-stop_if_missing_columns <- function(df, cols, object_name = "data") {
-  missing_cols <- setdiff(cols, names(df))
-  if (length(missing_cols) > 0L) {
-    stop(object_name, " is missing required columns: ", paste(missing_cols, collapse = ", "))
-  }
-  invisible(TRUE)
-}
-
-safe_pkg_version <- function(pkg) {
-  as.character(utils::packageVersion(pkg))
-}
-
-make_rhs <- function(vars) {
-  vars <- vars[!duplicated(vars)]
-  if (length(vars) == 0L) "1" else paste(vars, collapse = " + ")
-}
-
-split_var_string <- function(x) {
-  if (is.null(x) || is.na(x) || !nzchar(x)) {
-    character(0)
-  } else {
-    strsplit(x, "|", fixed = TRUE)[[1L]]
-  }
-}
-
-safe_loglik <- function(fit) {
-  out <- tryCatch(as.numeric(logLik(fit)), error = function(e) NA_real_)
-  if (!is.finite(out) && !is.null(fit$loglik)) {
-    out <- suppressWarnings(as.numeric(fit$loglik))
-  }
-  out
-}
-
-safe_aic_from_loglik <- function(loglik, k) {
-  if (is.finite(loglik) && is.finite(k)) -2 * loglik + 2 * k else NA_real_
-}
-
-safe_bic_from_loglik <- function(loglik, k, n) {
-  if (is.finite(loglik) && is.finite(k) && is.finite(n)) -2 * loglik + log(n) * k else NA_real_
-}
-
-clamp01 <- function(x) {
-  pmin(pmax(as.numeric(x), 0), 1)
-}
-
-find_first_matching_name <- function(x, patterns) {
-  x_lower <- tolower(x)
-  for (pat in patterns) {
-    idx <- which(grepl(pat, x_lower, perl = TRUE))
-    if (length(idx) > 0L) {
-      return(x[idx[1L]])
-    }
-  }
-  NA_character_
-}
-
-coerce_matrix <- function(x, nrow_expected = NULL, ncol_expected = NULL) {
-  out <- as.matrix(x)
-  storage.mode(out) <- "double"
-  if (!is.null(nrow_expected) && nrow(out) != nrow_expected) {
-    stop("Unexpected matrix nrow: ", nrow(out), " vs ", nrow_expected)
-  }
-  if (!is.null(ncol_expected) && ncol(out) != ncol_expected) {
-    stop("Unexpected matrix ncol: ", ncol(out), " vs ", ncol_expected)
-  }
-  out
-}
-
-# 🔴 Define: data ingest and preprocessing ===============================
-
-## 🟠 Read: merged source csv ===============================
-
-read_and_clean_input <- function(data_path) {
-  if (!file.exists(data_path)) {
-    stop("DATA_PATH does not exist: ", data_path)
-  }
-  
-  raw_df <- utils::read.csv(
-    file = data_path,
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  )
-  
-  required_cols <- c(ID_VAR, SITE_VAR, SEX_VAR, TIME_VAR, STATUS_VAR)
-  stop_if_missing_columns(raw_df, required_cols, object_name = "Input CSV")
-  
-  age_var_used <- if (AGE_VAR %in% names(raw_df)) AGE_VAR else AGE_FALLBACK_VAR
-  if (!age_var_used %in% names(raw_df)) {
-    stop("Neither AGE_VAR nor AGE_FALLBACK_VAR is present in the input data.")
-  }
-  
-  raw_df[[SITE_VAR]] <- trimws(as.character(raw_df[[SITE_VAR]]))
-  raw_df[[ID_VAR]] <- as.character(raw_df[[ID_VAR]])
-  raw_df[[SEX_VAR]] <- suppressWarnings(as.numeric(as.character(raw_df[[SEX_VAR]])))
-  raw_df[[TIME_VAR]] <- suppressWarnings(as.numeric(as.character(raw_df[[TIME_VAR]])))
-  raw_df[[STATUS_VAR]] <- suppressWarnings(as.integer(as.character(raw_df[[STATUS_VAR]])))
-  raw_df[[age_var_used]] <- suppressWarnings(as.numeric(as.character(raw_df[[age_var_used]])))
-  
-  essential_cols <- c(SITE_VAR, ID_VAR, SEX_VAR, TIME_VAR, STATUS_VAR, age_var_used)
-  keep <- stats::complete.cases(raw_df[, essential_cols, drop = FALSE]) &
-    !is.na(raw_df[[TIME_VAR]]) &
-    raw_df[[TIME_VAR]] >= 0
-  
-  dropped_n <- sum(!keep)
-  cleaned_df <- raw_df[keep, , drop = FALSE]
-  
-  cleaned_df$age_raw <- cleaned_df[[age_var_used]]
-  cleaned_df$event <- as.integer(cleaned_df[[STATUS_VAR]] == EVENT_CODE)
-  cleaned_df$time_years <- pmax(cleaned_df[[TIME_VAR]] / TIME_UNIT_DIVISOR, TIME_EPS_YEARS)
-  cleaned_df$site_id <- paste(cleaned_df[[SITE_VAR]], cleaned_df[[ID_VAR]], sep = "::")
-  cleaned_df$subject_uid <- sprintf("UID_%06d", seq_len(nrow(cleaned_df)))
-  
-  attr(cleaned_df, "age_var_used") <- age_var_used
-  attr(cleaned_df, "dropped_n") <- dropped_n
-  attr(cleaned_df, "raw_n") <- nrow(raw_df)
-  cleaned_df
-}
-
-## 🟠 Prepare: dataset-specific scaling and site coding ===============================
-
-prepare_analysis_dataset <- function(core_df, dataset_key) {
-  dataset_key <- toupper(dataset_key)
-  
-  if (dataset_key == "PNU") {
-    df <- core_df[core_df[[SITE_VAR]] == PNU_SITE_VALUE, , drop = FALSE]
-  } else if (dataset_key == "SNU") {
-    df <- core_df[core_df[[SITE_VAR]] == SNU_SITE_VALUE, , drop = FALSE]
-  } else if (dataset_key == "MERGED") {
-    df <- core_df
-  } else {
-    stop("Unknown dataset_key: ", dataset_key)
-  }
-  
-  if (nrow(df) == 0L) {
-    stop("No rows available for dataset: ", dataset_key)
-  }
-  
-  if (sum(df$event, na.rm = TRUE) < 1L) {
-    stop("Dataset ", dataset_key, " has no transition events after preprocessing.")
-  }
-  
-  age_center <- mean(df$age_raw, na.rm = TRUE)
-  age_sd <- stats::sd(df$age_raw, na.rm = TRUE)
-  if (!is.finite(age_sd) || age_sd <= 0) {
-    stop("Dataset ", dataset_key, " has non-positive age SD; cannot compute age_s.")
-  }
-  
-  age_scale_2sd <- 2 * age_sd
-  df$age_s <- (df$age_raw - age_center) / age_scale_2sd
-  df$sex_num <- df[[SEX_VAR]]
-  df$age_sex_int <- df$age_s * df$sex_num
-  
-  site_reference <- ""
-  site_nonreference <- ""
-  
-  if (dataset_key == "MERGED") {
-    site_levels <- sort(unique(df[[SITE_VAR]]))
-    if (length(site_levels) != 2L) {
-      stop(
-        "Merged dataset currently supports exactly 2 site levels for Step5. Found: ",
-        paste(site_levels, collapse = ", ")
-      )
-    }
-    if (!SITE_REFERENCE %in% site_levels) {
-      stop("SITE_REFERENCE (", SITE_REFERENCE, ") is not present in merged data.")
-    }
-    site_reference <- SITE_REFERENCE
-    site_nonreference <- setdiff(site_levels, site_reference)
-    if (length(site_nonreference) != 1L) {
-      stop("Merged dataset could not determine the non-reference site uniquely.")
-    }
-    site_nonreference <- site_nonreference[1L]
-    df$site_dummy <- as.integer(df[[SITE_VAR]] == site_nonreference)
-  } else {
-    df$site_dummy <- 0L
-  }
-  
-  df$dataset_key <- dataset_key
-  df$subject_rowid_dataset <- seq_len(nrow(df))
-  
-  preproc_row <- data.frame(
-    dataset = dataset_key,
-    n = nrow(df),
-    n_event = sum(df$event),
-    n_censor = sum(df$event == 0L),
-    age_var_used = attr(core_df, "age_var_used"),
-    age_center = age_center,
-    age_scale_2sd = age_scale_2sd,
-    site_reference = site_reference,
-    site_nonreference = site_nonreference,
-    min_followup_years = min(df$time_years, na.rm = TRUE),
-    max_followup_years = max(df$time_years, na.rm = TRUE),
-    stringsAsFactors = FALSE
-  )
-  
-  list(data = df, preproc = preproc_row)
-}
-
-# 🔴 Define: model grid and coefficient extraction ===============================
-
-## 🟠 Build: Step5 cure-model grid ===============================
-
-build_component_vars <- function(dataset_key, interaction_flag, site_flag) {
-  vars <- c("age_s", "sex_num")
-  if (as.integer(interaction_flag) == 1L) {
-    vars <- c(vars, "age_sex_int")
-  }
-  if (toupper(dataset_key) == "MERGED" && as.integer(site_flag) == 1L) {
-    vars <- c(vars, "site_dummy")
-  }
-  unique(vars)
-}
-
-build_step5_grid <- function(dataset_key) {
-  dataset_key <- toupper(dataset_key)
-  family_values <- c(PARAMETRIC_FAMILIES, "cox_latency")
-  incidence_flags <- c(0L, 1L)
-  latency_flags <- c(0L, 1L)
-  site_flags <- if (dataset_key == "MERGED") c(0L, 1L) else 0L
-  
-  out <- vector("list", length = length(family_values) * length(incidence_flags) * length(latency_flags) * length(site_flags))
-  idx <- 1L
-  
-  for (family_i in family_values) {
-    for (inc_i in incidence_flags) {
-      for (lat_i in latency_flags) {
-        for (site_i in site_flags) {
-          inc_vars <- build_component_vars(dataset_key, inc_i, site_i)
-          lat_vars <- build_component_vars(dataset_key, lat_i, site_i)
-          
-          cov_spec <- if (dataset_key == "MERGED") {
-            sprintf("C%d%dS%d", inc_i, lat_i, site_i)
-          } else {
-            sprintf("C%d%d", inc_i, lat_i)
-          }
-          
-          lane <- if (identical(family_i, "cox_latency")) "PH_semiparametric" else "AFT_parametric"
-          engine <- if (identical(family_i, "cox_latency")) "smcure" else "flexsurvcure"
-          anc_param <- if (identical(family_i, "cox_latency")) {
-            ""
-          } else {
-            switch(
-              family_i,
-              exp = "rate",
-              weibull = "scale",
-              llogis = "scale",
-              lnorm = "meanlog",
-              stop("Unknown parametric family: ", family_i)
-            )
-          }
-          
-          fit_id <- paste(dataset_key, lane, family_i, cov_spec, sep = "__")
-          
-          out[[idx]] <- data.frame(
-            dataset = dataset_key,
-            model_class = "cure_MLE",
-            lane = lane,
-            engine = engine,
-            family = family_i,
-            anc_param = anc_param,
-            incidence_int_flag = inc_i,
-            latency_int_flag = lat_i,
-            site_flag = site_i,
-            cov_spec = cov_spec,
-            incidence_terms = make_rhs(inc_vars),
-            latency_terms = make_rhs(lat_vars),
-            incidence_vars_str = paste(inc_vars, collapse = "|"),
-            latency_vars_str = paste(lat_vars, collapse = "|"),
-            fit_id = fit_id,
-            stringsAsFactors = FALSE
-          )
-          idx <- idx + 1L
-        }
-      }
-    }
-  }
-  
-  grid_df <- combine_rows(out)
-  grid_df$fit_index <- seq_len(nrow(grid_df))
-  grid_df
-}
-
-## 🟠 Extract: flexsurvcure coefficient table ===============================
-
-extract_flexsurvcure_res_table <- function(fit) {
-  if (is.null(fit$res.t)) {
-    return(NULL)
-  }
-  
-  df <- as.data.frame(fit$res.t, stringsAsFactors = FALSE)
-  df$term <- rownames(fit$res.t)
-  rownames(df) <- NULL
-  
-  original_names <- names(df)
-  
-  est_col <- find_first_matching_name(original_names, c("^est$", "^estimate$"))
-  se_col <- find_first_matching_name(original_names, c("^se$", "std", "stderr", "std.error"))
-  lower_col <- find_first_matching_name(original_names, c("^l95", "^lower"))
-  upper_col <- find_first_matching_name(original_names, c("^u95", "^upper"))
-  z_col <- find_first_matching_name(original_names, c("^z$", "zvalue"))
-  p_col <- find_first_matching_name(original_names, c("^p$", "pvalue"))
-  
-  out <- data.frame(
-    term = df$term,
-    estimate = if (!is.na(est_col)) suppressWarnings(as.numeric(df[[est_col]])) else NA_real_,
-    std_error = if (!is.na(se_col)) suppressWarnings(as.numeric(df[[se_col]])) else NA_real_,
-    zvalue = if (!is.na(z_col)) suppressWarnings(as.numeric(df[[z_col]])) else NA_real_,
-    pvalue = if (!is.na(p_col)) suppressWarnings(as.numeric(df[[p_col]])) else NA_real_,
-    lower95 = if (!is.na(lower_col)) suppressWarnings(as.numeric(df[[lower_col]])) else NA_real_,
-    upper95 = if (!is.na(upper_col)) suppressWarnings(as.numeric(df[[upper_col]])) else NA_real_,
-    stringsAsFactors = FALSE
-  )
-  
-  if (all(is.na(out$lower95)) && any(is.finite(out$std_error))) {
-    out$lower95 <- out$estimate - 1.96 * out$std_error
-  }
-  if (all(is.na(out$upper95)) && any(is.finite(out$std_error))) {
-    out$upper95 <- out$estimate + 1.96 * out$std_error
-  }
-  if (all(is.na(out$zvalue)) && any(is.finite(out$std_error))) {
-    out$zvalue <- out$estimate / out$std_error
-  }
-  if (all(is.na(out$pvalue)) && any(is.finite(out$zvalue))) {
-    out$pvalue <- 2 * stats::pnorm(-abs(out$zvalue))
   }
   
   out
 }
 
-extract_flexsurvcure_coef_table <- function(fit, dataset_key, fit_id, incidence_vars) {
-  res_df <- extract_flexsurvcure_res_table(fit)
-  if (is.null(res_df)) {
-    return(empty_coeff_df())
-  }
-  
-  latency_parameter_prefix <- c("rate", "scale", "shape", "meanlog", "sdlog")
-  
-  res_df$component <- vapply(
-    res_df$term,
-    FUN.VALUE = character(1L),
-    FUN = function(term_i) {
-      if (term_i == "theta" || term_i %in% incidence_vars) {
-        return("incidence")
-      }
-      if (term_i %in% latency_parameter_prefix) {
-        return("latency")
-      }
-      if (any(startsWith(term_i, paste0(latency_parameter_prefix, "(")))) {
-        return("latency")
-      }
-      "latency"
-    }
-  )
-  
-  res_df$source_scale <- ifelse(
-    res_df$component == "incidence",
-    "logit_cure_probability",
-    "package_native_real_line"
-  )
-  res_df$dataset <- dataset_key
-  res_df$fit_id <- fit_id
-  
-  res_df[, c("dataset", "fit_id", "component", "term", "estimate", "std_error", "zvalue", "pvalue", "lower95", "upper95", "source_scale"), drop = FALSE]
+norm_p_value <- function(z) {
+  ifelse(is.finite(z), 2 * stats::pnorm(abs(z), lower.tail = FALSE), NA_real_)
 }
 
-## 🟠 Extract: smcure coefficient table ===============================
+wald_ci <- function(est, se, level = 0.95) {
+  alpha <- 1 - level
+  z <- stats::qnorm(1 - alpha / 2)
+  lcl <- est - z * se
+  ucl <- est + z * se
+  cbind(lcl = lcl, ucl = ucl)
+}
 
-extract_smcure_coef_table <- function(fit, dataset_key, fit_id) {
-  incidence_df <- data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    component = "incidence",
-    term = fit$bnm,
-    estimate = as.numeric(fit$b),
-    std_error = NA_real_,
-    zvalue = NA_real_,
-    pvalue = NA_real_,
-    lower95 = NA_real_,
-    upper95 = NA_real_,
-    source_scale = "logit_uncured_probability",
+## 🟠 Build: model matrix creation with rank pruning ===============================
+make_model_matrix_with_pruning <- function(data, terms, include_intercept = TRUE, prefix = "x") {
+  rhs <- if (length(terms) == 0L) "1" else paste(terms, collapse = " + ")
+  fml <- stats::as.formula(paste("~", rhs))
+  mm0 <- stats::model.matrix(fml, data = data)
+  
+  if (!include_intercept && "(Intercept)" %in% colnames(mm0)) {
+    mm0 <- mm0[, colnames(mm0) != "(Intercept)", drop = FALSE]
+  }
+  
+  original_names <- colnames(mm0)
+  dropped_terms <- character()
+  
+  if (ncol(mm0) > 0L) {
+    qr_mm <- qr(mm0)
+    keep_idx <- sort(qr_mm$pivot[seq_len(qr_mm$rank)])
+    if (length(keep_idx) < ncol(mm0)) {
+      dropped_terms <- original_names[-keep_idx]
+    }
+    mm0 <- mm0[, keep_idx, drop = FALSE]
+    original_names <- colnames(mm0)
+  }
+  
+  new_names <- if (ncol(mm0) > 0L) sprintf("%s_%02d", prefix, seq_len(ncol(mm0))) else character(0)
+  colnames(mm0) <- new_names
+  
+  map <- data.frame(
+    coef_name = new_names,
+    term_label = original_names,
     stringsAsFactors = FALSE
   )
-  
-  latency_df <- data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    component = "latency",
-    term = fit$betanm,
-    estimate = as.numeric(fit$beta),
-    std_error = NA_real_,
-    zvalue = NA_real_,
-    pvalue = NA_real_,
-    lower95 = NA_real_,
-    upper95 = NA_real_,
-    source_scale = "cox_ph_log_hazard_ratio",
-    stringsAsFactors = FALSE
-  )
-  
-  if (!is.null(fit$b_sd)) {
-    incidence_df$std_error <- as.numeric(fit$b_sd)
-    incidence_df$zvalue <- as.numeric(fit$b_zvalue)
-    incidence_df$pvalue <- as.numeric(fit$b_pvalue)
-    incidence_df$lower95 <- incidence_df$estimate - 1.96 * incidence_df$std_error
-    incidence_df$upper95 <- incidence_df$estimate + 1.96 * incidence_df$std_error
-  }
-  
-  if (!is.null(fit$beta_sd)) {
-    latency_df$std_error <- as.numeric(fit$beta_sd)
-    latency_df$zvalue <- as.numeric(fit$beta_zvalue)
-    latency_df$pvalue <- as.numeric(fit$beta_pvalue)
-    latency_df$lower95 <- latency_df$estimate - 1.96 * latency_df$std_error
-    latency_df$upper95 <- latency_df$estimate + 1.96 * latency_df$std_error
-  }
-  
-  out <- rbind(incidence_df, latency_df)
-  rownames(out) <- NULL
-  out
-}
-
-# 🔴 Define: prediction helpers ===============================
-
-## 🟠 Parse: flexible summary output from flexsurvcure ===============================
-
-extract_single_flexsurv_survival <- function(summary_obj, eval_times) {
-  candidate <- NULL
-  
-  if (is.matrix(summary_obj) || is.data.frame(summary_obj)) {
-    candidate <- summary_obj
-  } else if (is.list(summary_obj)) {
-    obj_names <- names(summary_obj)
-    keep_idx <- seq_along(summary_obj)
-    if (!is.null(obj_names)) {
-      keep_idx <- which(obj_names != "X")
-      if (length(keep_idx) == 0L) {
-        keep_idx <- seq_along(summary_obj)
-      }
-    }
-    for (ii in keep_idx) {
-      if (is.matrix(summary_obj[[ii]]) || is.data.frame(summary_obj[[ii]])) {
-        candidate <- summary_obj[[ii]]
-        break
-      }
-    }
-  }
-  
-  if (is.null(candidate)) {
-    stop("Could not parse summary.flexsurvreg output for a single-row prediction.")
-  }
-  
-  df <- as.data.frame(candidate, stringsAsFactors = FALSE)
-  nms <- names(df)
-  
-  est_col <- if ("est" %in% nms) {
-    "est"
-  } else {
-    num_cols <- nms[vapply(df, is.numeric, logical(1))]
-    if (length(num_cols) == 0L) {
-      stop("No numeric estimate column found in parsed summary output.")
-    }
-    num_cols[1L]
-  }
-  
-  if ("time" %in% nms) {
-    time_vec <- suppressWarnings(as.numeric(df$time))
-    row_idx <- vapply(
-      eval_times,
-      FUN.VALUE = integer(1L),
-      FUN = function(tt) {
-        exact_idx <- which(abs(time_vec - tt) < 1e-10)
-        if (length(exact_idx) > 0L) exact_idx[1L] else which.min(abs(time_vec - tt))
-      }
-    )
-    est <- suppressWarnings(as.numeric(df[[est_col]][row_idx]))
-  } else {
-    if (nrow(df) < length(eval_times)) {
-      stop("Parsed summary output has fewer rows than requested prediction times.")
-    }
-    est <- suppressWarnings(as.numeric(df[[est_col]][seq_len(length(eval_times))]))
-  }
-  
-  clamp01(est)
-}
-
-## 🟠 Predict: parametric overall survival matrix ===============================
-
-predict_parametric_survival_matrix <- function(fit, data_df, eval_times) {
-  n_subject <- nrow(data_df)
-  n_times <- length(eval_times)
-  out <- matrix(NA_real_, nrow = n_subject, ncol = n_times)
-  fail_messages <- character(0)
-  
-  for (i in seq_len(n_subject)) {
-    out[i, ] <- tryCatch(
-      {
-        summ_i <- suppressWarnings(
-          summary(
-            fit,
-            newdata = data_df[i, , drop = FALSE],
-            type = "survival",
-            t = eval_times,
-            start = 0,
-            ci = FALSE,
-            se = FALSE,
-            B = 0,
-            tidy = FALSE
-          )
-        )
-        extract_single_flexsurv_survival(summ_i, eval_times)
-      },
-      error = function(e) {
-        fail_messages <<- c(fail_messages, paste0("row ", i, ": ", conditionMessage(e)))
-        rep(NA_real_, n_times)
-      }
-    )
-  }
   
   list(
-    matrix = clamp01(out),
-    n_failed_rows = sum(apply(is.na(out), 1L, all)),
-    failure_messages = unique(fail_messages)
+    matrix = mm0,
+    map = map,
+    dropped_terms = dropped_terms,
+    rhs = rhs,
+    include_intercept = include_intercept
   )
 }
 
-## 🟠 Compute: parametric cure fraction from fitted coefficients ===============================
-
-compute_parametric_cure_fraction <- function(fit, data_df, incidence_vars) {
-  res_df <- extract_flexsurvcure_res_table(fit)
-  if (is.null(res_df)) {
-    stop("Could not retrieve flexsurvcure coefficient table for cure-fraction computation.")
+## 🟠 Build: Kaplan-Meier step evaluators for IPCW and Cox baseline ===============================
+km_surv_eval <- function(eval_time, km_time, km_surv, left_limit = FALSE) {
+  eval_time <- as.numeric(eval_time)
+  if (length(km_time) == 0L) {
+    return(rep(1, length(eval_time)))
   }
   
-  intercept <- res_df$estimate[res_df$term == "theta"]
-  if (length(intercept) == 0L || !is.finite(intercept[1L])) {
-    intercept <- 0
-  } else {
-    intercept <- intercept[1L]
-  }
-  
-  eta <- rep(intercept, nrow(data_df))
-  
-  if (length(incidence_vars) > 0L) {
-    x_mat <- as.matrix(data_df[, incidence_vars, drop = FALSE])
-    storage.mode(x_mat) <- "double"
-    
-    beta_vec <- vapply(
-      incidence_vars,
-      FUN.VALUE = numeric(1L),
-      FUN = function(v) {
-        tmp <- res_df$estimate[res_df$term == v]
-        if (length(tmp) == 0L || !is.finite(tmp[1L])) 0 else tmp[1L]
-      }
-    )
-    
-    eta <- as.numeric(eta + x_mat %*% beta_vec)
-  }
-  
-  clamp01(stats::plogis(eta))
+  tiny <- 1e-10
+  t_use <- if (left_limit) pmax(eval_time - tiny, 0) else eval_time
+  idx <- findInterval(t_use, km_time, left.open = FALSE, rightmost.closed = TRUE)
+  out <- rep(1, length(eval_time))
+  ok <- idx > 0L
+  out[ok] <- km_surv[idx[ok]]
+  pmin(pmax(out, 0), 1)
 }
 
-## 🟠 Evaluate: semiparametric step-function predictions ===============================
-
-step_eval_single <- function(time_vec, surv_vec, eval_times) {
-  tt <- c(0, as.numeric(time_vec))
-  ss <- c(1, as.numeric(surv_vec))
-  
-  ord <- order(tt, seq_along(tt))
-  tt <- tt[ord]
-  ss <- ss[ord]
-  
-  keep <- !duplicated(tt, fromLast = TRUE)
-  tt <- tt[keep]
-  ss <- ss[keep]
-  
-  idx <- findInterval(eval_times, tt, rightmost.closed = TRUE, all.inside = TRUE)
-  idx[idx < 1L] <- 1L
-  idx[idx > length(ss)] <- length(ss)
-  
-  clamp01(ss[idx])
-}
-
-step_eval_matrix <- function(time_vec, surv_mat, eval_times) {
-  n_subject <- ncol(surv_mat)
-  out <- matrix(NA_real_, nrow = n_subject, ncol = length(eval_times))
-  for (j in seq_len(n_subject)) {
-    out[j, ] <- step_eval_single(time_vec = time_vec, surv_vec = surv_mat[, j], eval_times = eval_times)
-  }
-  out
-}
-
-compute_uncured_survival <- function(pop_surv_mat, cure_fraction) {
-  pop_surv_mat <- coerce_matrix(pop_surv_mat)
-  cure_fraction <- as.numeric(cure_fraction)
-  uncured_prob <- pmax(1 - cure_fraction, .Machine$double.eps)
-  out <- sweep(pop_surv_mat, 1L, cure_fraction, FUN = "-")
-  out <- sweep(out, 1L, uncured_prob, FUN = "/")
-  clamp01(out)
-}
-
-## 🟠 Predict: semiparametric Cox-latency matrices ===============================
-
-predict_smcure_matrices <- function(fit, data_df, incidence_vars, latency_vars, eval_times) {
-  newX <- stats::model.matrix(
-    object = stats::as.formula(paste0("~ ", make_rhs(latency_vars))),
-    data = data_df
-  )
-  if (ncol(newX) <= 1L) {
-    stop("Latency design matrix has no covariate columns after removing the intercept.")
-  }
-  newX <- newX[, -1L, drop = FALSE]
-  
-  newZ <- as.matrix(data_df[, incidence_vars, drop = FALSE])
-  storage.mode(newX) <- "double"
-  storage.mode(newZ) <- "double"
-  
-  pred_obj <- smcure::predictsmcure(
-    object = fit,
-    newX = newX,
-    newZ = newZ,
-    model = "ph"
-  )
-  
-  pred_mat <- as.matrix(pred_obj$prediction)
-  storage.mode(pred_mat) <- "double"
-  
-  time_vec <- pred_mat[, ncol(pred_mat)]
-  surv_curves <- pred_mat[, -ncol(pred_mat), drop = FALSE]
-  
-  ord <- order(time_vec, seq_along(time_vec))
-  time_vec <- time_vec[ord]
-  surv_curves <- surv_curves[ord, , drop = FALSE]
-  
-  pop_surv_mat <- step_eval_matrix(
-    time_vec = time_vec,
-    surv_mat = surv_curves,
-    eval_times = eval_times
-  )
-  
-  uncure_prob <- clamp01(as.numeric(pred_obj$newuncureprob))
-  cure_fraction <- clamp01(1 - uncure_prob)
-  uncured_surv_mat <- compute_uncured_survival(pop_surv_mat = pop_surv_mat, cure_fraction = cure_fraction)
+build_ipcw_helper <- function(time, event) {
+  censor_event <- as.integer(event == 0L)
+  sf <- survival::survfit(survival::Surv(time, censor_event) ~ 1)
+  km_time <- sf$time %||% numeric(0)
+  km_surv <- sf$surv %||% numeric(0)
   
   list(
-    pop_surv_mat = coerce_matrix(pop_surv_mat, nrow_expected = nrow(data_df), ncol_expected = length(eval_times)),
-    uncured_surv_mat = coerce_matrix(uncured_surv_mat, nrow_expected = nrow(data_df), ncol_expected = length(eval_times)),
-    cure_fraction = cure_fraction,
-    n_failed_rows = 0L,
-    failure_messages = character(0)
+    km_time = km_time,
+    km_surv = km_surv,
+    G_at = function(t) km_surv_eval(t, km_time, km_surv, left_limit = FALSE),
+    G_left = function(t) km_surv_eval(t, km_time, km_surv, left_limit = TRUE)
   )
 }
 
-# 🔴 Define: output table builders ===============================
-
-## 🟠 Create: subject-level long predictions ===============================
-
-make_subject_prediction_long <- function(data_df, dataset_key, fit_id, pop_surv_mat, uncured_surv_mat, cure_fraction) {
-  pop_surv_mat <- coerce_matrix(pop_surv_mat, nrow_expected = nrow(data_df), ncol_expected = length(PREDICTION_YEARS))
-  uncured_surv_mat <- coerce_matrix(uncured_surv_mat, nrow_expected = nrow(data_df), ncol_expected = length(PREDICTION_YEARS))
-  cure_fraction <- as.numeric(cure_fraction)
+make_step_surv_fun <- function(basehaz_df, zero_tail = TRUE) {
+  bh <- basehaz_df[order(basehaz_df$time), , drop = FALSE]
+  bh <- bh[!duplicated(bh$time, fromLast = TRUE), , drop = FALSE]
+  times <- bh$time
+  surv <- exp(-bh$hazard)
+  last_event_time <- if (length(times) > 0L) max(times) else NA_real_
   
-  n_subject <- nrow(data_df)
-  n_years <- ncol(pop_surv_mat)
-  
-  data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    subject_uid = rep(data_df$subject_uid, each = n_years),
-    subject_rowid_dataset = rep(data_df$subject_rowid_dataset, each = n_years),
-    site_id = rep(data_df$site_id, each = n_years),
-    site = rep(data_df[[SITE_VAR]], each = n_years),
-    id = rep(data_df[[ID_VAR]], each = n_years),
-    year = rep(PREDICTION_YEARS, times = n_subject),
-    Shat_pop = as.vector(t(pop_surv_mat)),
-    Riskhat_pop = 1 - as.vector(t(pop_surv_mat)),
-    Shat_uncured = as.vector(t(uncured_surv_mat)),
-    Riskhat_uncured = 1 - as.vector(t(uncured_surv_mat)),
-    cure_fraction = rep(cure_fraction, each = n_years),
-    uncured_probability = rep(1 - cure_fraction, each = n_years),
-    stringsAsFactors = FALSE
-  )
-}
-
-## 🟠 Create: cohort-average and latency summaries ===============================
-
-make_mean_prediction_df <- function(dataset_key, fit_id, pop_surv_mat) {
-  pop_surv_mat <- coerce_matrix(pop_surv_mat, ncol_expected = length(PREDICTION_YEARS))
-  mean_s <- colMeans(pop_surv_mat, na.rm = TRUE)
-  data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    year = PREDICTION_YEARS,
-    meanS = mean_s,
-    meanRisk = 1 - mean_s,
-    stringsAsFactors = FALSE
-  )
-}
-
-make_latency_summary_df <- function(dataset_key, fit_id, uncured_surv_mat) {
-  uncured_surv_mat <- coerce_matrix(uncured_surv_mat, ncol_expected = length(PREDICTION_YEARS))
-  data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    year = PREDICTION_YEARS,
-    meanSu = colMeans(uncured_surv_mat, na.rm = TRUE),
-    medianSu = apply(uncured_surv_mat, 2L, stats::median, na.rm = TRUE),
-    minSu = apply(uncured_surv_mat, 2L, min, na.rm = TRUE),
-    maxSu = apply(uncured_surv_mat, 2L, max, na.rm = TRUE),
-    stringsAsFactors = FALSE
-  )
-}
-
-make_cure_only_row <- function(dataset_key, fit_id, lane, family, incidence_target, cure_fraction, boundary_flag) {
-  cure_fraction <- as.numeric(cure_fraction)
-  data.frame(
-    dataset = dataset_key,
-    fit_id = fit_id,
-    lane = lane,
-    family = family,
-    incidence_target = incidence_target,
-    cure_fraction_mean = mean(cure_fraction, na.rm = TRUE),
-    cure_fraction_median = stats::median(cure_fraction, na.rm = TRUE),
-    cure_fraction_min = min(cure_fraction, na.rm = TRUE),
-    cure_fraction_max = max(cure_fraction, na.rm = TRUE),
-    uncured_probability_mean = mean(1 - cure_fraction, na.rm = TRUE),
-    boundary_flag = isTRUE(boundary_flag),
-    stringsAsFactors = FALSE
-  )
-}
-
-# 🔴 Define: model-fitting wrappers ===============================
-
-## 🟠 Fit: one parametric AFT cure model ===============================
-
-fit_one_parametric_cure_model <- function(spec_row, data_df) {
-  fit_started_at <- Sys.time()
-  fit_warning_messages <- character(0)
-  fit_error_messages <- character(0)
-  pred_warning_messages <- character(0)
-  pred_error_messages <- character(0)
-  
-  incidence_vars <- split_var_string(spec_row$incidence_vars_str)
-  latency_vars <- split_var_string(spec_row$latency_vars_str)
-  
-  surv_formula <- stats::as.formula(
-    paste0("survival::Surv(time_years, event) ~ ", make_rhs(incidence_vars))
-  )
-  
-  anc_list <- stats::setNames(
-    object = list(stats::as.formula(paste0("~ ", make_rhs(latency_vars)))),
-    nm = spec_row$anc_param
-  )
-  
-  fit_obj <- tryCatch(
-    withCallingHandlers(
-      flexsurvcure::flexsurvcure(
-        formula = surv_formula,
-        data = data_df,
-        dist = spec_row$family,
-        link = FLEXSURVCURE_LINK,
-        mixture = TRUE,
-        anc = anc_list,
-        na.action = stats::na.omit,
-        control = list(maxit = FLEXSURV_MAXIT)
-      ),
-      warning = function(w) {
-        fit_warning_messages <<- c(fit_warning_messages, conditionMessage(w))
-        invokeRestart("muffleWarning")
-      }
-    ),
-    error = function(e) {
-      structure(list(message = conditionMessage(e)), class = "step5_fit_error")
-    }
-  )
-  
-  fit_time_sec <- as.numeric(difftime(Sys.time(), fit_started_at, units = "secs"))
-  
-  if (inherits(fit_obj, "step5_fit_error")) {
-    registry_row <- data.frame(
-      dataset = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      model_class = spec_row$model_class,
-      lane = spec_row$lane,
-      engine = spec_row$engine,
-      family = spec_row$family,
-      cov_spec = spec_row$cov_spec,
-      incidence_int_flag = spec_row$incidence_int_flag,
-      latency_int_flag = spec_row$latency_int_flag,
-      site_flag = spec_row$site_flag,
-      incidence_terms = spec_row$incidence_terms,
-      latency_terms = spec_row$latency_terms,
-      n = nrow(data_df),
-      n_event = sum(data_df$event),
-      n_censor = sum(data_df$event == 0L),
-      n_parameters = NA_real_,
-      logLik = NA_real_,
-      AIC = NA_real_,
-      BIC = NA_real_,
-      converged_flag = FALSE,
-      incidence_target = "cure_probability",
-      mean_cure_fraction = NA_real_,
-      boundary_flag = NA,
-      fit_success = FALSE,
-      prediction_success = FALSE,
-      success = FALSE,
-      n_prediction_failed_rows = NA_integer_,
-      fit_time_sec = fit_time_sec,
-      prediction_time_sec = NA_real_,
-      error_stage = "fit",
-      error_message = fit_obj$message,
-      warning_messages = collapse_messages(fit_warning_messages),
-      stringsAsFactors = FALSE
-    )
+  function(t) {
+    t <- as.numeric(t)
+    out <- rep(1, length(t))
     
-    return(list(
-      fit_bundle = list(
-        spec = spec_row,
-        fit = NULL,
-        engine = spec_row$engine,
-        success = FALSE,
-        fit_success = FALSE,
-        prediction_success = FALSE,
-        warnings = fit_warning_messages,
-        error_message = fit_obj$message
-      ),
-      registry = registry_row,
-      coefficient_table = empty_coeff_df(),
-      subject_predictions = empty_subject_pred_df(),
-      mean_predictions = empty_mean_pred_df(),
-      latency_summary = empty_latency_summary_df(),
-      cure_only = empty_cure_only_df()
-    ))
+    if (length(times) > 0L) {
+      idx <- findInterval(t, vec = times, left.open = FALSE, rightmost.closed = TRUE)
+      ok <- idx > 0L
+      out[ok] <- surv[pmin(idx[ok], length(surv))]
+      if (isTRUE(zero_tail) && is.finite(last_event_time)) {
+        out[t > last_event_time] <- 0
+      }
+    }
+    
+    pmin(pmax(out, 0), 1)
+  }
+}
+
+## 🟠 Build: AFT latency survival and density calculators ===============================
+aft_surv_density <- function(family, time, eta, log_scale = NULL, tiny = 1e-12) {
+  t <- pmax(as.numeric(time), tiny)
+  eta <- as.numeric(eta)
+  
+  if (family == "exp") {
+    scale_par <- exp(eta)
+    logS <- -t / scale_par
+    logf <- -eta - t / scale_par
+  } else if (family == "weibull") {
+    sigma <- exp(log_scale)
+    shape <- 1 / sigma
+    log_t_over_scale <- log(t) - eta
+    z <- exp(shape * log_t_over_scale)
+    logS <- -z
+    logf <- log(shape) - shape * eta + (shape - 1) * log(t) - z
+  } else if (family == "lnorm") {
+    sigma <- exp(log_scale)
+    z <- (log(t) - eta) / sigma
+    logS <- stats::pnorm(z, lower.tail = FALSE, log.p = TRUE)
+    logf <- stats::dnorm(z, log = TRUE) - log(t) - log(sigma)
+  } else if (family == "llogis") {
+    sigma <- exp(log_scale)
+    z <- (log(t) - eta) / sigma
+    logS <- stats::plogis(-z, log = TRUE)
+    logf <- stats::dlogis(z, log = TRUE) - log(t) - log(sigma)
+  } else {
+    stop("지원하지 않는 AFT family입니다: ", family)
   }
   
-  coefficient_table <- extract_flexsurvcure_coef_table(
-    fit = fit_obj,
-    dataset_key = spec_row$dataset,
-    fit_id = spec_row$fit_id,
-    incidence_vars = incidence_vars
+  logS <- pmin(logS, 0)
+  S <- exp(pmax(logS, log(.Machine$double.xmin)))
+  S <- pmin(pmax(S, 0), 1)
+  
+  list(logS = logS, S = S, logf = logf)
+}
+
+## 🟠 Build: start values for parametric cure optimization ===============================
+build_parametric_starts <- function(data,
+                                    Z,
+                                    X,
+                                    inc_term_labels_effective,
+                                    lat_term_labels_effective,
+                                    lat_formula_rhs,
+                                    family) {
+  k_gamma <- ncol(Z)
+  k_beta <- ncol(X)
+  has_scale <- family != "exp"
+  
+  gamma_base <- rep(0, k_gamma)
+  if (k_gamma > 0L) {
+    fit_glm0 <- try(stats::glm.fit(
+      x = Z,
+      y = data$event_transition,
+      family = stats::quasibinomial(link = "logit")
+    ), silent = TRUE)
+    
+    if (!inherits(fit_glm0, "try-error") && !is.null(fit_glm0$coefficients)) {
+      gamma_base <- fit_glm0$coefficients
+      gamma_base[!is.finite(gamma_base)] <- 0
+      gamma_base <- as.numeric(gamma_base)
+    } else if ("(Intercept)" %in% inc_term_labels_effective) {
+      gamma_base[match("(Intercept)", inc_term_labels_effective)] <- stats::qlogis(min(max(mean(data$event_transition), 0.05), 0.95))
+    }
+  }
+  
+  beta_base <- rep(0, k_beta)
+  log_scale_base <- 0
+  
+  dist_name <- switch(
+    family,
+    exp = "exponential",
+    weibull = "weibull",
+    lnorm = "lognormal",
+    llogis = "loglogistic"
   )
   
-  pred_started_at <- Sys.time()
+  survreg_formula <- stats::as.formula(
+    paste0("survival::Surv(time_years, event_transition) ~ ", lat_formula_rhs)
+  )
   
-  pop_surv_mat <- NULL
-  uncured_surv_mat <- NULL
-  cure_fraction <- NULL
-  n_failed_rows <- NA_integer_
+  fit_survreg0 <- try(capture_warnings(
+    survival::survreg(
+      formula = survreg_formula,
+      data = data,
+      dist = dist_name
+    )
+  ), silent = TRUE)
   
-  pred_success <- tryCatch(
-    withCallingHandlers(
-      {
-        pop_pred <- predict_parametric_survival_matrix(
-          fit = fit_obj,
-          data_df = data_df,
-          eval_times = PREDICTION_YEARS
-        )
-        pop_surv_mat <- pop_pred$matrix
-        n_failed_rows <- pop_pred$n_failed_rows
-        if (length(pop_pred$failure_messages) > 0L) {
-          pred_error_messages <<- c(pred_error_messages, pop_pred$failure_messages)
-        }
+  if (!inherits(fit_survreg0, "try-error")) {
+    survreg_fit <- fit_survreg0$value
+    co <- stats::coef(survreg_fit)
+    tmp_beta <- rep(0, length(lat_term_labels_effective))
+    names(tmp_beta) <- lat_term_labels_effective
+    common_beta <- intersect(names(co), names(tmp_beta))
+    tmp_beta[common_beta] <- co[common_beta]
+    beta_base <- as.numeric(tmp_beta)
+    
+    if (has_scale) {
+      sc <- survreg_fit$scale %||% 1
+      if (is.finite(sc) && sc > 0) {
+        log_scale_base <- log(sc)
+      }
+    }
+  } else {
+    unc_idx <- which(data$event_transition == 1L)
+    if (length(unc_idx) >= max(5L, k_beta + 1L)) {
+      fit_lm0 <- try(stats::lm(
+        formula = stats::as.formula(paste0("log(time_years) ~ ", lat_formula_rhs)),
+        data = data[unc_idx, , drop = FALSE]
+      ), silent = TRUE)
+      
+      if (!inherits(fit_lm0, "try-error")) {
+        co <- stats::coef(fit_lm0)
+        tmp_beta <- rep(0, length(lat_term_labels_effective))
+        names(tmp_beta) <- lat_term_labels_effective
+        common_beta <- intersect(names(co), names(tmp_beta))
+        tmp_beta[common_beta] <- co[common_beta]
+        beta_base <- as.numeric(tmp_beta)
         
-        cure_fraction <- compute_parametric_cure_fraction(
-          fit = fit_obj,
-          data_df = data_df,
-          incidence_vars = incidence_vars
-        )
-        uncured_surv_mat <- compute_uncured_survival(
-          pop_surv_mat = pop_surv_mat,
-          cure_fraction = cure_fraction
-        )
-        TRUE
-      },
-      warning = function(w) {
-        pred_warning_messages <<- c(pred_warning_messages, conditionMessage(w))
-        invokeRestart("muffleWarning")
+        if (has_scale) {
+          log_scale_base <- log(max(stats::sigma(fit_lm0), 0.20))
+        }
       }
-    ),
-    error = function(e) {
-      pred_error_messages <<- c(pred_error_messages, conditionMessage(e))
-      FALSE
     }
-  )
-  
-  prediction_time_sec <- as.numeric(difftime(Sys.time(), pred_started_at, units = "secs"))
-  
-  if (!isTRUE(pred_success)) {
-    pop_surv_mat <- NULL
-    uncured_surv_mat <- NULL
-    cure_fraction <- NULL
   }
   
-  subject_predictions <- if (isTRUE(pred_success)) {
-    make_subject_prediction_long(
-      data_df = data_df,
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      pop_surv_mat = pop_surv_mat,
-      uncured_surv_mat = uncured_surv_mat,
-      cure_fraction = cure_fraction
-    )
-  } else {
-    empty_subject_pred_df()
+  intercept_idx <- match("(Intercept)", inc_term_labels_effective)
+  gamma_starts <- list(gamma_base)
+  
+  if (is.finite(intercept_idx)) {
+    for (shift_val in parametric_gamma_intercept_shifts) {
+      g <- gamma_base
+      g[intercept_idx] <- g[intercept_idx] + shift_val
+      gamma_starts[[length(gamma_starts) + 1L]] <- g
+    }
+    for (p0 in parametric_gamma_mean_uncured_starts) {
+      g <- gamma_base
+      g[intercept_idx] <- stats::qlogis(min(max(p0, prob_floor), 1 - prob_floor))
+      gamma_starts[[length(gamma_starts) + 1L]] <- g
+    }
   }
   
-  mean_predictions <- if (isTRUE(pred_success)) {
-    make_mean_prediction_df(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      pop_surv_mat = pop_surv_mat
-    )
-  } else {
-    empty_mean_pred_df()
+  gamma_keys <- vapply(gamma_starts, function(v) paste(round(v, 6), collapse = "|"), character(1))
+  gamma_starts <- gamma_starts[!duplicated(gamma_keys)]
+  
+  starts <- list()
+  for (g in gamma_starts) {
+    base_par <- c(g, beta_base)
+    starts[[length(starts) + 1L]] <- if (has_scale) c(base_par, log_scale_base) else base_par
+    if (has_scale) {
+      starts[[length(starts) + 1L]] <- c(base_par, log_scale_base + 0.5)
+      starts[[length(starts) + 1L]] <- c(base_par, log_scale_base - 0.5)
+    }
   }
   
-  latency_summary <- if (isTRUE(pred_success)) {
-    make_latency_summary_df(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      uncured_surv_mat = uncured_surv_mat
-    )
-  } else {
-    empty_latency_summary_df()
-  }
-  
-  cure_only <- if (isTRUE(pred_success)) {
-    make_cure_only_row(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      lane = spec_row$lane,
-      family = spec_row$family,
-      incidence_target = "cure_probability",
-      cure_fraction = cure_fraction,
-      boundary_flag = any(cure_fraction < BOUNDARY_EPS | cure_fraction > (1 - BOUNDARY_EPS))
-    )
-  } else {
-    empty_cure_only_df()
-  }
-  
-  loglik_val <- safe_loglik(fit_obj)
-  n_params <- if (nrow(coefficient_table) > 0L) nrow(coefficient_table) else suppressWarnings(length(stats::coef(fit_obj)))
-  aic_val <- safe_aic_from_loglik(loglik_val, n_params)
-  bic_val <- safe_bic_from_loglik(loglik_val, n_params, nrow(data_df))
-  
-  converged_flag <- TRUE
-  if (!is.null(fit_obj$converged)) {
-    converged_flag <- isTRUE(fit_obj$converged)
-  }
-  if (!is.null(fit_obj$opt$convergence)) {
-    converged_flag <- converged_flag && identical(as.integer(fit_obj$opt$convergence), 0L)
-  }
-  
-  prediction_complete <- isTRUE(pred_success) && identical(n_failed_rows, 0L)
-  
-  registry_row <- data.frame(
-    dataset = spec_row$dataset,
-    fit_id = spec_row$fit_id,
-    model_class = spec_row$model_class,
-    lane = spec_row$lane,
-    engine = spec_row$engine,
-    family = spec_row$family,
-    cov_spec = spec_row$cov_spec,
-    incidence_int_flag = spec_row$incidence_int_flag,
-    latency_int_flag = spec_row$latency_int_flag,
-    site_flag = spec_row$site_flag,
-    incidence_terms = spec_row$incidence_terms,
-    latency_terms = spec_row$latency_terms,
-    n = nrow(data_df),
-    n_event = sum(data_df$event),
-    n_censor = sum(data_df$event == 0L),
-    n_parameters = n_params,
-    logLik = loglik_val,
-    AIC = aic_val,
-    BIC = bic_val,
-    converged_flag = converged_flag,
-    incidence_target = "cure_probability",
-    mean_cure_fraction = if (isTRUE(pred_success)) mean(cure_fraction, na.rm = TRUE) else NA_real_,
-    boundary_flag = if (isTRUE(pred_success)) any(cure_fraction < BOUNDARY_EPS | cure_fraction > (1 - BOUNDARY_EPS)) else NA,
-    fit_success = TRUE,
-    prediction_success = prediction_complete,
-    success = TRUE && prediction_complete,
-    n_prediction_failed_rows = n_failed_rows,
-    fit_time_sec = fit_time_sec,
-    prediction_time_sec = prediction_time_sec,
-    error_stage = if (isTRUE(pred_success)) "" else "prediction",
-    error_message = collapse_messages(pred_error_messages),
-    warning_messages = collapse_messages(c(fit_warning_messages, pred_warning_messages)),
-    stringsAsFactors = FALSE
-  )
-  
-  list(
-    fit_bundle = list(
-      spec = spec_row,
-      fit = fit_obj,
-      engine = spec_row$engine,
-      success = TRUE && prediction_complete,
-      fit_success = TRUE,
-      prediction_success = prediction_complete,
-      warnings = c(fit_warning_messages, pred_warning_messages),
-      error_message = collapse_messages(pred_error_messages)
-    ),
-    registry = registry_row,
-    coefficient_table = coefficient_table,
-    subject_predictions = subject_predictions,
-    mean_predictions = mean_predictions,
-    latency_summary = latency_summary,
-    cure_only = cure_only
-  )
+  start_keys <- vapply(starts, function(v) paste(round(v, 6), collapse = "|"), character(1))
+  starts[!duplicated(start_keys)]
 }
 
-## 🟠 Fit: one semiparametric Cox-latency cure model ===============================
-
-fit_one_smcure_ph_model <- function(spec_row, data_df) {
-  fit_started_at <- Sys.time()
-  fit_warning_messages <- character(0)
-  fit_error_messages <- character(0)
-  pred_warning_messages <- character(0)
-  pred_error_messages <- character(0)
+## 🟠 Build: parametric AFT cure fitting engine ===============================
+fit_parametric_mixture_cure <- function(data,
+                                        incidence_bundle,
+                                        latency_bundle,
+                                        family) {
+  time <- data$time_years
+  event <- data$event_transition
+  Z <- incidence_bundle$matrix
+  X <- latency_bundle$matrix
   
-  incidence_vars <- split_var_string(spec_row$incidence_vars_str)
-  latency_vars <- split_var_string(spec_row$latency_vars_str)
+  k_gamma <- ncol(Z)
+  k_beta <- ncol(X)
+  has_scale <- family != "exp"
   
-  surv_formula <- stats::as.formula(
-    paste0("survival::Surv(time_years, event) ~ ", make_rhs(latency_vars))
-  )
-  cure_formula <- stats::as.formula(
-    paste0("~ ", make_rhs(incidence_vars))
-  )
-  
-  fit_obj <- tryCatch(
-    withCallingHandlers(
-      {
-        invisible(capture.output(
-          tmp_fit <- smcure::smcure(
-            formula = surv_formula,
-            cureform = cure_formula,
-            data = data_df,
-            na.action = stats::na.omit,
-            model = "ph",
-            link = SMCURE_LINK,
-            Var = SMCURE_VAR,
-            emmax = SMCURE_EMMAX,
-            eps = SMCURE_EPS,
-            nboot = if (SMCURE_VAR) SMCURE_NBOOT else 0L
-          )
-        ))
-        tmp_fit
-      },
-      warning = function(w) {
-        fit_warning_messages <<- c(fit_warning_messages, conditionMessage(w))
-        invokeRestart("muffleWarning")
-      }
-    ),
-    error = function(e) {
-      structure(list(message = conditionMessage(e)), class = "step5_fit_error")
+  nll_fun <- function(par) {
+    gamma <- par[seq_len(k_gamma)]
+    beta <- par[k_gamma + seq_len(k_beta)]
+    log_scale <- if (has_scale) par[k_gamma + k_beta + 1L] else NULL
+    
+    if (has_scale && (!is.finite(log_scale) || log_scale < -7 || log_scale > 7)) {
+      return(big_nll)
     }
-  )
-  
-  fit_time_sec <- as.numeric(difftime(Sys.time(), fit_started_at, units = "secs"))
-  
-  if (inherits(fit_obj, "step5_fit_error")) {
-    registry_row <- data.frame(
-      dataset = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      model_class = spec_row$model_class,
-      lane = spec_row$lane,
-      engine = spec_row$engine,
-      family = spec_row$family,
-      cov_spec = spec_row$cov_spec,
-      incidence_int_flag = spec_row$incidence_int_flag,
-      latency_int_flag = spec_row$latency_int_flag,
-      site_flag = spec_row$site_flag,
-      incidence_terms = spec_row$incidence_terms,
-      latency_terms = spec_row$latency_terms,
-      n = nrow(data_df),
-      n_event = sum(data_df$event),
-      n_censor = sum(data_df$event == 0L),
-      n_parameters = NA_real_,
-      logLik = NA_real_,
-      AIC = NA_real_,
-      BIC = NA_real_,
-      converged_flag = FALSE,
-      incidence_target = "uncured_probability",
-      mean_cure_fraction = NA_real_,
-      boundary_flag = NA,
-      fit_success = FALSE,
-      prediction_success = FALSE,
-      success = FALSE,
-      n_prediction_failed_rows = NA_integer_,
-      fit_time_sec = fit_time_sec,
-      prediction_time_sec = NA_real_,
-      error_stage = "fit",
-      error_message = fit_obj$message,
-      warning_messages = collapse_messages(fit_warning_messages),
-      stringsAsFactors = FALSE
+    if (any(!is.finite(par))) return(big_nll)
+    
+    eta_inc <- as.vector(Z %*% gamma)
+    pi_uncured <- stats::plogis(eta_inc)
+    pi_uncured <- pmin(pmax(pi_uncured, prob_floor), 1 - prob_floor)
+    
+    eta_lat <- if (k_beta > 0L) as.vector(X %*% beta) else rep(0, length(time))
+    lat_obj <- aft_surv_density(
+      family = family,
+      time = time,
+      eta = eta_lat,
+      log_scale = log_scale,
+      tiny = prob_floor
     )
     
+    log_event <- log(pi_uncured) + lat_obj$logf
+    cens_term <- pmax((1 - pi_uncured) + pi_uncured * lat_obj$S, prob_floor)
+    log_cens <- log(cens_term)
+    
+    ll <- sum(event * log_event + (1 - event) * log_cens)
+    if (!is.finite(ll)) return(big_nll)
+    -ll
+  }
+  
+  start_list <- build_parametric_starts(
+    data = data,
+    Z = Z,
+    X = X,
+    inc_term_labels_effective = incidence_bundle$map$term_label,
+    lat_term_labels_effective = latency_bundle$map$term_label,
+    lat_formula_rhs = latency_bundle$rhs,
+    family = family
+  )
+  
+  all_warnings <- character()
+  best_fit <- NULL
+  best_start_index <- NA_integer_
+  n_successful_starts <- 0L
+  
+  fit_start_time <- Sys.time()
+  
+  for (s_idx in seq_along(start_list)) {
+    st <- start_list[[s_idx]]
+    
+    fit_try <- try(capture_warnings(
+      stats::optim(
+        par = st,
+        fn = nll_fun,
+        method = "BFGS",
+        control = list(maxit = parametric_maxit, reltol = parametric_reltol)
+      )
+    ), silent = TRUE)
+    
+    if (inherits(fit_try, "try-error")) {
+      all_warnings <- unique(c(all_warnings, paste0("optim_error_start_", s_idx, ": ", as.character(fit_try))))
+      next
+    }
+    
+    all_warnings <- unique(c(all_warnings, fit_try$warnings))
+    opt_obj <- fit_try$value
+    if (is.finite(opt_obj$value)) {
+      n_successful_starts <- n_successful_starts + 1L
+    }
+    
+    if (is.null(best_fit) || (is.finite(opt_obj$value) && opt_obj$value < best_fit$value)) {
+      best_fit <- opt_obj
+      best_start_index <- s_idx
+    }
+  }
+  
+  fit_time_sec <- as.numeric(difftime(Sys.time(), fit_start_time, units = "secs"))
+  
+  if (is.null(best_fit) || !is.finite(best_fit$value)) {
     return(list(
-      fit_bundle = list(
-        spec = spec_row,
-        fit = NULL,
-        engine = spec_row$engine,
-        success = FALSE,
-        fit_success = FALSE,
-        prediction_success = FALSE,
-        warnings = fit_warning_messages,
-        error_message = fit_obj$message
-      ),
-      registry = registry_row,
-      coefficient_table = empty_coeff_df(),
-      subject_predictions = empty_subject_pred_df(),
-      mean_predictions = empty_mean_pred_df(),
-      latency_summary = empty_latency_summary_df(),
-      cure_only = empty_cure_only_df()
+      fit_ok = FALSE,
+      fit_status = "error",
+      warnings = unique(c(all_warnings, "모든 parametric 최적화 시도가 실패했습니다.")),
+      fit_time_sec = fit_time_sec,
+      n_start_attempts = length(start_list),
+      n_successful_starts = n_successful_starts
     ))
   }
   
-  coefficient_table <- extract_smcure_coef_table(
-    fit = fit_obj,
-    dataset_key = spec_row$dataset,
-    fit_id = spec_row$fit_id
+  gamma_hat <- best_fit$par[seq_len(k_gamma)]
+  beta_hat <- best_fit$par[k_gamma + seq_len(k_beta)]
+  log_scale_hat <- if (has_scale) best_fit$par[k_gamma + k_beta + 1L] else NA_real_
+  
+  hess_try <- try(capture_warnings(
+    stats::optimHess(best_fit$par, fn = nll_fun)
+  ), silent = TRUE)
+  
+  if (inherits(hess_try, "try-error")) {
+    all_warnings <- unique(c(all_warnings, paste0("optimHess_error: ", as.character(hess_try))))
+    hessian <- matrix(NA_real_, length(best_fit$par), length(best_fit$par))
+  } else {
+    all_warnings <- unique(c(all_warnings, hess_try$warnings))
+    hessian <- hess_try$value
+  }
+  
+  vcov_obj <- safe_inverse_hessian(hessian)
+  se_vec <- if (!vcov_obj$singular) sqrt(diag(vcov_obj$vcov)) else rep(NA_real_, length(best_fit$par))
+  
+  gamma_se <- se_vec[seq_len(k_gamma)]
+  beta_se <- se_vec[k_gamma + seq_len(k_beta)]
+  log_scale_se <- if (has_scale) se_vec[k_gamma + k_beta + 1L] else NA_real_
+  
+  names(gamma_hat) <- incidence_bundle$map$term_label
+  names(beta_hat) <- latency_bundle$map$term_label
+  names(gamma_se) <- incidence_bundle$map$term_label
+  names(beta_se) <- latency_bundle$map$term_label
+  
+  eta_inc_fit <- as.vector(Z %*% unname(gamma_hat))
+  pi_uncured_fit <- stats::plogis(eta_inc_fit)
+  pi_uncured_fit <- pmin(pmax(pi_uncured_fit, prob_floor), 1 - prob_floor)
+  cure_fraction_fit <- 1 - pi_uncured_fit
+  
+  eta_lat_fit <- if (k_beta > 0L) as.vector(X %*% unname(beta_hat)) else rep(0, nrow(data))
+  lat_fit <- aft_surv_density(
+    family = family,
+    time = time,
+    eta = eta_lat_fit,
+    log_scale = if (has_scale) log_scale_hat else NULL,
+    tiny = prob_floor
   )
   
-  pred_started_at <- Sys.time()
+  log_event_fit <- log(pi_uncured_fit) + lat_fit$logf
+  cens_term_fit <- pmax((1 - pi_uncured_fit) + pi_uncured_fit * lat_fit$S, prob_floor)
+  log_cens_fit <- log(cens_term_fit)
+  logLik_fit <- sum(event * log_event_fit + (1 - event) * log_cens_fit)
   
-  pop_surv_mat <- NULL
-  uncured_surv_mat <- NULL
-  cure_fraction <- NULL
-  n_failed_rows <- 0L
+  n_par <- length(best_fit$par)
+  AIC_fit <- 2 * n_par - 2 * logLik_fit
+  BIC_fit <- log(nrow(data)) * n_par - 2 * logLik_fit
   
-  pred_success <- tryCatch(
-    withCallingHandlers(
-      {
-        pred_obj <- predict_smcure_matrices(
-          fit = fit_obj,
-          data_df = data_df,
-          incidence_vars = incidence_vars,
-          latency_vars = latency_vars,
-          eval_times = PREDICTION_YEARS
-        )
-        pop_surv_mat <- pred_obj$pop_surv_mat
-        uncured_surv_mat <- pred_obj$uncured_surv_mat
-        cure_fraction <- pred_obj$cure_fraction
-        n_failed_rows <- pred_obj$n_failed_rows
-        if (length(pred_obj$failure_messages) > 0L) {
-          pred_error_messages <<- c(pred_error_messages, pred_obj$failure_messages)
-        }
-        TRUE
-      },
-      warning = function(w) {
-        pred_warning_messages <<- c(pred_warning_messages, conditionMessage(w))
-        invokeRestart("muffleWarning")
-      }
-    ),
-    error = function(e) {
-      pred_error_messages <<- c(pred_error_messages, conditionMessage(e))
-      FALSE
+  boundary_flag <- any(pi_uncured_fit < boundary_prob_threshold) ||
+    any(pi_uncured_fit > 1 - boundary_prob_threshold) ||
+    any(cure_fraction_fit < boundary_prob_threshold) ||
+    any(cure_fraction_fit > 1 - boundary_prob_threshold)
+  
+  list(
+    fit_ok = TRUE,
+    fit_status = "ok",
+    lane = "AFT_param",
+    family = family,
+    warnings = unique(all_warnings),
+    fit_time_sec = fit_time_sec,
+    convergence_code = best_fit$convergence,
+    convergence_message = best_fit$message %||% "",
+    convergence_flag = best_fit$convergence == 0L,
+    singular_hessian_flag = vcov_obj$singular,
+    hessian_condition_number = vcov_obj$condition_number,
+    hessian = hessian,
+    vcov = vcov_obj$vcov,
+    vcov_method = if (vcov_obj$singular) "not_available_due_to_hessian" else "inverse_hessian_full",
+    incidence_target = "uncured_probability",
+    gamma = gamma_hat,
+    gamma_se = gamma_se,
+    beta = beta_hat,
+    beta_se = beta_se,
+    log_scale = log_scale_hat,
+    log_scale_se = log_scale_se,
+    scale_natural = if (has_scale) exp(log_scale_hat) else NA_real_,
+    scale_se_natural = if (has_scale && is.finite(log_scale_se)) exp(log_scale_hat) * log_scale_se else NA_real_,
+    logLik = logLik_fit,
+    AIC = AIC_fit,
+    BIC = BIC_fit,
+    n_parameters = n_par,
+    pi_uncured_train = pi_uncured_fit,
+    cure_fraction_train = cure_fraction_fit,
+    boundary_flag = boundary_flag,
+    max_event_time_years = if (any(event == 1L)) max(time[event == 1L]) else NA_real_,
+    max_followup_time_years = max(time),
+    incidence_bundle = incidence_bundle,
+    latency_bundle = latency_bundle,
+    has_scale = has_scale,
+    n_start_attempts = length(start_list),
+    n_successful_starts = n_successful_starts,
+    best_start_index = best_start_index,
+    best_objective_value = best_fit$value
+  )
+}
+
+## 🟠 Build: parametric AFT cure prediction engine ===============================
+predict_parametric_cure_fit <- function(fit_obj, Znew, Xnew, years) {
+  pi_uncured <- stats::plogis(as.vector(Znew %*% unname(fit_obj$gamma)))
+  pi_uncured <- pmin(pmax(pi_uncured, prob_floor), 1 - prob_floor)
+  
+  eta_lat <- if (ncol(Xnew) > 0L) as.vector(Xnew %*% unname(fit_obj$beta)) else rep(0, nrow(Znew))
+  
+  S_u <- matrix(NA_real_, nrow = nrow(Znew), ncol = length(years))
+  S_pop <- matrix(NA_real_, nrow = nrow(Znew), ncol = length(years))
+  
+  for (j in seq_along(years)) {
+    lat_obj <- aft_surv_density(
+      family = fit_obj$family,
+      time = rep(years[j], nrow(Znew)),
+      eta = eta_lat,
+      log_scale = if (fit_obj$has_scale) fit_obj$log_scale else NULL,
+      tiny = prob_floor
+    )
+    S_u[, j] <- lat_obj$S
+    S_pop[, j] <- (1 - pi_uncured) + pi_uncured * lat_obj$S
+  }
+  
+  colnames(S_u) <- paste0("y", years)
+  colnames(S_pop) <- paste0("y", years)
+  
+  list(
+    years = years,
+    pi_uncured = pi_uncured,
+    cure_fraction = 1 - pi_uncured,
+    S_u = S_u,
+    S_pop = S_pop
+  )
+}
+
+## 🟠 Build: fractional logistic and Cox EM subroutines ===============================
+fractional_logit_nll <- function(gamma, Z, w) {
+  eta <- as.vector(Z %*% gamma)
+  p <- stats::plogis(eta)
+  p <- pmin(pmax(p, prob_floor), 1 - prob_floor)
+  -sum(w * log(p) + (1 - w) * log1p(-p))
+}
+
+fit_fractional_logit_mstep <- function(Z, w, start_gamma) {
+  fit_try <- try(capture_warnings(
+    stats::optim(
+      par = start_gamma,
+      fn = fractional_logit_nll,
+      Z = Z,
+      w = w,
+      method = "BFGS",
+      control = list(maxit = 500L, reltol = 1e-10)
+    )
+  ), silent = TRUE)
+  
+  if (inherits(fit_try, "try-error")) {
+    list(
+      par = start_gamma,
+      warnings = paste0("fractional_logit_optim_error: ", as.character(fit_try)),
+      convergence = 1L
+    )
+  } else {
+    list(
+      par = fit_try$value$par,
+      warnings = fit_try$warnings,
+      convergence = fit_try$value$convergence
+    )
+  }
+}
+
+fit_weighted_cox_mstep <- function(time, event, X, w, beta_start = NULL) {
+  df <- as.data.frame(X)
+  df$time <- time
+  df$event <- event
+  df$w <- w
+  
+  rhs <- if (ncol(X) > 0L) {
+    paste(colnames(X), collapse = " + ")
+  } else {
+    "1"
+  }
+  
+  fml <- stats::as.formula(paste0("survival::Surv(time, event) ~ ", rhs))
+  
+  cox_try <- try(capture_warnings(
+    survival::coxph(
+      formula = fml,
+      data = df,
+      ties = "breslow",
+      singular.ok = TRUE,
+      init = beta_start,
+      weights = w,
+      control = survival::coxph.control(iter.max = coxph_iter_max, eps = 1e-09),
+      x = FALSE,
+      y = FALSE,
+      model = FALSE
+    )
+  ), silent = TRUE)
+  
+  if (inherits(cox_try, "try-error")) {
+    return(list(
+      ok = FALSE,
+      warnings = paste0("coxph_error: ", as.character(cox_try))
+    ))
+  }
+  
+  cox_fit <- cox_try$value
+  beta_hat <- stats::coef(cox_fit)
+  beta_hat <- if (length(beta_hat) == 0L) numeric(0) else beta_hat
+  if (anyNA(beta_hat)) beta_hat[is.na(beta_hat)] <- 0
+  
+  bh_try <- try(capture_warnings(
+    survival::basehaz(cox_fit, centered = FALSE)
+  ), silent = TRUE)
+  
+  if (inherits(bh_try, "try-error")) {
+    return(list(
+      ok = FALSE,
+      warnings = c(cox_try$warnings, paste0("basehaz_error: ", as.character(bh_try)))
+    ))
+  }
+  
+  vc_try <- try(stats::vcov(cox_fit), silent = TRUE)
+  beta_vcov <- if (inherits(vc_try, "try-error")) {
+    matrix(NA_real_, length(beta_hat), length(beta_hat))
+  } else {
+    vc_try
+  }
+  
+  list(
+    ok = TRUE,
+    beta = beta_hat,
+    beta_vcov = beta_vcov,
+    cox_fit = cox_fit,
+    basehaz_df = bh_try$value,
+    warnings = unique(c(cox_try$warnings, bh_try$warnings))
+  )
+}
+
+## 🟠 Build: semiparametric Cox-latency cure EM engine ===============================
+fit_ph_cure_em <- function(data,
+                           incidence_bundle,
+                           latency_bundle) {
+  time <- data$time_years
+  event <- data$event_transition
+  Z <- incidence_bundle$matrix
+  X <- latency_bundle$matrix
+  
+  n <- nrow(data)
+  if (sum(event) == 0L) {
+    return(list(
+      fit_ok = FALSE,
+      fit_status = "error",
+      warnings = "PH cure EM 적합 불가: transition event가 0개입니다.",
+      fit_time_sec = 0
+    ))
+  }
+  
+  all_warnings <- character()
+  fit_start_time <- Sys.time()
+  
+  init_glm <- try(stats::glm.fit(
+    x = Z,
+    y = event,
+    family = stats::quasibinomial(link = "logit")
+  ), silent = TRUE)
+  
+  gamma_curr <- if (!inherits(init_glm, "try-error") && !is.null(init_glm$coefficients)) {
+    g <- init_glm$coefficients
+    g[!is.finite(g)] <- 0
+    as.numeric(g)
+  } else {
+    g <- rep(0, ncol(Z))
+    if ("(Intercept)" %in% incidence_bundle$map$term_label) {
+      g[match("(Intercept)", incidence_bundle$map$term_label)] <- stats::qlogis(min(max(mean(event), 0.05), 0.95))
     }
+    g
+  }
+  
+  init_cox <- fit_weighted_cox_mstep(
+    time = time,
+    event = event,
+    X = X,
+    w = rep(1, n),
+    beta_start = NULL
   )
   
-  prediction_time_sec <- as.numeric(difftime(Sys.time(), pred_started_at, units = "secs"))
-  prediction_complete <- isTRUE(pred_success) && identical(n_failed_rows, 0L)
-  
-  subject_predictions <- if (isTRUE(pred_success)) {
-    make_subject_prediction_long(
-      data_df = data_df,
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      pop_surv_mat = pop_surv_mat,
-      uncured_surv_mat = uncured_surv_mat,
-      cure_fraction = cure_fraction
-    )
-  } else {
-    empty_subject_pred_df()
+  if (!isTRUE(init_cox$ok)) {
+    return(list(
+      fit_ok = FALSE,
+      fit_status = "error",
+      warnings = unique(c(all_warnings, init_cox$warnings, "초기 Cox PH 적합 실패")),
+      fit_time_sec = as.numeric(difftime(Sys.time(), fit_start_time, units = "secs"))
+    ))
   }
   
-  mean_predictions <- if (isTRUE(pred_success)) {
-    make_mean_prediction_df(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      pop_surv_mat = pop_surv_mat
+  beta_curr <- as.numeric(init_cox$beta)
+  names(beta_curr) <- latency_bundle$map$term_label
+  basehaz_df_curr <- init_cox$basehaz_df
+  cox_fit_curr <- init_cox$cox_fit
+  beta_vcov_curr <- init_cox$beta_vcov
+  all_warnings <- unique(c(all_warnings, init_cox$warnings))
+  
+  converged <- FALSE
+  em_trace <- numeric(em_max_iter)
+  pseudo_loglik_trace <- numeric(em_max_iter)
+  final_w <- rep(1, n)
+  
+  for (iter in seq_len(em_max_iter)) {
+    S0_fun <- make_step_surv_fun(basehaz_df_curr, zero_tail = TRUE)
+    eta_inc <- as.vector(Z %*% gamma_curr)
+    pi_uncured <- stats::plogis(eta_inc)
+    pi_uncured <- pmin(pmax(pi_uncured, prob_floor), 1 - prob_floor)
+    
+    lp <- if (ncol(X) > 0L) as.vector(X %*% beta_curr) else rep(0, n)
+    S0_at_t <- S0_fun(time)
+    S_u <- S0_at_t ^ exp(lp)
+    
+    denom <- pmax((1 - pi_uncured) + pi_uncured * S_u, prob_floor)
+    w <- event + (1 - event) * pi_uncured * S_u / denom
+    w <- pmin(pmax(w, prob_floor), 1)
+    final_w <- w
+    
+    gamma_update <- fit_fractional_logit_mstep(
+      Z = Z,
+      w = w,
+      start_gamma = gamma_curr
     )
-  } else {
-    empty_mean_pred_df()
+    gamma_new <- as.numeric(gamma_update$par)
+    all_warnings <- unique(c(all_warnings, gamma_update$warnings))
+    
+    cox_update <- fit_weighted_cox_mstep(
+      time = time,
+      event = event,
+      X = X,
+      w = w,
+      beta_start = beta_curr
+    )
+    
+    if (!isTRUE(cox_update$ok)) {
+      return(list(
+        fit_ok = FALSE,
+        fit_status = "error",
+        warnings = unique(c(all_warnings, cox_update$warnings, paste0("EM iteration ", iter, " 에서 Cox PH 적합 실패"))),
+        fit_time_sec = as.numeric(difftime(Sys.time(), fit_start_time, units = "secs"))
+      ))
+    }
+    
+    beta_new <- if (length(cox_update$beta) > 0L) as.numeric(cox_update$beta) else numeric(0)
+    basehaz_df_new <- cox_update$basehaz_df
+    cox_fit_new <- cox_update$cox_fit
+    beta_vcov_new <- cox_update$beta_vcov
+    all_warnings <- unique(c(all_warnings, cox_update$warnings))
+    
+    incidence_ll <- -fractional_logit_nll(gamma_new, Z, w)
+    partial_ll <- cox_fit_new$loglik[2] %||% NA_real_
+    pseudo_loglik_trace[iter] <- incidence_ll + partial_ll
+    
+    old_par <- c(gamma_curr, beta_curr)
+    new_par <- c(gamma_new, beta_new)
+    rel_change <- max(abs(new_par - old_par) / pmax(abs(old_par), 1e-6))
+    em_trace[iter] <- rel_change
+    
+    gamma_curr <- gamma_new
+    beta_curr <- beta_new
+    basehaz_df_curr <- basehaz_df_new
+    cox_fit_curr <- cox_fit_new
+    beta_vcov_curr <- beta_vcov_new
+    
+    if (is.finite(rel_change) && rel_change < em_tol) {
+      converged <- TRUE
+      em_trace <- em_trace[seq_len(iter)]
+      pseudo_loglik_trace <- pseudo_loglik_trace[seq_len(iter)]
+      break
+    }
+    
+    if (iter == em_max_iter) {
+      em_trace <- em_trace[seq_len(iter)]
+      pseudo_loglik_trace <- pseudo_loglik_trace[seq_len(iter)]
+    }
   }
   
-  latency_summary <- if (isTRUE(pred_success)) {
-    make_latency_summary_df(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      uncured_surv_mat = uncured_surv_mat
+  gamma_hess_try <- try(capture_warnings(
+    stats::optimHess(
+      par = gamma_curr,
+      fn = fractional_logit_nll,
+      Z = Z,
+      w = final_w
     )
+  ), silent = TRUE)
+  
+  if (inherits(gamma_hess_try, "try-error")) {
+    gamma_hessian <- matrix(NA_real_, length(gamma_curr), length(gamma_curr))
+    all_warnings <- unique(c(all_warnings, paste0("gamma_optimHess_error: ", as.character(gamma_hess_try))))
   } else {
-    empty_latency_summary_df()
+    gamma_hessian <- gamma_hess_try$value
+    all_warnings <- unique(c(all_warnings, gamma_hess_try$warnings))
   }
   
-  cure_only <- if (isTRUE(pred_success)) {
-    make_cure_only_row(
-      dataset_key = spec_row$dataset,
-      fit_id = spec_row$fit_id,
-      lane = spec_row$lane,
-      family = spec_row$family,
-      incidence_target = "uncured_probability",
-      cure_fraction = cure_fraction,
-      boundary_flag = any(cure_fraction < BOUNDARY_EPS | cure_fraction > (1 - BOUNDARY_EPS))
-    )
-  } else {
-    empty_cure_only_df()
-  }
+  gamma_vcov_obj <- safe_inverse_hessian(gamma_hessian)
+  gamma_vcov <- gamma_vcov_obj$vcov
+  gamma_se <- if (!gamma_vcov_obj$singular) sqrt(diag(gamma_vcov)) else rep(NA_real_, length(gamma_curr))
   
-  n_params <- length(fit_obj$b %||% numeric()) + length(fit_obj$beta %||% numeric())
-  converged_flag <- all(is.finite(c(fit_obj$b %||% numeric(), fit_obj$beta %||% numeric())))
+  beta_se <- tryCatch(sqrt(diag(beta_vcov_curr)), error = function(e) rep(NA_real_, length(beta_curr)))
+  if (length(beta_se) == 0L) beta_se <- numeric(0)
   
-  registry_row <- data.frame(
-    dataset = spec_row$dataset,
-    fit_id = spec_row$fit_id,
-    model_class = spec_row$model_class,
-    lane = spec_row$lane,
-    engine = spec_row$engine,
-    family = spec_row$family,
-    cov_spec = spec_row$cov_spec,
-    incidence_int_flag = spec_row$incidence_int_flag,
-    latency_int_flag = spec_row$latency_int_flag,
-    site_flag = spec_row$site_flag,
-    incidence_terms = spec_row$incidence_terms,
-    latency_terms = spec_row$latency_terms,
-    n = nrow(data_df),
-    n_event = sum(data_df$event),
-    n_censor = sum(data_df$event == 0L),
-    n_parameters = n_params,
+  names(gamma_curr) <- incidence_bundle$map$term_label
+  names(beta_curr) <- latency_bundle$map$term_label
+  names(gamma_se) <- incidence_bundle$map$term_label
+  names(beta_se) <- latency_bundle$map$term_label
+  
+  S0_fun_final <- make_step_surv_fun(basehaz_df_curr, zero_tail = TRUE)
+  eta_inc_final <- as.vector(Z %*% unname(gamma_curr))
+  pi_uncured_final <- stats::plogis(eta_inc_final)
+  pi_uncured_final <- pmin(pmax(pi_uncured_final, prob_floor), 1 - prob_floor)
+  cure_fraction_final <- 1 - pi_uncured_final
+  
+  lp_final <- if (ncol(X) > 0L) as.vector(X %*% unname(beta_curr)) else rep(0, n)
+  S_u_final <- S0_fun_final(time) ^ exp(lp_final)
+  
+  boundary_flag <- any(pi_uncured_final < boundary_prob_threshold) ||
+    any(pi_uncured_final > 1 - boundary_prob_threshold) ||
+    any(cure_fraction_final < boundary_prob_threshold) ||
+    any(cure_fraction_final > 1 - boundary_prob_threshold)
+  
+  fit_time_sec <- as.numeric(difftime(Sys.time(), fit_start_time, units = "secs"))
+  
+  list(
+    fit_ok = TRUE,
+    fit_status = if (converged) "ok" else "maxit_reached",
+    lane = "PH_semiparam",
+    family = "coxph",
+    warnings = unique(all_warnings),
+    fit_time_sec = fit_time_sec,
+    convergence_code = if (converged) 0L else 1L,
+    convergence_message = if (converged) "EM converged" else "EM max iteration reached",
+    convergence_flag = converged,
+    singular_hessian_flag = gamma_vcov_obj$singular,
+    hessian_condition_number = gamma_vcov_obj$condition_number,
+    incidence_target = "uncured_probability",
+    gamma = gamma_curr,
+    gamma_se = gamma_se,
+    gamma_vcov = gamma_vcov,
+    beta = beta_curr,
+    beta_se = beta_se,
+    beta_vcov = beta_vcov_curr,
+    log_scale = NA_real_,
+    log_scale_se = NA_real_,
+    scale_natural = NA_real_,
+    scale_se_natural = NA_real_,
     logLik = NA_real_,
+    partial_logLik = cox_fit_curr$loglik[2] %||% NA_real_,
+    pseudo_logLik = tail(pseudo_loglik_trace, 1),
     AIC = NA_real_,
     BIC = NA_real_,
-    converged_flag = converged_flag,
-    incidence_target = "uncured_probability",
-    mean_cure_fraction = if (isTRUE(pred_success)) mean(cure_fraction, na.rm = TRUE) else NA_real_,
-    boundary_flag = if (isTRUE(pred_success)) any(cure_fraction < BOUNDARY_EPS | cure_fraction > (1 - BOUNDARY_EPS)) else NA,
-    fit_success = TRUE,
-    prediction_success = prediction_complete,
-    success = TRUE && prediction_complete,
-    n_prediction_failed_rows = n_failed_rows,
-    fit_time_sec = fit_time_sec,
-    prediction_time_sec = prediction_time_sec,
-    error_stage = if (isTRUE(pred_success)) "" else "prediction",
-    error_message = collapse_messages(pred_error_messages),
-    warning_messages = collapse_messages(c(fit_warning_messages, pred_warning_messages)),
-    stringsAsFactors = FALSE
+    n_parameters = length(gamma_curr) + length(beta_curr),
+    pi_uncured_train = pi_uncured_final,
+    cure_fraction_train = cure_fraction_final,
+    boundary_flag = boundary_flag,
+    max_event_time_years = if (any(event == 1L)) max(time[event == 1L]) else NA_real_,
+    max_followup_time_years = max(time),
+    incidence_bundle = incidence_bundle,
+    latency_bundle = latency_bundle,
+    basehaz_df = basehaz_df_curr,
+    baseline_zero_tail = TRUE,
+    em_iterations = length(em_trace),
+    em_max_relative_change = if (length(em_trace) > 0L) tail(em_trace, 1) else NA_real_,
+    em_trace = em_trace,
+    pseudo_logLik_trace = pseudo_loglik_trace,
+    final_posterior_uncured_weights = final_w,
+    vcov_method = "conditional_block_diagonal"
   )
+}
+
+## 🟠 Build: semiparametric Cox-latency cure prediction engine ===============================
+predict_ph_cure_fit <- function(fit_obj, Znew, Xnew, years) {
+  pi_uncured <- stats::plogis(as.vector(Znew %*% unname(fit_obj$gamma)))
+  pi_uncured <- pmin(pmax(pi_uncured, prob_floor), 1 - prob_floor)
+  
+  lp <- if (ncol(Xnew) > 0L) as.vector(Xnew %*% unname(fit_obj$beta)) else rep(0, nrow(Znew))
+  S0_fun <- make_step_surv_fun(fit_obj$basehaz_df, zero_tail = isTRUE(fit_obj$baseline_zero_tail))
+  
+  S_u <- matrix(NA_real_, nrow = nrow(Znew), ncol = length(years))
+  S_pop <- matrix(NA_real_, nrow = nrow(Znew), ncol = length(years))
+  
+  for (j in seq_along(years)) {
+    S0_t <- S0_fun(rep(years[j], nrow(Znew)))
+    S_u[, j] <- S0_t ^ exp(lp)
+    S_pop[, j] <- (1 - pi_uncured) + pi_uncured * S_u[, j]
+  }
+  
+  colnames(S_u) <- paste0("y", years)
+  colnames(S_pop) <- paste0("y", years)
   
   list(
-    fit_bundle = list(
-      spec = spec_row,
-      fit = fit_obj,
-      engine = spec_row$engine,
-      success = TRUE && prediction_complete,
-      fit_success = TRUE,
-      prediction_success = prediction_complete,
-      warnings = c(fit_warning_messages, pred_warning_messages),
-      error_message = collapse_messages(pred_error_messages)
-    ),
-    registry = registry_row,
-    coefficient_table = coefficient_table,
-    subject_predictions = subject_predictions,
-    mean_predictions = mean_predictions,
-    latency_summary = latency_summary,
-    cure_only = cure_only
+    years = years,
+    pi_uncured = pi_uncured,
+    cure_fraction = 1 - pi_uncured,
+    S_u = S_u,
+    S_pop = S_pop
   )
 }
 
-# 🔴 Define: validation helpers for non-broken exports ===============================
+## 🟠 Build: IPCW performance metrics and IBS calculators ===============================
+weighted_auc_ipcw <- function(r_case, r_ctrl, w_case, w_ctrl) {
+  if (length(r_case) == 0L || length(r_ctrl) == 0L) return(NA_real_)
+  if (sum(w_case) <= 0 || sum(w_ctrl) <= 0) return(NA_real_)
+  
+  ord_ctrl <- order(r_ctrl)
+  r_ctrl <- r_ctrl[ord_ctrl]
+  w_ctrl <- w_ctrl[ord_ctrl]
+  
+  ctrl_sum_by_r <- tapply(w_ctrl, r_ctrl, sum)
+  u <- as.numeric(names(ctrl_sum_by_r))
+  ord_u <- order(u)
+  u <- u[ord_u]
+  ctrl_sum <- as.numeric(ctrl_sum_by_r[ord_u])
+  cum_ctrl <- cumsum(ctrl_sum)
+  
+  less_idx <- findInterval(r_case - 1e-12, u)
+  less_w <- ifelse(less_idx > 0L, cum_ctrl[less_idx], 0)
+  
+  match_idx <- match(r_case, u)
+  equal_w <- ifelse(!is.na(match_idx), ctrl_sum[match_idx], 0)
+  
+  numerator <- sum(w_case * (less_w + 0.5 * equal_w))
+  denominator <- sum(w_case) * sum(w_ctrl)
+  
+  if (denominator <= 0) return(NA_real_)
+  numerator / denominator
+}
 
-## 🟠 Validate: internal consistency of exported tables ===============================
-
-validate_step5_outputs <- function(model_grid, fit_registry, cure_only, mean_predictions, latency_summary, subject_predictions, analysis_data_list) {
-  if (nrow(model_grid) == 0L) {
-    stop("Model grid is empty.")
-  }
+compute_time_dependent_metrics <- function(data, pred_obj, ipcw_helper, years, meta) {
+  rows <- vector("list", length(years))
   
-  if (nrow(fit_registry) != nrow(model_grid)) {
-    stop("fit_registry row count does not match model_grid row count.")
-  }
-  
-  if (!all(model_grid$fit_id %in% fit_registry$fit_id)) {
-    stop("Some fit_id values in model_grid are missing from fit_registry.")
-  }
-  
-  required_fit_cols <- c("fit_success", "prediction_success", "success", "n_prediction_failed_rows")
-  missing_fit_cols <- setdiff(required_fit_cols, names(fit_registry))
-  if (length(missing_fit_cols) > 0L) {
-    stop("fit_registry is missing required QC columns: ", paste(missing_fit_cols, collapse = ", "))
-  }
-  
-  pred_ok_ids <- fit_registry$fit_id[isTRUE(fit_registry$prediction_success) | fit_registry$prediction_success == TRUE]
-  pred_ok_ids <- unique(pred_ok_ids)
-  
-  if (length(pred_ok_ids) == 0L) {
-    stop("No model achieved prediction_success = TRUE. Exports would be broken.")
-  }
-  
-  if (nrow(cure_only) != length(pred_ok_ids)) {
-    stop("cure_only row count does not equal the number of prediction_success models.")
-  }
-  
-  expected_mean_rows <- length(pred_ok_ids) * length(PREDICTION_YEARS)
-  if (nrow(mean_predictions) != expected_mean_rows) {
-    stop("mean_predictions row count mismatch: ", nrow(mean_predictions), " vs ", expected_mean_rows)
-  }
-  
-  if (nrow(latency_summary) != expected_mean_rows) {
-    stop("latency_summary row count mismatch: ", nrow(latency_summary), " vs ", expected_mean_rows)
-  }
-  
-  if (EXPORT_SUBJECT_PREDICTIONS) {
-    fit_to_dataset <- fit_registry[, c("fit_id", "dataset"), drop = FALSE]
-    dataset_sizes <- vapply(analysis_data_list, nrow, integer(1))
-    expected_subject_rows <- sum(dataset_sizes[fit_to_dataset$dataset] * length(PREDICTION_YEARS) * as.integer(fit_to_dataset$fit_id %in% pred_ok_ids))
-    if (nrow(subject_predictions) != expected_subject_rows) {
-      stop("subject_predictions row count mismatch: ", nrow(subject_predictions), " vs ", expected_subject_rows)
+  for (j in seq_along(years)) {
+    t0 <- years[j]
+    surv_pred <- pred_obj$S_pop[, j]
+    risk_pred <- 1 - surv_pred
+    
+    cases <- data$event_transition == 1L & data$time_years <= t0
+    controls <- data$time_years > t0
+    
+    G_t <- ipcw_helper$G_at(t0)
+    G_t_used <- pmax(G_t, prob_floor)
+    
+    weights_brier <- rep(0, nrow(data))
+    if (any(cases)) {
+      G_left_case <- ipcw_helper$G_left(data$time_years[cases])
+      weights_brier[cases] <- 1 / pmax(G_left_case, prob_floor)
     }
-  }
-  
-  param_ok_n <- sum(fit_registry$engine == "flexsurvcure" & fit_registry$prediction_success)
-  cox_ok_n <- sum(fit_registry$engine == "smcure" & fit_registry$prediction_success)
-  
-  if (param_ok_n == 0L) {
-    stop("No parametric flexsurvcure model achieved prediction_success = TRUE.")
-  }
-  
-  if (cox_ok_n == 0L) {
-    stop("No semiparametric smcure model achieved prediction_success = TRUE.")
-  }
-  
-  invisible(
-    data.frame(
-      metric = c("prediction_success_total", "prediction_success_parametric", "prediction_success_cox"),
-      value = c(length(pred_ok_ids), param_ok_n, cox_ok_n),
+    if (any(controls)) {
+      weights_brier[controls] <- 1 / G_t_used
+    }
+    
+    outcome_t <- as.integer(cases)
+    brier_ipcw <- if (sum(weights_brier) > 0 && is.finite(G_t)) {
+      mean(weights_brier * (outcome_t - risk_pred)^2)
+    } else {
+      NA_real_
+    }
+    
+    auc_cd <- if (any(cases) && any(controls) && is.finite(G_t) && G_t > prob_floor) {
+      w_case <- 1 / pmax(ipcw_helper$G_left(data$time_years[cases]), prob_floor)
+      w_ctrl <- rep(1 / G_t_used, sum(controls))
+      weighted_auc_ipcw(
+        r_case = risk_pred[cases],
+        r_ctrl = risk_pred[controls],
+        w_case = w_case,
+        w_ctrl = w_ctrl
+      )
+    } else {
+      NA_real_
+    }
+    
+    rows[[j]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      metric_scope = "apparent_training",
+      year = t0,
+      auc_cd = auc_cd,
+      brier_ipcw = brier_ipcw,
+      G_t_censoring_survival = G_t,
+      n_cases = sum(cases),
+      n_controls = sum(controls),
+      auc_valid = is.finite(auc_cd),
+      brier_valid = is.finite(brier_ipcw),
+      beyond_max_followup = if (is.finite(max(data$time_years))) t0 > max(data$time_years) else NA,
+      beyond_last_event = if (any(data$event_transition == 1L)) t0 > max(data$time_years[data$event_transition == 1L]) else NA,
       stringsAsFactors = FALSE
     )
-  )
-}
-
-# 🔴 Execute: data ingest, grid building, fitting, and QC ===============================
-
-## 🟠 Ingest: source data and dataset branches ===============================
-
-core_data <- read_and_clean_input(DATA_PATH)
-raw_n <- attr(core_data, "raw_n")
-dropped_n <- attr(core_data, "dropped_n")
-age_var_used_global <- attr(core_data, "age_var_used")
-duplicate_site_id_n <- sum(duplicated(core_data$site_id))
-
-analysis_data_list <- list()
-preproc_rows <- list()
-
-for (ds in DATASETS_TO_RUN) {
-  prepared <- prepare_analysis_dataset(core_df = core_data, dataset_key = ds)
-  analysis_data_list[[toupper(ds)]] <- prepared$data
-  preproc_rows[[toupper(ds)]] <- prepared$preproc
-}
-
-preproc_spec <- combine_rows(preproc_rows)
-model_grid <- combine_rows(lapply(DATASETS_TO_RUN, build_step5_grid))
-
-## 🟠 Run: fit or reload master object ===============================
-
-if (!REFIT_MODELS && !file.exists(MASTER_RDS_PATH)) {
-  stop("REFIT_MODELS is FALSE, but no existing master RDS was found: ", MASTER_RDS_PATH)
-}
-
-if (!REFIT_MODELS) {
-  master_obj <- readRDS(MASTER_RDS_PATH)
-  
-  analysis_spec <- master_obj$analysis_spec
-  preproc_spec <- master_obj$preprocessing
-  model_grid <- master_obj$model_grid
-  fit_registry <- master_obj$fit_registry
-  coefficient_table <- master_obj$coefficient_table
-  cure_only <- master_obj$cure_only
-  mean_predictions <- master_obj$mean_predictions
-  latency_summary <- master_obj$latency_summary
-  subject_predictions <- master_obj$subject_predictions
-  fit_objects <- master_obj$fit_objects
-} else {
-  analysis_spec <- data.frame(
-    script_version = SCRIPT_VERSION,
-    analysis_run_timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-    data_path = DATA_PATH,
-    export_dir = EXPORT_DIR,
-    refit_models = REFIT_MODELS,
-    datasets_run = paste(DATASETS_TO_RUN, collapse = "|"),
-    age_var_requested = AGE_VAR,
-    age_var_fallback = AGE_FALLBACK_VAR,
-    age_var_used_global = age_var_used_global,
-    time_var = TIME_VAR,
-    status_var = STATUS_VAR,
-    event_code = EVENT_CODE,
-    right_censor_codes = paste(RIGHT_CENSOR_CODES, collapse = "|"),
-    time_unit_divisor = TIME_UNIT_DIVISOR,
-    time_eps_years = TIME_EPS_YEARS,
-    prediction_years = paste(PREDICTION_YEARS, collapse = "|"),
-    pnu_site_value = PNU_SITE_VALUE,
-    snu_site_value = SNU_SITE_VALUE,
-    site_reference = SITE_REFERENCE,
-    boundary_eps = BOUNDARY_EPS,
-    flexsurvcure_link = FLEXSURVCURE_LINK,
-    flexsurv_maxit = FLEXSURV_MAXIT,
-    smcure_link = SMCURE_LINK,
-    smcure_var = SMCURE_VAR,
-    smcure_nboot = if (SMCURE_VAR) SMCURE_NBOOT else 0L,
-    smcure_emmax = SMCURE_EMMAX,
-    smcure_eps = SMCURE_EPS,
-    raw_rows = raw_n,
-    cleaned_rows = nrow(core_data),
-    dropped_rows_global_cleaning = dropped_n,
-    duplicated_site_id_n = duplicate_site_id_n,
-    stop_if_any_prediction_failure = STOP_IF_ANY_PREDICTION_FAILURE,
-    package_survival = safe_pkg_version("survival"),
-    package_flexsurv = safe_pkg_version("flexsurv"),
-    package_flexsurvcure = safe_pkg_version("flexsurvcure"),
-    package_smcure = safe_pkg_version("smcure"),
-    R_version = R.version.string,
-    stringsAsFactors = FALSE
-  )
-  
-  fit_objects <- vector("list", length = nrow(model_grid))
-  names(fit_objects) <- model_grid$fit_id
-  
-  registry_rows <- vector("list", length = nrow(model_grid))
-  coefficient_tables <- list()
-  cure_only_rows <- list()
-  mean_prediction_rows <- list()
-  latency_summary_rows <- list()
-  subject_prediction_rows <- list()
-  
-  for (i in seq_len(nrow(model_grid))) {
-    spec_row <- as.list(model_grid[i, , drop = FALSE])
-    data_df <- analysis_data_list[[spec_row$dataset]]
-    
-    if (identical(spec_row$engine, "flexsurvcure")) {
-      res_i <- fit_one_parametric_cure_model(spec_row = spec_row, data_df = data_df)
-    } else if (identical(spec_row$engine, "smcure")) {
-      res_i <- fit_one_smcure_ph_model(spec_row = spec_row, data_df = data_df)
-    } else {
-      stop("Unknown engine in model grid: ", spec_row$engine)
-    }
-    
-    fit_objects[[spec_row$fit_id]] <- res_i$fit_bundle
-    registry_rows[[i]] <- res_i$registry
-    
-    if (nrow(res_i$coefficient_table) > 0L) {
-      coefficient_tables[[length(coefficient_tables) + 1L]] <- res_i$coefficient_table
-    }
-    if (nrow(res_i$cure_only) > 0L) {
-      cure_only_rows[[length(cure_only_rows) + 1L]] <- res_i$cure_only
-    }
-    if (nrow(res_i$mean_predictions) > 0L) {
-      mean_prediction_rows[[length(mean_prediction_rows) + 1L]] <- res_i$mean_predictions
-    }
-    if (nrow(res_i$latency_summary) > 0L) {
-      latency_summary_rows[[length(latency_summary_rows) + 1L]] <- res_i$latency_summary
-    }
-    if (nrow(res_i$subject_predictions) > 0L) {
-      subject_prediction_rows[[length(subject_prediction_rows) + 1L]] <- res_i$subject_predictions
-    }
   }
   
-  fit_registry <- combine_rows(registry_rows)
-  coefficient_table <- combine_rows(coefficient_tables, empty_df_fun = empty_coeff_df)
-  cure_only <- combine_rows(cure_only_rows, empty_df_fun = empty_cure_only_df)
-  mean_predictions <- combine_rows(mean_prediction_rows, empty_df_fun = empty_mean_pred_df)
-  latency_summary <- combine_rows(latency_summary_rows, empty_df_fun = empty_latency_summary_df)
-  subject_predictions <- combine_rows(subject_prediction_rows, empty_df_fun = empty_subject_pred_df)
+  perf_df <- do.call(rbind, rows)
+  valid_brier <- is.finite(perf_df$brier_ipcw)
+  ibs_val <- if (sum(valid_brier) >= 2L) {
+    trapz_base(perf_df$year[valid_brier], perf_df$brier_ipcw[valid_brier]) /
+      (max(perf_df$year[valid_brier]) - min(perf_df$year[valid_brier]))
+  } else {
+    NA_real_
+  }
+  perf_df$IBS_apparent <- ibs_val
+  perf_df
+}
+
+## 🟠 Build: output assemblers for predictions and summaries ===============================
+assemble_subject_prediction_df <- function(data, pred_obj, meta, last_event_time, max_followup_time) {
+  out <- vector("list", length(pred_obj$years))
   
-  qc_summary <- validate_step5_outputs(
-    model_grid = model_grid,
-    fit_registry = fit_registry,
-    cure_only = cure_only,
-    mean_predictions = mean_predictions,
-    latency_summary = latency_summary,
-    subject_predictions = subject_predictions,
-    analysis_data_list = analysis_data_list
-  )
-  
-  if (STOP_IF_ANY_PREDICTION_FAILURE && any(!fit_registry$prediction_success)) {
-    bad_ids <- fit_registry$fit_id[!fit_registry$prediction_success]
-    stop(
-      "At least one model did not achieve prediction_success = TRUE: ",
-      paste(bad_ids, collapse = ", ")
+  for (j in seq_along(pred_obj$years)) {
+    yr <- pred_obj$years[j]
+    out[[j]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      id_original = data[[id_var]],
+      unique_id = data$unique_id,
+      site_std = data$site_std,
+      site_num = data$site_num,
+      sex_num = data$sex_num,
+      age_raw = data$age_raw,
+      age_s = data$age_s,
+      time_days_original = data$time_days_original,
+      time_years = data$time_years,
+      status_num_observed = data[[status_var]],
+      event_transition = data$event_transition,
+      year = yr,
+      surv = pred_obj$S_pop[, j],
+      risk = 1 - pred_obj$S_pop[, j],
+      surv_uncured = pred_obj$S_u[, j],
+      pi_uncured = pred_obj$pi_uncured,
+      cure_fraction = pred_obj$cure_fraction,
+      beyond_last_event = if (is.finite(last_event_time)) yr > last_event_time else NA,
+      beyond_max_followup = if (is.finite(max_followup_time)) yr > max_followup_time else NA,
+      is_extrapolated = if (is.finite(max_followup_time)) yr > max_followup_time else NA,
+      stringsAsFactors = FALSE
     )
   }
   
-  master_obj <- list(
-    analysis_spec = analysis_spec,
-    preprocessing = preproc_spec,
-    model_grid = model_grid,
-    fit_registry = fit_registry,
-    coefficient_table = coefficient_table,
-    cure_only = cure_only,
-    mean_predictions = mean_predictions,
-    latency_summary = latency_summary,
-    subject_predictions = subject_predictions,
-    analysis_data = analysis_data_list,
-    fit_objects = fit_objects,
-    qc_summary = qc_summary
+  do.call(rbind, out)
+}
+
+assemble_mean_prediction_df <- function(pred_subject_df) {
+  years <- sort(unique(pred_subject_df$year))
+  out <- vector("list", length(years))
+  
+  for (j in seq_along(years)) {
+    dd <- pred_subject_df[pred_subject_df$year == years[j], , drop = FALSE]
+    out[[j]] <- data.frame(
+      dataset_branch = dd$dataset_branch[1],
+      data_cut = dd$data_cut[1],
+      subgroup = dd$subgroup[1],
+      model_class = dd$model_class[1],
+      lane = dd$lane[1],
+      family = dd$family[1],
+      family_code = dd$family_code[1],
+      spec_id = dd$spec_id[1],
+      model_id = dd$model_id[1],
+      year = years[j],
+      mean_surv = mean(dd$surv),
+      sd_surv = stats::sd(dd$surv),
+      surv_q25 = stats::quantile(dd$surv, 0.25),
+      surv_median = stats::median(dd$surv),
+      surv_q75 = stats::quantile(dd$surv, 0.75),
+      mean_risk = mean(dd$risk),
+      sd_risk = stats::sd(dd$risk),
+      risk_q25 = stats::quantile(dd$risk, 0.25),
+      risk_median = stats::median(dd$risk),
+      risk_q75 = stats::quantile(dd$risk, 0.75),
+      mean_surv_uncured = mean(dd$surv_uncured),
+      mean_pi_uncured = mean(dd$pi_uncured),
+      mean_cure_fraction = mean(dd$cure_fraction),
+      median_cure_fraction = stats::median(dd$cure_fraction),
+      n_subjects = nrow(dd),
+      beyond_last_event = unique(dd$beyond_last_event)[1],
+      beyond_max_followup = unique(dd$beyond_max_followup)[1],
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  do.call(rbind, out)
+}
+
+assemble_cure_summary_row <- function(fit_obj, mean_pred_df, perf_df, meta) {
+  row <- data.frame(
+    dataset_branch = meta$dataset_branch,
+    data_cut = "full",
+    subgroup = "overall",
+    model_class = "cure_MLE",
+    lane = meta$lane,
+    family = meta$family_label,
+    family_code = meta$family_code,
+    spec_id = meta$spec_id,
+    model_id = meta$model_id,
+    incidence_target = fit_obj$incidence_target,
+    mean_pi_uncured = mean(fit_obj$pi_uncured_train),
+    mean_cure_fraction = mean(fit_obj$cure_fraction_train),
+    median_cure_fraction = stats::median(fit_obj$cure_fraction_train),
+    cure_fraction_q25 = stats::quantile(fit_obj$cure_fraction_train, 0.25),
+    cure_fraction_q75 = stats::quantile(fit_obj$cure_fraction_train, 0.75),
+    min_cure_fraction = min(fit_obj$cure_fraction_train),
+    max_cure_fraction = max(fit_obj$cure_fraction_train),
+    boundary_flag = fit_obj$boundary_flag,
+    convergence_flag = fit_obj$convergence_flag,
+    IBS_apparent = if (all(is.na(perf_df$IBS_apparent))) NA_real_ else unique(stats::na.omit(perf_df$IBS_apparent))[1],
+    mean_auc_valid = if (any(is.finite(perf_df$auc_cd))) mean(perf_df$auc_cd, na.rm = TRUE) else NA_real_,
+    mean_brier_valid = if (any(is.finite(perf_df$brier_ipcw))) mean(perf_df$brier_ipcw, na.rm = TRUE) else NA_real_,
+    stringsAsFactors = FALSE
   )
   
-  saveRDS(master_obj, MASTER_RDS_PATH, compress = "xz")
+  for (yr in mean_pred_df$year) {
+    row[[paste0("mean_surv_y", yr)]] <- mean_pred_df$mean_surv[mean_pred_df$year == yr]
+    row[[paste0("mean_risk_y", yr)]] <- mean_pred_df$mean_risk[mean_pred_df$year == yr]
+    row[[paste0("mean_su_y", yr)]] <- mean_pred_df$mean_surv_uncured[mean_pred_df$year == yr]
+  }
+  
+  row
 }
 
-# 🔴 Export: csv outputs and manifest ===============================
-
-## 🟠 Order: final tables consistently ===============================
-
-if (nrow(model_grid) > 0L) {
-  model_grid <- model_grid[order(model_grid$dataset, model_grid$lane, model_grid$family, model_grid$cov_spec), , drop = FALSE]
+assemble_param_coef_df <- function(fit_obj, meta) {
+  rows <- list()
+  
+  if (length(fit_obj$gamma) > 0L) {
+    gamma_terms <- names(fit_obj$gamma)
+    gamma_est <- unname(fit_obj$gamma)
+    gamma_se <- unname(fit_obj$gamma_se)
+    gamma_z <- gamma_est / gamma_se
+    gamma_p <- norm_p_value(gamma_z)
+    gamma_ci <- wald_ci(gamma_est, gamma_se)
+    
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      component = "incidence",
+      coefficient_scale = "logit_uncured_odds",
+      exp_scale_label = "odds_ratio_uncured",
+      term = gamma_terms,
+      estimate = gamma_est,
+      std_error = gamma_se,
+      z_value = gamma_z,
+      p_value = gamma_p,
+      wald_lcl = gamma_ci[, "lcl"],
+      wald_ucl = gamma_ci[, "ucl"],
+      exp_estimate = exp(gamma_est),
+      exp_wald_lcl = exp(gamma_ci[, "lcl"]),
+      exp_wald_ucl = exp(gamma_ci[, "ucl"]),
+      se_method = if (meta$lane == "AFT_param") "inverse_hessian" else "conditional_fractional_logit",
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (length(fit_obj$beta) > 0L) {
+    beta_terms <- names(fit_obj$beta)
+    beta_est <- unname(fit_obj$beta)
+    beta_se <- unname(fit_obj$beta_se)
+    beta_z <- beta_est / beta_se
+    beta_p <- norm_p_value(beta_z)
+    beta_ci <- wald_ci(beta_est, beta_se)
+    
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      component = "latency",
+      coefficient_scale = if (meta$lane == "AFT_param") "log_time_ratio" else "log_hazard_ratio",
+      exp_scale_label = if (meta$lane == "AFT_param") "time_ratio" else "hazard_ratio",
+      term = beta_terms,
+      estimate = beta_est,
+      std_error = beta_se,
+      z_value = beta_z,
+      p_value = beta_p,
+      wald_lcl = beta_ci[, "lcl"],
+      wald_ucl = beta_ci[, "ucl"],
+      exp_estimate = exp(beta_est),
+      exp_wald_lcl = exp(beta_ci[, "lcl"]),
+      exp_wald_ucl = exp(beta_ci[, "ucl"]),
+      se_method = if (meta$lane == "AFT_param") "inverse_hessian" else "conditional_weighted_coxph",
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (meta$lane == "AFT_param" && isTRUE(fit_obj$has_scale)) {
+    sc_ci <- wald_ci(fit_obj$log_scale, fit_obj$log_scale_se)
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      component = "ancillary",
+      coefficient_scale = "log_scale_parameter",
+      exp_scale_label = "scale_parameter",
+      term = "log_scale",
+      estimate = fit_obj$log_scale,
+      std_error = fit_obj$log_scale_se,
+      z_value = fit_obj$log_scale / fit_obj$log_scale_se,
+      p_value = norm_p_value(fit_obj$log_scale / fit_obj$log_scale_se),
+      wald_lcl = sc_ci[, "lcl"],
+      wald_ucl = sc_ci[, "ucl"],
+      exp_estimate = fit_obj$scale_natural,
+      exp_wald_lcl = exp(sc_ci[, "lcl"]),
+      exp_wald_ucl = exp(sc_ci[, "ucl"]),
+      se_method = "inverse_hessian",
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  do.call(rbind, rows)
 }
 
-if (nrow(preproc_spec) > 0L) {
-  preproc_spec <- preproc_spec[order(preproc_spec$dataset), , drop = FALSE]
+assemble_vcov_long_df <- function(fit_obj, meta) {
+  rows <- list()
+  
+  if (meta$lane == "AFT_param" && !is.null(fit_obj$vcov) && all(dim(fit_obj$vcov) > 0L)) {
+    param_labels <- c(
+      paste0("incidence::", names(fit_obj$gamma)),
+      paste0("latency::", names(fit_obj$beta)),
+      if (isTRUE(fit_obj$has_scale)) "ancillary::log_scale" else character(0)
+    )
+    
+    vc <- fit_obj$vcov
+    if (length(param_labels) == nrow(vc)) {
+      for (r in seq_along(param_labels)) {
+        for (c in seq_len(r)) {
+          rows[[length(rows) + 1L]] <- data.frame(
+            dataset_branch = meta$dataset_branch,
+            data_cut = "full",
+            subgroup = "overall",
+            model_class = "cure_MLE",
+            lane = meta$lane,
+            family = meta$family_label,
+            family_code = meta$family_code,
+            spec_id = meta$spec_id,
+            model_id = meta$model_id,
+            param_row = param_labels[r],
+            param_col = param_labels[c],
+            covariance = vc[r, c],
+            vcov_method = fit_obj$vcov_method,
+            cross_block_available = TRUE,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+    }
+  }
+  
+  if (meta$lane == "PH_semiparam") {
+    if (!is.null(fit_obj$gamma_vcov) && all(dim(fit_obj$gamma_vcov) > 0L)) {
+      g_labels <- paste0("incidence::", names(fit_obj$gamma))
+      for (r in seq_along(g_labels)) {
+        for (c in seq_len(r)) {
+          rows[[length(rows) + 1L]] <- data.frame(
+            dataset_branch = meta$dataset_branch,
+            data_cut = "full",
+            subgroup = "overall",
+            model_class = "cure_MLE",
+            lane = meta$lane,
+            family = meta$family_label,
+            family_code = meta$family_code,
+            spec_id = meta$spec_id,
+            model_id = meta$model_id,
+            param_row = g_labels[r],
+            param_col = g_labels[c],
+            covariance = fit_obj$gamma_vcov[r, c],
+            vcov_method = "conditional_block_diagonal_incidence",
+            cross_block_available = FALSE,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+    }
+    
+    if (!is.null(fit_obj$beta_vcov) && all(dim(fit_obj$beta_vcov) > 0L) && length(fit_obj$beta) > 0L) {
+      b_labels <- paste0("latency::", names(fit_obj$beta))
+      for (r in seq_along(b_labels)) {
+        for (c in seq_len(r)) {
+          rows[[length(rows) + 1L]] <- data.frame(
+            dataset_branch = meta$dataset_branch,
+            data_cut = "full",
+            subgroup = "overall",
+            model_class = "cure_MLE",
+            lane = meta$lane,
+            family = meta$family_label,
+            family_code = meta$family_code,
+            spec_id = meta$spec_id,
+            model_id = meta$model_id,
+            param_row = b_labels[r],
+            param_col = b_labels[c],
+            covariance = fit_obj$beta_vcov[r, c],
+            vcov_method = "conditional_block_diagonal_latency",
+            cross_block_available = FALSE,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+    }
+  }
+  
+  do.call(rbind, rows)
 }
 
-if (nrow(fit_registry) > 0L) {
-  fit_registry <- fit_registry[order(fit_registry$dataset, fit_registry$lane, fit_registry$family, fit_registry$cov_spec), , drop = FALSE]
-}
-
-if (nrow(coefficient_table) > 0L) {
-  coefficient_table <- coefficient_table[order(coefficient_table$dataset, coefficient_table$fit_id, coefficient_table$component, coefficient_table$term), , drop = FALSE]
-}
-
-if (nrow(cure_only) > 0L) {
-  cure_only <- cure_only[order(cure_only$dataset, cure_only$fit_id), , drop = FALSE]
-}
-
-if (nrow(mean_predictions) > 0L) {
-  mean_predictions <- mean_predictions[order(mean_predictions$dataset, mean_predictions$fit_id, mean_predictions$year), , drop = FALSE]
-}
-
-if (nrow(latency_summary) > 0L) {
-  latency_summary <- latency_summary[order(latency_summary$dataset, latency_summary$fit_id, latency_summary$year), , drop = FALSE]
-}
-
-if (nrow(subject_predictions) > 0L) {
-  subject_predictions <- subject_predictions[order(subject_predictions$dataset, subject_predictions$fit_id, subject_predictions$subject_uid, subject_predictions$year), , drop = FALSE]
-}
-
-## 🟠 Write: source-of-truth files ===============================
-
-utils::write.csv(model_grid, MODEL_GRID_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(preproc_spec, PREPROC_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(analysis_spec, ANALYSIS_SPEC_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(fit_registry, FIT_REGISTRY_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(coefficient_table, COEFFICIENTS_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(cure_only, CURE_ONLY_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(mean_predictions, MEAN_PRED_CSV_PATH, row.names = FALSE, na = "")
-utils::write.csv(latency_summary, LATENCY_SUMMARY_CSV_PATH, row.names = FALSE, na = "")
-
-if (EXPORT_SUBJECT_PREDICTIONS) {
-  utils::write.csv(subject_predictions, SUBJECT_PRED_CSV_PATH, row.names = FALSE, na = "")
-}
-
-manifest_rows <- list(
+assemble_cox_baseline_df <- function(fit_obj, meta) {
+  bh <- fit_obj$basehaz_df
+  if (is.null(bh) || nrow(bh) == 0L) return(NULL)
+  
   data.frame(
-    file_name = basename(MASTER_RDS_PATH),
-    purpose = "Master RDS with fit objects, prepared data, exported tables, and QC summary",
-    rows = NA_integer_,
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(MODEL_GRID_CSV_PATH),
-    purpose = "Step5 cure-MLE model grid",
-    rows = nrow(model_grid),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(PREPROC_CSV_PATH),
-    purpose = "Dataset-specific preprocessing and scaling summary",
-    rows = nrow(preproc_spec),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(ANALYSIS_SPEC_CSV_PATH),
-    purpose = "Global analysis specification and package versions",
-    rows = nrow(analysis_spec),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(FIT_REGISTRY_CSV_PATH),
-    purpose = "Fit registry with fit_success, prediction_success, and QC fields",
-    rows = nrow(fit_registry),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(COEFFICIENTS_CSV_PATH),
-    purpose = "Incidence and latency coefficient table",
-    rows = nrow(coefficient_table),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(CURE_ONLY_CSV_PATH),
-    purpose = "Cure-only summary by fitted model",
-    rows = nrow(cure_only),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(MEAN_PRED_CSV_PATH),
-    purpose = "Cohort-average population survival and risk by year",
-    rows = nrow(mean_predictions),
-    stringsAsFactors = FALSE
-  ),
-  data.frame(
-    file_name = basename(LATENCY_SUMMARY_CSV_PATH),
-    purpose = "Latency survival summary by year",
-    rows = nrow(latency_summary),
+    dataset_branch = meta$dataset_branch,
+    data_cut = "full",
+    subgroup = "overall",
+    model_class = "cure_MLE",
+    lane = meta$lane,
+    family = meta$family_label,
+    family_code = meta$family_code,
+    spec_id = meta$spec_id,
+    model_id = meta$model_id,
+    time_years = bh$time,
+    baseline_cumhaz = bh$hazard,
+    baseline_surv = exp(-bh$hazard),
+    zero_tail_applied = isTRUE(fit_obj$baseline_zero_tail),
     stringsAsFactors = FALSE
   )
+}
+
+assemble_fit_diagnostics_df <- function(fit_obj, meta) {
+  rows <- list()
+  
+  rows[[length(rows) + 1L]] <- data.frame(
+    dataset_branch = meta$dataset_branch,
+    data_cut = "full",
+    subgroup = "overall",
+    model_class = "cure_MLE",
+    lane = meta$lane,
+    family = meta$family_label,
+    family_code = meta$family_code,
+    spec_id = meta$spec_id,
+    model_id = meta$model_id,
+    diagnostic_group = "summary",
+    iteration = NA_integer_,
+    metric_name = "fit_time_sec",
+    metric_value = fit_obj$fit_time_sec %||% NA_real_,
+    metric_text = NA_character_,
+    stringsAsFactors = FALSE
+  )
+  
+  if (meta$lane == "AFT_param") {
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      diagnostic_group = "summary",
+      iteration = NA_integer_,
+      metric_name = "n_start_attempts",
+      metric_value = fit_obj$n_start_attempts %||% NA_real_,
+      metric_text = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      diagnostic_group = "summary",
+      iteration = NA_integer_,
+      metric_name = "n_successful_starts",
+      metric_value = fit_obj$n_successful_starts %||% NA_real_,
+      metric_text = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      diagnostic_group = "summary",
+      iteration = NA_integer_,
+      metric_name = "best_objective_value",
+      metric_value = fit_obj$best_objective_value %||% NA_real_,
+      metric_text = NA_character_,
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (meta$lane == "PH_semiparam") {
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      diagnostic_group = "summary",
+      iteration = NA_integer_,
+      metric_name = "em_iterations",
+      metric_value = fit_obj$em_iterations %||% NA_real_,
+      metric_text = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    rows[[length(rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      diagnostic_group = "summary",
+      iteration = NA_integer_,
+      metric_name = "em_max_relative_change",
+      metric_value = fit_obj$em_max_relative_change %||% NA_real_,
+      metric_text = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    
+    if (!is.null(fit_obj$em_trace) && length(fit_obj$em_trace) > 0L) {
+      for (k in seq_along(fit_obj$em_trace)) {
+        rows[[length(rows) + 1L]] <- data.frame(
+          dataset_branch = meta$dataset_branch,
+          data_cut = "full",
+          subgroup = "overall",
+          model_class = "cure_MLE",
+          lane = meta$lane,
+          family = meta$family_label,
+          family_code = meta$family_code,
+          spec_id = meta$spec_id,
+          model_id = meta$model_id,
+          diagnostic_group = "em_trace",
+          iteration = k,
+          metric_name = "max_relative_change",
+          metric_value = fit_obj$em_trace[k],
+          metric_text = NA_character_,
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+    
+    if (!is.null(fit_obj$pseudo_logLik_trace) && length(fit_obj$pseudo_logLik_trace) > 0L) {
+      for (k in seq_along(fit_obj$pseudo_logLik_trace)) {
+        rows[[length(rows) + 1L]] <- data.frame(
+          dataset_branch = meta$dataset_branch,
+          data_cut = "full",
+          subgroup = "overall",
+          model_class = "cure_MLE",
+          lane = meta$lane,
+          family = meta$family_label,
+          family_code = meta$family_code,
+          spec_id = meta$spec_id,
+          model_id = meta$model_id,
+          diagnostic_group = "em_trace",
+          iteration = k,
+          metric_name = "pseudo_logLik",
+          metric_value = fit_obj$pseudo_logLik_trace[k],
+          metric_text = NA_character_,
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+  }
+  
+  do.call(rbind, rows)
+}
+
+# 🔴 Import: raw merged dataset and validate schema ===============================
+
+## 🟠 Read: CSV input and choose age variable ===============================
+raw0 <- utils::read.csv(
+  file = data_path,
+  stringsAsFactors = FALSE,
+  fileEncoding = "UTF-8"
 )
 
-if (EXPORT_SUBJECT_PREDICTIONS) {
-  manifest_rows[[length(manifest_rows) + 1L]] <- data.frame(
-    file_name = basename(SUBJECT_PRED_CSV_PATH),
-    purpose = "Subject-level yearly predictions",
-    rows = nrow(subject_predictions),
+required_cols <- c(id_var, site_var, sex_var, time_var, status_var)
+missing_cols <- setdiff(required_cols, names(raw0))
+if (length(missing_cols) > 0L) {
+  stop("필수 컬럼이 없습니다: ", paste(missing_cols, collapse = ", "))
+}
+
+age_var <- if (age_var_preferred %in% names(raw0)) {
+  age_var_preferred
+} else if ("age_int" %in% names(raw0)) {
+  "age_int"
+} else {
+  stop("age_exact_entry 또는 age_int 컬럼이 필요합니다.")
+}
+
+## 🟠 Normalize: core variables and endpoint coding ===============================
+raw0[[id_var]] <- as.character(raw0[[id_var]])
+raw0[[site_var]] <- toupper(trimws(as.character(raw0[[site_var]])))
+raw0[[sex_var]] <- suppressWarnings(as.numeric(as.character(raw0[[sex_var]])))
+raw0[[time_var]] <- suppressWarnings(as.numeric(as.character(raw0[[time_var]])))
+raw0[[status_var]] <- suppressWarnings(as.integer(as.character(raw0[[status_var]])))
+raw0[[age_var]] <- suppressWarnings(as.numeric(as.character(raw0[[age_var]])))
+
+site_levels_observed <- sort(unique(raw0[[site_var]]))
+if (length(site_levels_observed) != 2L) {
+  stop("현재 Step5 코드는 site가 정확히 2수준인 병합 데이터만 가정합니다. 관측된 수준: ", paste(site_levels_observed, collapse = ", "))
+}
+
+pnu_site_effective <- if (toupper(pnu_site_label) %in% site_levels_observed) {
+  toupper(pnu_site_label)
+} else {
+  toupper(site_reference_label)
+}
+
+site_reference_effective <- if (toupper(site_reference_label) %in% site_levels_observed) {
+  toupper(site_reference_label)
+} else {
+  pnu_site_effective
+}
+
+snu_site_effective <- if (toupper(snu_site_label) %in% site_levels_observed) {
+  toupper(snu_site_label)
+} else {
+  setdiff(site_levels_observed, pnu_site_effective)[1]
+}
+
+raw0$unique_id <- paste(raw0[[site_var]], raw0[[id_var]], sep = "::")
+raw0$event_transition <- as.integer(raw0[[status_var]] == 1L)
+raw0$time_days_original <- raw0[[time_var]]
+raw0$time_days_adjusted <- pmax(raw0[[time_var]], time_zero_epsilon_days)
+raw0$time_years <- raw0$time_days_adjusted / days_per_year
+raw0$age_raw <- raw0[[age_var]]
+raw0$site_num <- ifelse(raw0[[site_var]] == site_reference_effective, 0, 1)
+
+if (!all(stats::na.omit(unique(raw0[[sex_var]])) %in% c(0, 1))) {
+  stop("sex_num은 0/1 코딩이어야 합니다.")
+}
+
+## 🟠 Filter: complete-case analytic rows ===============================
+core_complete_vars <- c("unique_id", "time_years", "event_transition", "age_raw", sex_var, site_var, "site_num", status_var, "time_days_original")
+raw_complete <- raw0[stats::complete.cases(raw0[, core_complete_vars]), , drop = FALSE]
+
+if (nrow(raw_complete) == 0L) {
+  stop("complete-case 적용 후 남은 관측치가 없습니다.")
+}
+
+# 🔴 Prepare: branch-specific analytic datasets ===============================
+
+## 🟠 Split: PNU SNU merged branches ===============================
+branch_data_list <- list(
+  PNU = raw_complete[raw_complete[[site_var]] == pnu_site_effective, , drop = FALSE],
+  SNU = raw_complete[raw_complete[[site_var]] == snu_site_effective, , drop = FALSE],
+  merged = raw_complete
+)
+
+if (nrow(branch_data_list$PNU) == 0L) stop("PNU 브랜치에 데이터가 없습니다. pnu_site_label 또는 site_reference_label을 확인해 주세요.")
+if (nrow(branch_data_list$SNU) == 0L) stop("SNU 브랜치에 데이터가 없습니다. snu_site_label을 확인해 주세요.")
+
+## 🟠 Scale: branch-specific age_s and QC summaries ===============================
+preproc_spec_rows <- list()
+qc_rows <- list()
+ipcw_helper_list <- list()
+
+for (branch_name in names(branch_data_list)) {
+  branch_dat <- branch_data_list[[branch_name]]
+  
+  age_center <- mean(branch_dat$age_raw)
+  age_scale_2sd <- 2 * stats::sd(branch_dat$age_raw)
+  if (!is.finite(age_scale_2sd) || age_scale_2sd <= 0) {
+    stop("branch ", branch_name, " 에서 age 2SD 스케일을 계산할 수 없습니다.")
+  }
+  
+  branch_dat$age_s <- (branch_dat$age_raw - age_center) / age_scale_2sd
+  branch_dat$sex_num <- branch_dat[[sex_var]]
+  branch_dat$site_std <- branch_dat[[site_var]]
+  
+  branch_data_list[[branch_name]] <- branch_dat
+  ipcw_helper_list[[branch_name]] <- build_ipcw_helper(
+    time = branch_dat$time_years,
+    event = branch_dat$event_transition
+  )
+  
+  preproc_spec_rows[[length(preproc_spec_rows) + 1L]] <- data.frame(
+    dataset_branch = branch_name,
+    age_var = age_var,
+    age_center = age_center,
+    age_scale_2sd = age_scale_2sd,
+    sex_var = sex_var,
+    sex_coding = "0=Female,1=Male",
+    site_reference_label = site_reference_effective,
+    pnu_site_effective = pnu_site_effective,
+    snu_site_effective = snu_site_effective,
+    site_levels_observed = paste(site_levels_observed, collapse = " | "),
+    time_scale = "years_from_entry",
+    time_zero_epsilon_days = time_zero_epsilon_days,
+    stringsAsFactors = FALSE
+  )
+  
+  qc_rows[[length(qc_rows) + 1L]] <- data.frame(
+    dataset_branch = branch_name,
+    n_subjects = nrow(branch_dat),
+    n_events_transition = sum(branch_dat$event_transition == 1L),
+    n_censored_total = sum(branch_dat$event_transition == 0L),
+    n_right_censor_status0 = sum(branch_dat[[status_var]] == 0L),
+    n_remission_censor_status2 = sum(branch_dat[[status_var]] == 2L),
+    n_zero_or_negative_time_adjusted = sum(branch_dat$time_days_original <= 0),
+    min_followup_years = min(branch_dat$time_years),
+    max_followup_years = max(branch_dat$time_years),
+    max_event_years = if (any(branch_dat$event_transition == 1L)) max(branch_dat$time_years[branch_dat$event_transition == 1L]) else NA_real_,
     stringsAsFactors = FALSE
   )
 }
 
-manifest <- combine_rows(manifest_rows)
-utils::write.csv(manifest, MANIFEST_CSV_PATH, row.names = FALSE, na = "")
+preproc_spec_df <- do.call(rbind, preproc_spec_rows)
+qc_summary_df <- do.call(rbind, qc_rows)
+
+# 🔴 Design: Step5 cure grid and cached matrices ===============================
+
+## 🟠 Enumerate: cure specification table ===============================
+build_spec_table <- function(dataset_branch) {
+  grid0 <- expand.grid(
+    incidence_int_flag = c(0L, 1L),
+    latency_int_flag = c(0L, 1L),
+    stringsAsFactors = FALSE
+  )
+  
+  if (dataset_branch == "merged") {
+    out <- list()
+    for (sf in c(0L, 1L)) {
+      tmp <- grid0
+      tmp$site_flag <- sf
+      out[[length(out) + 1L]] <- tmp
+    }
+    grid0 <- do.call(rbind, out)
+    grid0$spec_id <- paste0("C", grid0$incidence_int_flag, grid0$latency_int_flag, "S", grid0$site_flag)
+  } else {
+    grid0$site_flag <- 0L
+    grid0$spec_id <- paste0("C", grid0$incidence_int_flag, grid0$latency_int_flag)
+  }
+  
+  rows <- vector("list", nrow(grid0))
+  for (i in seq_len(nrow(grid0))) {
+    inc_terms <- c("age_s", "sex_num")
+    lat_terms <- c("age_s", "sex_num")
+    
+    if (grid0$incidence_int_flag[i] == 1L) inc_terms <- c(inc_terms, "age_s:sex_num")
+    if (grid0$latency_int_flag[i] == 1L) lat_terms <- c(lat_terms, "age_s:sex_num")
+    if (grid0$site_flag[i] == 1L) {
+      inc_terms <- c(inc_terms, "site_num")
+      lat_terms <- c(lat_terms, "site_num")
+    }
+    
+    rows[[i]] <- data.frame(
+      dataset_branch = dataset_branch,
+      spec_id = grid0$spec_id[i],
+      incidence_int_flag = grid0$incidence_int_flag[i],
+      latency_int_flag = grid0$latency_int_flag[i],
+      site_flag = grid0$site_flag[i],
+      incidence_terms_raw = collapse_terms(inc_terms),
+      latency_terms_raw = collapse_terms(lat_terms),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  do.call(rbind, rows)
+}
+
+spec_table_list <- lapply(names(branch_data_list), build_spec_table)
+spec_table_df <- do.call(rbind, spec_table_list)
+
+## 🟠 Define: family lanes and model classes ===============================
+family_table <- data.frame(
+  lane = c("AFT_param", "AFT_param", "AFT_param", "AFT_param", "PH_semiparam"),
+  family_code = c("exp", "weibull", "llogis", "lnorm", "coxph"),
+  family_label = c("Exponential", "Weibull", "Log-logistic", "Log-normal", "Cox-latency"),
+  stringsAsFactors = FALSE
+)
+
+## 🟠 Cache: design matrices by branch and cure spec ===============================
+design_cache <- list()
+
+for (branch_name in names(branch_data_list)) {
+  dat_branch <- branch_data_list[[branch_name]]
+  specs_branch <- spec_table_df[spec_table_df$dataset_branch == branch_name, , drop = FALSE]
+  
+  for (i in seq_len(nrow(specs_branch))) {
+    spec_row <- specs_branch[i, , drop = FALSE]
+    cache_key <- paste(branch_name, spec_row$spec_id, sep = "__")
+    
+    inc_terms <- strsplit(spec_row$incidence_terms_raw, " \\+ ")[[1]]
+    lat_terms <- strsplit(spec_row$latency_terms_raw, " \\+ ")[[1]]
+    
+    inc_bundle <- make_model_matrix_with_pruning(
+      data = dat_branch,
+      terms = inc_terms,
+      include_intercept = TRUE,
+      prefix = "inc"
+    )
+    
+    lat_param_bundle <- make_model_matrix_with_pruning(
+      data = dat_branch,
+      terms = lat_terms,
+      include_intercept = TRUE,
+      prefix = "latp"
+    )
+    
+    lat_ph_bundle <- make_model_matrix_with_pruning(
+      data = dat_branch,
+      terms = lat_terms,
+      include_intercept = FALSE,
+      prefix = "latph"
+    )
+    
+    design_cache[[cache_key]] <- list(
+      incidence_bundle = inc_bundle,
+      latency_param_bundle = lat_param_bundle,
+      latency_ph_bundle = lat_ph_bundle
+    )
+  }
+}
+
+## 🟠 Assemble: final Step5 model grid ===============================
+model_grid_rows <- list()
+
+for (i in seq_len(nrow(spec_table_df))) {
+  spec_row <- spec_table_df[i, , drop = FALSE]
+  for (j in seq_len(nrow(family_table))) {
+    fam_row <- family_table[j, , drop = FALSE]
+    
+    model_id <- paste(
+      "step5",
+      spec_row$dataset_branch,
+      fam_row$lane,
+      fam_row$family_code,
+      spec_row$spec_id,
+      sep = "__"
+    )
+    
+    model_grid_rows[[length(model_grid_rows) + 1L]] <- data.frame(
+      dataset_branch = spec_row$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = fam_row$lane,
+      family_code = fam_row$family_code,
+      family_label = fam_row$family_label,
+      spec_id = spec_row$spec_id,
+      incidence_int_flag = spec_row$incidence_int_flag,
+      latency_int_flag = spec_row$latency_int_flag,
+      site_flag = spec_row$site_flag,
+      incidence_terms_raw = spec_row$incidence_terms_raw,
+      latency_terms_raw = spec_row$latency_terms_raw,
+      cache_key = paste(spec_row$dataset_branch, spec_row$spec_id, sep = "__"),
+      model_id = model_id,
+      rds_file = paste0(sanitize_filename(model_id), ".rds"),
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+model_grid_df <- do.call(rbind, model_grid_rows)
+
+# 🔴 Fit: Step5 MLE cure grid over all branches and families ===============================
+
+## 🟠 Initialize: result containers and templates ===============================
+fit_registry_rows <- list()
+coef_rows <- list()
+pred_subject_rows <- list()
+pred_mean_rows <- list()
+cure_summary_rows <- list()
+perf_rows <- list()
+warning_rows <- list()
+vcov_rows <- list()
+cox_baseline_rows <- list()
+diag_rows <- list()
+manifest_rows <- list()
+
+template_fit_grid <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), incidence_int_flag = integer(),
+  latency_int_flag = integer(), site_flag = integer(), incidence_terms_raw = character(),
+  latency_terms_raw = character(), incidence_terms_effective = character(),
+  latency_terms_effective = character(), dropped_incidence_terms = character(),
+  dropped_latency_terms = character(), incidence_target = character(), n_subjects = integer(),
+  n_events = integer(), n_censored = integer(), logLik = numeric(), partial_logLik = numeric(),
+  pseudo_logLik = numeric(), AIC = numeric(), BIC = numeric(), n_parameters = integer(),
+  IBS_apparent = numeric(), mean_auc_valid = numeric(), mean_brier_valid = numeric(),
+  n_auc_valid = integer(), n_brier_valid = integer(), convergence_flag = logical(),
+  convergence_code = integer(), convergence_message = character(), boundary_flag = logical(),
+  singular_hessian_flag = logical(), hessian_condition_number = numeric(),
+  vcov_method = character(), max_event_time_years = numeric(), max_followup_time_years = numeric(),
+  mean_pi_uncured = numeric(), mean_cure_fraction = numeric(), em_iterations = integer(),
+  em_max_relative_change = numeric(), n_start_attempts = integer(),
+  n_successful_starts = integer(), fit_ok = logical(), fit_status = character(),
+  fit_time_sec = numeric(), warning_count = integer(), rds_file = character(),
+  loaded_existing_rds = logical(), stringsAsFactors = FALSE
+)
+
+template_param_est <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), component = character(),
+  coefficient_scale = character(), exp_scale_label = character(), term = character(),
+  estimate = numeric(), std_error = numeric(), z_value = numeric(), p_value = numeric(),
+  wald_lcl = numeric(), wald_ucl = numeric(), exp_estimate = numeric(),
+  exp_wald_lcl = numeric(), exp_wald_ucl = numeric(), se_method = character(),
+  stringsAsFactors = FALSE
+)
+
+template_subject_pred <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), id_original = character(),
+  unique_id = character(), site_std = character(), site_num = numeric(),
+  sex_num = numeric(), age_raw = numeric(), age_s = numeric(),
+  time_days_original = numeric(), time_years = numeric(), status_num_observed = integer(),
+  event_transition = integer(), year = numeric(), surv = numeric(), risk = numeric(),
+  surv_uncured = numeric(), pi_uncured = numeric(), cure_fraction = numeric(),
+  beyond_last_event = logical(), beyond_max_followup = logical(), is_extrapolated = logical(),
+  stringsAsFactors = FALSE
+)
+
+template_mean_pred <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), year = numeric(), mean_surv = numeric(),
+  sd_surv = numeric(), surv_q25 = numeric(), surv_median = numeric(), surv_q75 = numeric(),
+  mean_risk = numeric(), sd_risk = numeric(), risk_q25 = numeric(),
+  risk_median = numeric(), risk_q75 = numeric(), mean_surv_uncured = numeric(),
+  mean_pi_uncured = numeric(), mean_cure_fraction = numeric(),
+  median_cure_fraction = numeric(), n_subjects = integer(),
+  beyond_last_event = logical(), beyond_max_followup = logical(),
+  stringsAsFactors = FALSE
+)
+
+template_cure_summary <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), incidence_target = character(),
+  mean_pi_uncured = numeric(), mean_cure_fraction = numeric(), median_cure_fraction = numeric(),
+  cure_fraction_q25 = numeric(), cure_fraction_q75 = numeric(),
+  min_cure_fraction = numeric(), max_cure_fraction = numeric(),
+  boundary_flag = logical(), convergence_flag = logical(),
+  IBS_apparent = numeric(), mean_auc_valid = numeric(), mean_brier_valid = numeric(),
+  stringsAsFactors = FALSE
+)
+
+template_perf <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), metric_scope = character(),
+  year = numeric(), auc_cd = numeric(), brier_ipcw = numeric(),
+  G_t_censoring_survival = numeric(), n_cases = integer(), n_controls = integer(),
+  auc_valid = logical(), brier_valid = logical(),
+  beyond_max_followup = logical(), beyond_last_event = logical(),
+  IBS_apparent = numeric(), stringsAsFactors = FALSE
+)
+
+template_warning <- data.frame(
+  dataset_branch = character(), lane = character(), family = character(),
+  spec_id = character(), model_id = character(), warning_type = character(),
+  warning_message = character(), stringsAsFactors = FALSE
+)
+
+template_vcov <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), param_row = character(),
+  param_col = character(), covariance = numeric(), vcov_method = character(),
+  cross_block_available = logical(), stringsAsFactors = FALSE
+)
+
+template_baseline <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), time_years = numeric(),
+  baseline_cumhaz = numeric(), baseline_surv = numeric(), zero_tail_applied = logical(),
+  stringsAsFactors = FALSE
+)
+
+template_diag <- data.frame(
+  dataset_branch = character(), data_cut = character(), subgroup = character(),
+  model_class = character(), lane = character(), family = character(), family_code = character(),
+  spec_id = character(), model_id = character(), diagnostic_group = character(),
+  iteration = integer(), metric_name = character(), metric_value = numeric(),
+  metric_text = character(), stringsAsFactors = FALSE
+)
+
+## 🟠 Iterate: fit or load every Step5 model ===============================
+for (i in seq_len(nrow(model_grid_df))) {
+  meta <- model_grid_df[i, , drop = FALSE]
+  meta_list <- as.list(meta)
+  
+  message(sprintf("[%s] (%d/%d) %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), i, nrow(model_grid_df), meta$model_id))
+  
+  dat_branch <- branch_data_list[[meta$dataset_branch]]
+  design_obj <- design_cache[[meta$cache_key]]
+  ipcw_helper <- ipcw_helper_list[[meta$dataset_branch]]
+  
+  incidence_bundle <- design_obj$incidence_bundle
+  latency_bundle <- if (meta$lane == "AFT_param") design_obj$latency_param_bundle else design_obj$latency_ph_bundle
+  
+  rds_path <- file.path(export_path, meta$rds_file)
+  fit_obj <- NULL
+  loaded_existing <- FALSE
+  refit_reason <- NA_character_
+  
+  if (isTRUE(reuse_existing_model_rds) && !isTRUE(overwrite_model_rds) && file.exists(rds_path)) {
+    load_try <- try(readRDS(rds_path), silent = TRUE)
+    if (!inherits(load_try, "try-error")) {
+      temp_fit <- load_try
+      version_ok <- identical(temp_fit$script_version %||% "", script_version)
+      if (!isTRUE(force_refit_if_script_version_mismatch) || version_ok) {
+        fit_obj <- temp_fit
+        loaded_existing <- TRUE
+      } else {
+        refit_reason <- "script_version_mismatch"
+      }
+    } else {
+      refit_reason <- "rds_read_error"
+    }
+  }
+  
+  if (is.null(fit_obj)) {
+    if (meta$lane == "AFT_param") {
+      fit_obj <- fit_parametric_mixture_cure(
+        data = dat_branch,
+        incidence_bundle = incidence_bundle,
+        latency_bundle = latency_bundle,
+        family = meta$family_code
+      )
+    } else {
+      fit_obj <- fit_ph_cure_em(
+        data = dat_branch,
+        incidence_bundle = incidence_bundle,
+        latency_bundle = latency_bundle
+      )
+    }
+    
+    fit_obj$script_version <- script_version
+    fit_obj$meta <- meta_list
+    fit_obj$training_data_minimal <- dat_branch[, c(
+      "unique_id", id_var, "site_std", "site_num", "sex_num", "age_raw", "age_s",
+      "time_days_original", "time_years", status_var, "event_transition"
+    ), drop = FALSE]
+    fit_obj$loaded_existing_rds <- FALSE
+    fit_obj$refit_reason <- refit_reason
+    
+    saveRDS(fit_obj, rds_path)
+  } else {
+    fit_obj$loaded_existing_rds <- TRUE
+    fit_obj$refit_reason <- NA_character_
+  }
+  
+  manifest_rows <- record_manifest_row(
+    manifest_list = manifest_rows,
+    file_name = basename(rds_path),
+    file_type = "model_rds",
+    n_rows = NA_integer_,
+    note = if (loaded_existing) "existing model fit reused" else paste("new model fit saved", refit_reason %||% ""),
+    model_id = meta$model_id
+  )
+  
+  if (!isTRUE(fit_obj$fit_ok)) {
+    fit_registry_rows[[length(fit_registry_rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      data_cut = "full",
+      subgroup = "overall",
+      model_class = "cure_MLE",
+      lane = meta$lane,
+      family = meta$family_label,
+      family_code = meta$family_code,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      incidence_int_flag = meta$incidence_int_flag,
+      latency_int_flag = meta$latency_int_flag,
+      site_flag = meta$site_flag,
+      incidence_terms_raw = meta$incidence_terms_raw,
+      latency_terms_raw = meta$latency_terms_raw,
+      incidence_terms_effective = collapse_terms(incidence_bundle$map$term_label),
+      latency_terms_effective = collapse_terms(latency_bundle$map$term_label),
+      dropped_incidence_terms = collapse_terms(incidence_bundle$dropped_terms),
+      dropped_latency_terms = collapse_terms(latency_bundle$dropped_terms),
+      incidence_target = NA_character_,
+      n_subjects = nrow(dat_branch),
+      n_events = sum(dat_branch$event_transition == 1L),
+      n_censored = sum(dat_branch$event_transition == 0L),
+      logLik = NA_real_,
+      partial_logLik = NA_real_,
+      pseudo_logLik = NA_real_,
+      AIC = NA_real_,
+      BIC = NA_real_,
+      n_parameters = NA_integer_,
+      IBS_apparent = NA_real_,
+      mean_auc_valid = NA_real_,
+      mean_brier_valid = NA_real_,
+      n_auc_valid = NA_integer_,
+      n_brier_valid = NA_integer_,
+      convergence_flag = FALSE,
+      convergence_code = NA_integer_,
+      convergence_message = paste(fit_obj$warnings %||% "fit failed", collapse = " | "),
+      boundary_flag = NA,
+      singular_hessian_flag = NA,
+      hessian_condition_number = NA_real_,
+      vcov_method = NA_character_,
+      max_event_time_years = if (any(dat_branch$event_transition == 1L)) max(dat_branch$time_years[dat_branch$event_transition == 1L]) else NA_real_,
+      max_followup_time_years = max(dat_branch$time_years),
+      mean_pi_uncured = NA_real_,
+      mean_cure_fraction = NA_real_,
+      em_iterations = fit_obj$em_iterations %||% NA_integer_,
+      em_max_relative_change = fit_obj$em_max_relative_change %||% NA_real_,
+      n_start_attempts = fit_obj$n_start_attempts %||% NA_integer_,
+      n_successful_starts = fit_obj$n_successful_starts %||% NA_integer_,
+      fit_ok = FALSE,
+      fit_status = fit_obj$fit_status %||% "error",
+      fit_time_sec = fit_obj$fit_time_sec %||% NA_real_,
+      warning_count = length(fit_obj$warnings %||% character()),
+      rds_file = basename(rds_path),
+      loaded_existing_rds = loaded_existing,
+      stringsAsFactors = FALSE
+    )
+    
+    warning_rows[[length(warning_rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      lane = meta$lane,
+      family = meta$family_label,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      warning_type = "fit_error",
+      warning_message = paste(fit_obj$warnings %||% "unknown error", collapse = " | "),
+      stringsAsFactors = FALSE
+    )
+    
+    next
+  }
+  
+  pred_obj <- if (meta$lane == "AFT_param") {
+    predict_parametric_cure_fit(
+      fit_obj = fit_obj,
+      Znew = incidence_bundle$matrix,
+      Xnew = latency_bundle$matrix,
+      years = prediction_years
+    )
+  } else {
+    predict_ph_cure_fit(
+      fit_obj = fit_obj,
+      Znew = incidence_bundle$matrix,
+      Xnew = latency_bundle$matrix,
+      years = prediction_years
+    )
+  }
+  
+  pred_subject_df <- assemble_subject_prediction_df(
+    data = dat_branch,
+    pred_obj = pred_obj,
+    meta = meta_list,
+    last_event_time = fit_obj$max_event_time_years %||% NA_real_,
+    max_followup_time = fit_obj$max_followup_time_years %||% NA_real_
+  )
+  
+  pred_mean_df <- assemble_mean_prediction_df(pred_subject_df)
+  perf_df <- compute_time_dependent_metrics(
+    data = dat_branch,
+    pred_obj = pred_obj,
+    ipcw_helper = ipcw_helper,
+    years = prediction_years,
+    meta = meta_list
+  )
+  
+  if (length(fit_obj$warnings) > 0L) {
+    warning_rows[[length(warning_rows) + 1L]] <- data.frame(
+      dataset_branch = meta$dataset_branch,
+      lane = meta$lane,
+      family = meta$family_label,
+      spec_id = meta$spec_id,
+      model_id = meta$model_id,
+      warning_type = "warning",
+      warning_message = paste(unique(fit_obj$warnings), collapse = " | "),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (isTRUE(write_param_estimates)) {
+    coef_rows[[length(coef_rows) + 1L]] <- assemble_param_coef_df(
+      fit_obj = fit_obj,
+      meta = meta_list
+    )
+  }
+  
+  if (isTRUE(write_subject_level_predictions)) {
+    pred_subject_rows[[length(pred_subject_rows) + 1L]] <- pred_subject_df
+  }
+  
+  if (isTRUE(write_mean_level_predictions)) {
+    pred_mean_rows[[length(pred_mean_rows) + 1L]] <- pred_mean_df
+  }
+  
+  if (isTRUE(write_cure_summary)) {
+    cure_summary_rows[[length(cure_summary_rows) + 1L]] <- assemble_cure_summary_row(
+      fit_obj = fit_obj,
+      mean_pred_df = pred_mean_df,
+      perf_df = perf_df,
+      meta = meta_list
+    )
+  }
+  
+  if (isTRUE(write_perf_metrics)) {
+    perf_rows[[length(perf_rows) + 1L]] <- perf_df
+  }
+  
+  if (isTRUE(write_vcov_long)) {
+    vc_df <- assemble_vcov_long_df(
+      fit_obj = fit_obj,
+      meta = meta_list
+    )
+    if (!is.null(vc_df) && nrow(vc_df) > 0L) {
+      vcov_rows[[length(vcov_rows) + 1L]] <- vc_df
+    }
+  }
+  
+  if (isTRUE(write_cox_baseline_curve) && meta$lane == "PH_semiparam") {
+    bh_df <- assemble_cox_baseline_df(
+      fit_obj = fit_obj,
+      meta = meta_list
+    )
+    if (!is.null(bh_df) && nrow(bh_df) > 0L) {
+      cox_baseline_rows[[length(cox_baseline_rows) + 1L]] <- bh_df
+    }
+  }
+  
+  if (isTRUE(write_fit_diagnostics)) {
+    diag_rows[[length(diag_rows) + 1L]] <- assemble_fit_diagnostics_df(
+      fit_obj = fit_obj,
+      meta = meta_list
+    )
+  }
+  
+  fit_registry_rows[[length(fit_registry_rows) + 1L]] <- data.frame(
+    dataset_branch = meta$dataset_branch,
+    data_cut = "full",
+    subgroup = "overall",
+    model_class = "cure_MLE",
+    lane = meta$lane,
+    family = meta$family_label,
+    family_code = meta$family_code,
+    spec_id = meta$spec_id,
+    model_id = meta$model_id,
+    incidence_int_flag = meta$incidence_int_flag,
+    latency_int_flag = meta$latency_int_flag,
+    site_flag = meta$site_flag,
+    incidence_terms_raw = meta$incidence_terms_raw,
+    latency_terms_raw = meta$latency_terms_raw,
+    incidence_terms_effective = collapse_terms(fit_obj$incidence_bundle$map$term_label),
+    latency_terms_effective = collapse_terms(fit_obj$latency_bundle$map$term_label),
+    dropped_incidence_terms = collapse_terms(fit_obj$incidence_bundle$dropped_terms),
+    dropped_latency_terms = collapse_terms(fit_obj$latency_bundle$dropped_terms),
+    incidence_target = fit_obj$incidence_target %||% NA_character_,
+    n_subjects = nrow(dat_branch),
+    n_events = sum(dat_branch$event_transition == 1L),
+    n_censored = sum(dat_branch$event_transition == 0L),
+    logLik = fit_obj$logLik %||% NA_real_,
+    partial_logLik = fit_obj$partial_logLik %||% NA_real_,
+    pseudo_logLik = fit_obj$pseudo_logLik %||% NA_real_,
+    AIC = fit_obj$AIC %||% NA_real_,
+    BIC = fit_obj$BIC %||% NA_real_,
+    n_parameters = fit_obj$n_parameters %||% NA_integer_,
+    IBS_apparent = if (all(is.na(perf_df$IBS_apparent))) NA_real_ else unique(stats::na.omit(perf_df$IBS_apparent))[1],
+    mean_auc_valid = if (any(is.finite(perf_df$auc_cd))) mean(perf_df$auc_cd, na.rm = TRUE) else NA_real_,
+    mean_brier_valid = if (any(is.finite(perf_df$brier_ipcw))) mean(perf_df$brier_ipcw, na.rm = TRUE) else NA_real_,
+    n_auc_valid = sum(is.finite(perf_df$auc_cd)),
+    n_brier_valid = sum(is.finite(perf_df$brier_ipcw)),
+    convergence_flag = fit_obj$convergence_flag %||% FALSE,
+    convergence_code = fit_obj$convergence_code %||% NA_integer_,
+    convergence_message = fit_obj$convergence_message %||% "",
+    boundary_flag = fit_obj$boundary_flag %||% NA,
+    singular_hessian_flag = fit_obj$singular_hessian_flag %||% NA,
+    hessian_condition_number = fit_obj$hessian_condition_number %||% NA_real_,
+    vcov_method = fit_obj$vcov_method %||% NA_character_,
+    max_event_time_years = fit_obj$max_event_time_years %||% NA_real_,
+    max_followup_time_years = fit_obj$max_followup_time_years %||% NA_real_,
+    mean_pi_uncured = mean(fit_obj$pi_uncured_train),
+    mean_cure_fraction = mean(fit_obj$cure_fraction_train),
+    em_iterations = fit_obj$em_iterations %||% NA_integer_,
+    em_max_relative_change = fit_obj$em_max_relative_change %||% NA_real_,
+    n_start_attempts = fit_obj$n_start_attempts %||% NA_integer_,
+    n_successful_starts = fit_obj$n_successful_starts %||% NA_integer_,
+    fit_ok = fit_obj$fit_ok %||% FALSE,
+    fit_status = fit_obj$fit_status %||% "unknown",
+    fit_time_sec = fit_obj$fit_time_sec %||% NA_real_,
+    warning_count = length(fit_obj$warnings %||% character()),
+    rds_file = basename(rds_path),
+    loaded_existing_rds = loaded_existing,
+    stringsAsFactors = FALSE
+  )
+}
+
+# 🔴 Combine: final Step5 tables from all fitted models ===============================
+
+## 🟠 Bind: all result containers into data frames ===============================
+fit_mc_grid_df <- bind_rows_or_template(fit_registry_rows, template_fit_grid)
+param_estimates_mc_grid_df <- bind_rows_or_template(coef_rows, template_param_est)
+pred_subject_mc_grid_df <- bind_rows_or_template(pred_subject_rows, template_subject_pred)
+pred_mean_mc_grid_df <- bind_rows_or_template(pred_mean_rows, template_mean_pred)
+cure_only_mc_grid_df <- bind_rows_or_template(cure_summary_rows, template_cure_summary)
+perf_mc_grid_df <- bind_rows_or_template(perf_rows, template_perf)
+fit_warnings_df <- bind_rows_or_template(warning_rows, template_warning)
+vcov_long_mc_grid_df <- bind_rows_or_template(vcov_rows, template_vcov)
+cox_baseline_curve_grid_df <- bind_rows_or_template(cox_baseline_rows, template_baseline)
+fit_diagnostics_grid_df <- bind_rows_or_template(diag_rows, template_diag)
+
+## 🟠 Add: wide yearly columns to cure summary when available ===============================
+if (nrow(cure_only_mc_grid_df) > 0L && nrow(pred_mean_mc_grid_df) > 0L) {
+  years_unique <- sort(unique(pred_mean_mc_grid_df$year))
+  for (yr in years_unique) {
+    idx_year <- pred_mean_mc_grid_df$year == yr
+    tmp <- pred_mean_mc_grid_df[idx_year, c("model_id", "mean_surv", "mean_risk", "mean_surv_uncured"), drop = FALSE]
+    names(tmp)[2:4] <- c(
+      paste0("mean_surv_y", yr),
+      paste0("mean_risk_y", yr),
+      paste0("mean_su_y", yr)
+    )
+    cure_only_mc_grid_df <- merge(cure_only_mc_grid_df, tmp, by = "model_id", all.x = TRUE, sort = FALSE)
+  }
+}
+
+# 🔴 Export: Step5 CSV outputs and manifest ===============================
+
+## 🟠 Write: Step5 source-of-truth csv files ===============================
+file_model_grid_spec <- file.path(export_path, "step5_model_grid_spec.csv")
+file_preproc_spec <- file.path(export_path, "step5_preproc_spec.csv")
+file_qc_summary <- file.path(export_path, "step5_qc_summary.csv")
+file_fit_grid <- file.path(export_path, "step5_fit_mc_grid.csv")
+file_cure_only <- file.path(export_path, "step5_cure_only_mc_grid.csv")
+file_param_est <- file.path(export_path, "step5_param_estimates_mc_grid.csv")
+file_pred_subject <- file.path(export_path, "step5_pred_subject_mc_grid.csv")
+file_pred_mean <- file.path(export_path, "step5_pred_mean_mc_grid.csv")
+file_perf <- file.path(export_path, "step5_perf_mc_grid.csv")
+file_fit_warnings <- file.path(export_path, "step5_fit_warnings.csv")
+file_vcov_long <- file.path(export_path, "step5_vcov_long_mc_grid.csv")
+file_cox_baseline <- file.path(export_path, "step5_cox_baseline_curve_grid.csv")
+file_fit_diag <- file.path(export_path, "step5_fit_diagnostics_grid.csv")
+file_manifest <- file.path(export_path, "step5_run_manifest.csv")
+
+write_csv_utf8(model_grid_df, file_model_grid_spec)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_model_grid_spec), "csv", nrow(model_grid_df), "Step5 전체 model grid", NA_character_)
+
+write_csv_utf8(preproc_spec_df, file_preproc_spec)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_preproc_spec), "csv", nrow(preproc_spec_df), "branch별 preprocessing spec", NA_character_)
+
+write_csv_utf8(qc_summary_df, file_qc_summary)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_qc_summary), "csv", nrow(qc_summary_df), "branch별 QC summary", NA_character_)
+
+write_csv_utf8(fit_mc_grid_df, file_fit_grid)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_fit_grid), "csv", nrow(fit_mc_grid_df), "모델 적합 레지스트리와 핵심 요약", NA_character_)
+
+write_csv_utf8(cure_only_mc_grid_df, file_cure_only)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_cure_only), "csv", nrow(cure_only_mc_grid_df), "모델별 cure summary와 1-10년 mean risk/survival", NA_character_)
+
+write_csv_utf8(param_estimates_mc_grid_df, file_param_est)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_param_est), "csv", nrow(param_estimates_mc_grid_df), "incidence/latency/ancillary coefficients", NA_character_)
+
+write_csv_utf8(pred_subject_mc_grid_df, file_pred_subject)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_pred_subject), "csv", nrow(pred_subject_mc_grid_df), "subject-level yearly predictions with covariates", NA_character_)
+
+write_csv_utf8(pred_mean_mc_grid_df, file_pred_mean)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_pred_mean), "csv", nrow(pred_mean_mc_grid_df), "cohort-average yearly predictions and quantiles", NA_character_)
+
+write_csv_utf8(perf_mc_grid_df, file_perf)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_perf), "csv", nrow(perf_mc_grid_df), "time-dependent AUC/Brier/IBS apparent performance", NA_character_)
+
+write_csv_utf8(fit_warnings_df, file_fit_warnings)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_fit_warnings), "csv", nrow(fit_warnings_df), "fit warnings and errors", NA_character_)
+
+write_csv_utf8(vcov_long_mc_grid_df, file_vcov_long)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_vcov_long), "csv", nrow(vcov_long_mc_grid_df), "parameter covariance long table", NA_character_)
+
+write_csv_utf8(cox_baseline_curve_grid_df, file_cox_baseline)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_cox_baseline), "csv", nrow(cox_baseline_curve_grid_df), "Cox-latency baseline cumulative hazard and survival", NA_character_)
+
+write_csv_utf8(fit_diagnostics_grid_df, file_fit_diag)
+manifest_rows <- record_manifest_row(manifest_rows, basename(file_fit_diag), "csv", nrow(fit_diagnostics_grid_df), "optimizer and EM diagnostics", NA_character_)
+
+## 🟠 Write: manifest for all exported files ===============================
+manifest_df <- do.call(rbind, manifest_rows)
+manifest_df$script_version <- script_version
+manifest_df$data_path <- data_path
+manifest_df$export_path <- export_path
+manifest_df$created_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+
+write_csv_utf8(manifest_df, file_manifest)
+
+message("Step5 완료: ", export_path)

@@ -1,14 +1,18 @@
-# 🔴 Configure: paths and runtime ===============================
+# 🔴 Configure: paths and run controls ===============================
 data_path <- "/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv"
 export_path <- '/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.분석 방법 및 결과/🟦7.Step7_베이지안 MCM 방법/🟩2.메인모델링 결과/attachments'
 
 auto_install_packages <- FALSE
 overwrite_existing_exports <- TRUE
-save_stanfit_inside_master_rds <- TRUE
+save_fit_rds_per_model <- TRUE
+
+export_subject_static_csv <- TRUE
+export_calibration_csv <- TRUE
+export_remission_competing_risk_csv <- TRUE
 
 prediction_years <- 1:10
-selected_contrast_years <- c(2, 5, 10)
-calibration_years <- c(2, 5, 10)
+selected_contrast_years <- 1:10
+calibration_years <- 1:10
 
 active_bundle_ids <- c(
   "primary_family",
@@ -56,7 +60,7 @@ options(stringsAsFactors = FALSE)
 Sys.setenv(TZ = "UTC")
 
 required_packages <- c(
-  "rstan", "survival", "cmprsk", "loo", "posterior", "timeROC",
+  "rstan", "survival", "cmprsk", "loo", "timeROC",
   "dplyr", "tibble", "tidyr", "purrr", "readr", "stringr", "data.table"
 )
 
@@ -80,9 +84,20 @@ load_or_install_packages(required_packages, auto_install = auto_install_packages
 rstan::rstan_options(auto_write = TRUE)
 options(mc.cores = min(parallel::detectCores(), chains_main))
 
-# 🔴 Define: shared objects and constants ===============================
+# 🔴 Define: utilities and registries ===============================
+## 🟠 Helpers: core primitives ===============================
 `%||%` <- function(x, y) {
   if (is.null(x) || length(x) == 0L || all(is.na(x))) y else x
+}
+
+finite_max <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) NA_real_ else max(x)
+}
+
+finite_min <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) NA_real_ else min(x)
 }
 
 bind_rows_or_template <- function(lst, template = NULL) {
@@ -94,6 +109,23 @@ bind_rows_or_template <- function(lst, template = NULL) {
   dplyr::bind_rows(keep)
 }
 
+safe_write_csv <- function(df, file_path, overwrite = TRUE) {
+  if (file.exists(file_path) && !overwrite) stop("파일이 이미 존재합니다: ", file_path)
+  readr::write_csv(df, file_path, na = "")
+  invisible(file_path)
+}
+
+safe_save_rds <- function(object, file_path, overwrite = TRUE) {
+  if (file.exists(file_path) && !overwrite) stop("파일이 이미 존재합니다: ", file_path)
+  saveRDS(object, file_path, compress = "xz")
+  invisible(file_path)
+}
+
+get_model_key <- function(bundle_id, cohort_id, family_name, latency_spec_id) {
+  paste(bundle_id, cohort_id, latency_spec_id, family_name, sep = "__")
+}
+
+## 🟠 Helpers: model registries ===============================
 family_lookup <- tibble::tibble(
   family_id = 1L:4L,
   family_name = c("exponential", "weibull", "loglogistic", "lognormal")
@@ -177,21 +209,56 @@ bundle_settings <- tibble::tribble(
   "sa12_noncure_benchmark", "I-noexternal",       "L-main",          FALSE,              FALSE,     TRUE
 )
 
-# 🔴 Define: helpers for data and priors ===============================
-## 🟠 Helpers: I/O wrappers ===============================
-safe_write_csv <- function(df, file_path, overwrite = TRUE) {
-  if (file.exists(file_path) && !overwrite) stop("파일이 이미 존재합니다: ", file_path)
-  readr::write_csv(df, file_path, na = "")
-  invisible(file_path)
+build_model_registry <- function(active_bundle_ids, bundle_latency_map, bundle_settings, family_lookup) {
+  regs <- list()
+  
+  for (bundle_id in active_bundle_ids) {
+    if (!bundle_id %in% names(bundle_latency_map)) next
+    bundle_row <- bundle_settings %>% dplyr::filter(bundle_id == !!bundle_id)
+    if (nrow(bundle_row) != 1L) stop("bundle_settings 정의 오류: ", bundle_id)
+    latency_map <- bundle_latency_map[[bundle_id]]
+    
+    for (cohort_id in names(latency_map)) {
+      for (latency_spec_id in latency_map[[cohort_id]]) {
+        for (i in seq_len(nrow(family_lookup))) {
+          regs[[length(regs) + 1L]] <- tibble::tibble(
+            bundle_id = bundle_id,
+            cohort_id = cohort_id,
+            latency_spec_id = latency_spec_id,
+            family_id = family_lookup$family_id[i],
+            family_name = family_lookup$family_name[i],
+            incidence_spec_id = bundle_row$incidence_spec_id,
+            latency_prior_id = bundle_row$latency_prior_id,
+            age_support_trim = bundle_row$age_support_trim,
+            use_ipcw = bundle_row$use_ipcw,
+            force_all_susceptible = bundle_row$force_all_susceptible
+          )
+        }
+      }
+    }
+  }
+  
+  out <- dplyr::bind_rows(regs) %>%
+    dplyr::mutate(
+      model_id = paste(bundle_id, cohort_id, latency_spec_id, family_name, sep = "__"),
+      model_class = dplyr::if_else(force_all_susceptible, "bayes_nocure_benchmark", "bayes_cure"),
+      lane = "bayes_AFT"
+    ) %>%
+    dplyr::select(
+      model_id, bundle_id, cohort_id, latency_spec_id, family_id, family_name,
+      incidence_spec_id, latency_prior_id, age_support_trim, use_ipcw,
+      force_all_susceptible, model_class, lane
+    )
+  
+  if (nrow(out) == 0L) stop("실행할 모델이 없습니다. active_bundle_ids를 확인하세요.")
+  if (anyDuplicated(out$model_id) > 0L) stop("model_id 중복이 존재합니다.")
+  out
 }
 
-safe_save_rds <- function(object, file_path, overwrite = TRUE) {
-  if (file.exists(file_path) && !overwrite) stop("파일이 이미 존재합니다: ", file_path)
-  saveRDS(object, file_path, compress = "xz")
-  invisible(file_path)
-}
+model_registry <- build_model_registry(active_bundle_ids, bundle_latency_map, bundle_settings, family_lookup)
 
-## 🟠 Helpers: raw data normalization ===============================
+# 🔴 Define: raw-data helpers ===============================
+## 🟠 Helpers: normalize inputs ===============================
 normalize_site_value <- function(x) {
   out <- toupper(trimws(as.character(x)))
   out <- ifelse(grepl("PNU", out), "PNU", out)
@@ -272,7 +339,7 @@ prepare_master_data <- function(raw_df) {
   if (any(!out$status_num %in% c(0L, 1L, 2L))) stop("status_num은 0/1/2만 허용됩니다.")
   if (any(is.na(out$days_followup))) stop("days_followup 결측이 존재합니다.")
   if (any(out$days_followup < 0)) stop("days_followup < 0 값이 존재합니다.")
-  if (any(out$site == "SNU" & out$status_num == 2L)) stop("SNU subset에 remission(status_num == 2)이 존재합니다.")
+  if (any(out$site == "SNU" & out$status_num == 2L)) stop("SNU subset에 remission(status_num == 2L)이 존재합니다.")
   out
 }
 
@@ -361,186 +428,8 @@ build_latency_matrix <- function(df, cohort_id, latency_spec_id) {
   list(X = X, coef_names = colnames(X))
 }
 
-## 🟠 Helpers: external anchors and bundle settings ===============================
-compute_external_info <- function() {
-  to_person_year <- function(x) x / 10000
-  to_prob <- function(rate_py) 1 - exp(-rate_py)
-  to_logit <- function(p) qlogis(p)
-  s0_from_ci <- function(lcl, ucl) (log(ucl) - log(lcl)) / (2 * 1.96)
-  
-  anchor_tbl <- tibble::tribble(
-    ~sex,      ~age_band, ~rate_10k, ~adj_irr_lcl, ~adj_irr_ucl,
-    "Female",  "<20",      0.69,      NA_real_,     NA_real_,
-    "Female",  "20-29",    1.71,      1.66,         3.28,
-    "Female",  "30-39",    1.24,      1.55,         3.28,
-    "Female",  "40-49",    0.94,      1.19,         2.77,
-    "Male",    "<20",      1.05,      NA_real_,     NA_real_,
-    "Male",    "20-29",    4.15,      1.74,         3.92,
-    "Male",    "30-39",    1.96,      0.94,         2.36,
-    "Male",    "40-49",    0.98,      0.47,         1.41
-  ) %>%
-    dplyr::mutate(
-      rate_py = to_person_year(rate_10k),
-      p1 = to_prob(rate_py),
-      y = to_logit(p1)
-    )
-  
-  y_f_lt20 <- anchor_tbl %>% dplyr::filter(sex == "Female", age_band == "<20") %>% dplyr::pull(y)
-  y_f_20   <- anchor_tbl %>% dplyr::filter(sex == "Female", age_band == "20-29") %>% dplyr::pull(y)
-  y_f_30   <- anchor_tbl %>% dplyr::filter(sex == "Female", age_band == "30-39") %>% dplyr::pull(y)
-  y_f_40   <- anchor_tbl %>% dplyr::filter(sex == "Female", age_band == "40-49") %>% dplyr::pull(y)
-  y_m_lt20 <- anchor_tbl %>% dplyr::filter(sex == "Male", age_band == "<20") %>% dplyr::pull(y)
-  y_m_20   <- anchor_tbl %>% dplyr::filter(sex == "Male", age_band == "20-29") %>% dplyr::pull(y)
-  y_m_30   <- anchor_tbl %>% dplyr::filter(sex == "Male", age_band == "30-39") %>% dplyr::pull(y)
-  y_m_40   <- anchor_tbl %>% dplyr::filter(sex == "Male", age_band == "40-49") %>% dplyr::pull(y)
-  
-  mu_main <- c(
-    y_m_lt20 - y_f_lt20,
-    y_f_20 - y_f_lt20,
-    y_f_30 - y_f_lt20,
-    (y_m_20 - y_f_20) - (y_m_lt20 - y_f_lt20),
-    (y_m_30 - y_f_30) - (y_m_lt20 - y_f_lt20)
-  )
-  names(mu_main) <- c("betaMale", "beta20_29", "beta30p", "betaMale20_29", "betaMale30p")
-  
-  y_f_30_alt <- mean(c(y_f_30, y_f_40))
-  y_m_30_alt <- mean(c(y_m_30, y_m_40))
-  mu_anchor_alt <- c(
-    y_m_lt20 - y_f_lt20,
-    y_f_20 - y_f_lt20,
-    y_f_30_alt - y_f_lt20,
-    (y_m_20 - y_f_20) - (y_m_lt20 - y_f_lt20),
-    (y_m_30_alt - y_f_30_alt) - (y_m_lt20 - y_f_lt20)
-  )
-  names(mu_anchor_alt) <- names(mu_main)
-  
-  s0_main <- c(
-    betaMale = max(
-      s0_from_ci(1.66, 3.28),
-      s0_from_ci(1.55, 3.28),
-      s0_from_ci(1.74, 3.92),
-      s0_from_ci(0.94, 2.36)
-    ),
-    beta20_29 = s0_from_ci(1.66, 3.28),
-    beta30p = s0_from_ci(1.55, 3.28),
-    betaMale20_29 = sqrt(s0_from_ci(1.74, 3.92)^2 + s0_from_ci(1.66, 3.28)^2),
-    betaMale30p = sqrt(s0_from_ci(0.94, 2.36)^2 + s0_from_ci(1.55, 3.28)^2)
-  )
-  
-  s0_betaMale_direct <- s0_from_ci(0.41, 0.69)
-  
-  list(
-    alpha0_gp = y_f_lt20,
-    anchor_table = anchor_tbl,
-    mu_main = mu_main,
-    mu_anchor_alt = mu_anchor_alt,
-    s0_main = s0_main,
-    s0_betaMale_direct = s0_betaMale_direct
-  )
-}
-
-external_info <- compute_external_info()
-
-build_prior_settings <- function(bundle_id, external_info) {
-  mu_beta <- external_info$mu_main
-  s0_beta <- external_info$s0_main
-  alpha0_gp <- external_info$alpha0_gp
-  incidence_regime_int <- 1L
-  delta_sd <- 3.5
-  robust_weight <- 0.8
-  force_all_susceptible <- FALSE
-  
-  if (bundle_id == "sa1_robust") {
-    incidence_regime_int <- 2L
-  } else if (bundle_id == "sa2_shape_off") {
-    incidence_regime_int <- 3L
-  } else if (bundle_id == "sa3_no_external") {
-    incidence_regime_int <- 4L
-  } else if (bundle_id == "sa8_delta_narrow") {
-    incidence_regime_int <- 1L
-    delta_sd <- 2.5
-  } else if (bundle_id == "sa8_delta_wide") {
-    incidence_regime_int <- 1L
-    delta_sd <- 5.0
-  } else if (bundle_id == "sa9_anchor_alt") {
-    incidence_regime_int <- 1L
-    mu_beta <- external_info$mu_anchor_alt
-  } else if (bundle_id == "sa10_betaMale_direct") {
-    incidence_regime_int <- 1L
-    s0_beta["betaMale"] <- external_info$s0_betaMale_direct
-  } else if (bundle_id == "sa12_noncure_benchmark") {
-    incidence_regime_int <- 4L
-    force_all_susceptible <- TRUE
-  }
-  
-  list(
-    alpha0_gp = alpha0_gp,
-    mu_beta = unname(mu_beta),
-    s0_beta = unname(s0_beta),
-    incidence_regime_int = incidence_regime_int,
-    delta_sd = delta_sd,
-    robust_weight = robust_weight,
-    force_all_susceptible = force_all_susceptible
-  )
-}
-
-build_latency_prior_settings <- function(latency_prior_id) {
-  switch(
-    latency_prior_id,
-    "L-main" = list(gamma_sd = 1.0, gamma0_sd = 2.0, log_sigma_mean = log(0.8), log_sigma_sd = 0.35),
-    "L-tight" = list(gamma_sd = 0.5, gamma0_sd = 2.0, log_sigma_mean = log(0.8), log_sigma_sd = 0.25),
-    "L-wide" = list(gamma_sd = 1.5, gamma0_sd = 2.0, log_sigma_mean = log(0.8), log_sigma_sd = 0.50),
-    "L-int-tight" = list(gamma_sd = 1.0, gamma0_sd = 1.5, log_sigma_mean = log(0.8), log_sigma_sd = 0.35),
-    "L-int-wide" = list(gamma_sd = 1.0, gamma0_sd = 2.5, log_sigma_mean = log(0.8), log_sigma_sd = 0.35),
-    stop("지원하지 않는 latency_prior_id: ", latency_prior_id)
-  )
-}
-
-build_model_registry <- function(active_bundle_ids, bundle_latency_map, bundle_settings, family_lookup) {
-  regs <- list()
-  
-  for (bundle_id in active_bundle_ids) {
-    if (!bundle_id %in% names(bundle_latency_map)) next
-    bundle_row <- bundle_settings %>% dplyr::filter(bundle_id == !!bundle_id)
-    if (nrow(bundle_row) != 1L) stop("bundle_settings 정의 오류: ", bundle_id)
-    latency_map <- bundle_latency_map[[bundle_id]]
-    
-    for (cohort_id in names(latency_map)) {
-      for (latency_spec_id in latency_map[[cohort_id]]) {
-        for (i in seq_len(nrow(family_lookup))) {
-          regs[[length(regs) + 1L]] <- tibble::tibble(
-            bundle_id = bundle_id,
-            cohort_id = cohort_id,
-            latency_spec_id = latency_spec_id,
-            family_id = family_lookup$family_id[i],
-            family_name = family_lookup$family_name[i],
-            incidence_spec_id = bundle_row$incidence_spec_id,
-            latency_prior_id = bundle_row$latency_prior_id,
-            age_support_trim = bundle_row$age_support_trim,
-            use_ipcw = bundle_row$use_ipcw,
-            force_all_susceptible = bundle_row$force_all_susceptible
-          )
-        }
-      }
-    }
-  }
-  
-  dplyr::bind_rows(regs) %>%
-    dplyr::mutate(
-      model_id = paste(bundle_id, cohort_id, latency_spec_id, family_name, sep = "__"),
-      model_class = dplyr::if_else(force_all_susceptible, "bayes_nocure_benchmark", "bayes_cure"),
-      lane = "bayes_AFT"
-    ) %>%
-    dplyr::select(
-      model_id, bundle_id, cohort_id, latency_spec_id, family_id, family_name,
-      incidence_spec_id, latency_prior_id, age_support_trim, use_ipcw,
-      force_all_susceptible, model_class, lane
-    )
-}
-
-model_registry <- build_model_registry(active_bundle_ids, bundle_latency_map, bundle_settings, family_lookup)
-
-## 🟠 Helpers: survival utilities ===============================
+# 🔴 Define: KM and competing-risk helpers ===============================
+## 🟠 Helpers: nonparametric summaries ===============================
 step_surv_from_survfit <- function(sf, times) {
   s <- summary(sf, times = times, extend = TRUE)
   tibble::tibble(
@@ -575,91 +464,6 @@ compute_km_yearly_summary <- function(master_df, years) {
   })
 }
 
-safe_timeROC_auc <- function(time, event, score, t_eval) {
-  if (length(unique(stats::na.omit(score))) < 2L) return(NA_real_)
-  if (sum(event == 1 & time <= t_eval, na.rm = TRUE) < 2L) return(NA_real_)
-  if (sum(time > t_eval, na.rm = TRUE) < 2L) return(NA_real_)
-  out <- tryCatch(
-    timeROC::timeROC(
-      T = time,
-      delta = event,
-      marker = score,
-      cause = 1,
-      weighting = "marginal",
-      times = t_eval,
-      iid = FALSE,
-      ROC = FALSE
-    ),
-    error = function(e) NULL
-  )
-  if (is.null(out)) return(NA_real_)
-  as.numeric(out$AUC[1])
-}
-
-compute_ipcw_brier <- function(time, event, surv_prob, t_eval) {
-  sf_g <- survival::survfit(survival::Surv(time, 1 - event) ~ 1)
-  g_t <- summary(sf_g, times = t_eval, extend = TRUE)$surv
-  g_t <- pmax(g_t, 1e-8)
-  eps <- 1e-8
-  g_tminus <- summary(sf_g, times = pmax(time - eps, 0), extend = TRUE)$surv
-  g_tminus <- pmax(g_tminus, 1e-8)
-  
-  part1 <- as.numeric(time <= t_eval & event == 1L) * ((0 - surv_prob)^2 / g_tminus)
-  part2 <- as.numeric(time > t_eval) * ((1 - surv_prob)^2 / g_t)
-  mean(part1 + part2, na.rm = TRUE)
-}
-
-compute_ibs <- function(year_grid, brier_values) {
-  keep <- which(is.finite(year_grid) & is.finite(brier_values))
-  if (length(keep) < 2L) return(NA_real_)
-  x <- year_grid[keep]
-  y <- brier_values[keep]
-  dx <- diff(x)
-  avg_y <- (head(y, -1L) + tail(y, -1L)) / 2
-  sum(dx * avg_y) / (max(x) - min(x))
-}
-
-build_calibration_data <- function(time, event, risk, eval_time, n_bins = 10L) {
-  if (all(!is.finite(risk))) return(NULL)
-  if (length(unique(stats::na.omit(risk))) < 2L) return(NULL)
-  bins <- min(n_bins, length(unique(stats::na.omit(risk))))
-  if (bins < 2L) return(NULL)
-  
-  df <- tibble::tibble(time = time, event = event, risk = risk) %>%
-    dplyr::mutate(bin = dplyr::ntile(risk, bins))
-  
-  df %>%
-    dplyr::group_by(bin) %>%
-    dplyr::group_modify(function(dat, key) {
-      sf <- survival::survfit(survival::Surv(time, event) ~ 1, data = dat)
-      s_eval <- summary(sf, times = eval_time, extend = TRUE)$surv[1]
-      tibble::tibble(
-        bin = key$bin,
-        n = nrow(dat),
-        mean_pred_risk = mean(dat$risk, na.rm = TRUE),
-        observed_risk_km = 1 - s_eval
-      )
-    }) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(year = eval_time)
-}
-
-compute_ppc_summary <- function(mean_yearly_df, km_df) {
-  joined <- mean_yearly_df %>%
-    dplyr::left_join(
-      km_df %>% dplyr::select(year, Risk_KM),
-      by = "year"
-    ) %>%
-    dplyr::mutate(abs_diff = abs(meanRisk_mean - Risk_KM))
-  
-  tibble::tibble(
-    ppc_rmse = sqrt(mean((joined$meanRisk_mean - joined$Risk_KM)^2, na.rm = TRUE)),
-    tail_fit_absdiff_10 = joined$abs_diff[joined$year == max(joined$year)][1] %||% NA_real_,
-    tail_fit_flag = dplyr::if_else((joined$abs_diff[joined$year == max(joined$year)][1] %||% Inf) <= tail_fit_absdiff_threshold, TRUE, FALSE, missing = FALSE)
-  )
-}
-
-## 🟠 Helpers: IPCW for remission sensitivity ===============================
 step_cumhaz_at_times <- function(basehaz_df, times) {
   idx <- findInterval(times, basehaz_df$time)
   out <- numeric(length(times))
@@ -673,8 +477,13 @@ compute_remission_ipcw_weights <- function(df) {
     return(list(
       weights = rep(1, nrow(df)),
       weight_summary = tibble::tibble(
-        mean_weight = 1, sd_weight = 0, min_weight = 1, max_weight = 1,
-        p01_weight = 1, p99_weight = 1, remission_events = sum(df$status_num == 2L)
+        mean_weight = 1,
+        sd_weight = 0,
+        min_weight = 1,
+        max_weight = 1,
+        p01_weight = 1,
+        p99_weight = 1,
+        remission_events = sum(df$status_num == 2L)
       ),
       censor_model = NULL
     ))
@@ -720,7 +529,87 @@ compute_remission_ipcw_weights <- function(df) {
   )
 }
 
-## 🟠 Helpers: Stan data and diagnostics ===============================
+extract_cif_at_times <- function(cif_obj, failcode, times) {
+  nm <- grep(paste0("^", failcode), names(cif_obj), value = TRUE)[1]
+  if (is.na(nm) || length(nm) == 0L) return(rep(NA_real_, length(times)))
+  obj <- cif_obj[[nm]]
+  stats::approx(
+    x = c(0, obj$time),
+    y = c(0, obj$est),
+    xout = times,
+    method = "constant",
+    yleft = 0,
+    rule = 2,
+    f = 0
+  )$y
+}
+
+run_competing_risk_summary <- function(master_df, cohort_id, years) {
+  prep <- prepare_branch_data(master_df, cohort_id, age_support_trim = FALSE)
+  df <- prep$data %>% dplyr::mutate(fstatus = status_num)
+  
+  if (!any(df$fstatus == 2L)) {
+    return(list(
+      yearly = tibble::tibble(
+        cohort_id = cohort_id,
+        year = years,
+        transition_cif = NA_real_,
+        remission_cif = NA_real_
+      ),
+      coef = tibble::tibble(
+        cohort_id = cohort_id,
+        term = character(),
+        estimate = numeric(),
+        se = numeric(),
+        z = numeric(),
+        p_value = numeric()
+      )
+    ))
+  }
+  
+  cif_obj <- cmprsk::cuminc(ftime = df$time_years, fstatus = df$fstatus, cencode = 0)
+  
+  yearly <- tibble::tibble(
+    cohort_id = cohort_id,
+    year = years,
+    transition_cif = extract_cif_at_times(cif_obj, failcode = 1, times = years),
+    remission_cif = extract_cif_at_times(cif_obj, failcode = 2, times = years)
+  )
+  
+  X_fg <- as.matrix(df %>% dplyr::transmute(age_s = age_s, sex = sex))
+  fg_fit <- tryCatch(
+    cmprsk::crr(ftime = df$time_years, fstatus = df$fstatus, cov1 = X_fg, failcode = 1, cencode = 0),
+    error = function(e) NULL
+  )
+  
+  coef_tbl <- if (is.null(fg_fit)) {
+    tibble::tibble(
+      cohort_id = cohort_id,
+      term = character(),
+      estimate = numeric(),
+      se = numeric(),
+      z = numeric(),
+      p_value = numeric()
+    )
+  } else {
+    se <- sqrt(diag(fg_fit$var))
+    z <- fg_fit$coef / se
+    p <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
+    tibble::tibble(
+      cohort_id = cohort_id,
+      term = names(fg_fit$coef),
+      estimate = unname(fg_fit$coef),
+      se = unname(se),
+      z = unname(z),
+      p_value = unname(p)
+    )
+  }
+  
+  list(yearly = yearly, coef = coef_tbl)
+}
+
+# 🔴 Define: Stan data and diagnostics helpers ===============================
+## 🟠 Helpers: fit diagnostics ===============================
 build_stan_data <- function(df, latency_obj, prior_settings, latency_prior_settings, family_id, obs_weight) {
   list(
     N = nrow(df),
@@ -750,42 +639,34 @@ build_stan_data <- function(df, latency_obj, prior_settings, latency_prior_setti
 
 compute_chain_bfmi <- function(fit) {
   sp <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
-  bfmi_vals <- vapply(sp, function(mat) {
+  vapply(sp, function(mat) {
     e <- mat[, "energy__"]
     if (length(e) < 2L || stats::var(e) <= 0) return(NA_real_)
     mean(diff(e)^2) / stats::var(e)
   }, numeric(1))
-  bfmi_vals
 }
 
 summarize_fit_diagnostics <- function(fit, max_treedepth_used, ess_threshold = 400) {
-  draw_summ <- tryCatch(
-    posterior::summarise_draws(
-      posterior::as_draws_array(fit),
-      rhat = posterior::rhat,
-      ess_bulk = posterior::ess_bulk,
-      ess_tail = posterior::ess_tail
-    ),
-    error = function(e) NULL
-  )
+  stan_sum <- tryCatch(rstan::summary(fit)$summary, error = function(e) NULL)
   
-  if (is.null(draw_summ) || !all(c("rhat", "ess_bulk", "ess_tail") %in% names(draw_summ))) {
-    stan_sum <- rstan::summary(fit)$summary
-    max_rhat <- if ("Rhat" %in% colnames(stan_sum)) max(stan_sum[, "Rhat"], na.rm = TRUE) else NA_real_
-    min_ess_bulk <- if ("n_eff" %in% colnames(stan_sum)) min(stan_sum[, "n_eff"], na.rm = TRUE) else NA_real_
-    min_ess_tail <- min_ess_bulk
+  if (is.null(stan_sum)) {
+    max_rhat <- NA_real_
+    min_ess_bulk <- NA_real_
+    min_ess_tail <- NA_real_
   } else {
-    max_rhat <- max(draw_summ$rhat, na.rm = TRUE)
-    min_ess_bulk <- min(draw_summ$ess_bulk, na.rm = TRUE)
-    min_ess_tail <- min(draw_summ$ess_tail, na.rm = TRUE)
+    keep_rows <- !grepl("^log_lik\\[", rownames(stan_sum))
+    if (!any(keep_rows)) keep_rows <- rep(TRUE, nrow(stan_sum))
+    stan_use <- stan_sum[keep_rows, , drop = FALSE]
+    max_rhat <- if ("Rhat" %in% colnames(stan_use)) finite_max(stan_use[, "Rhat"]) else NA_real_
+    min_ess_bulk <- if ("n_eff" %in% colnames(stan_use)) finite_min(stan_use[, "n_eff"]) else NA_real_
+    min_ess_tail <- min_ess_bulk
   }
   
   sampler_params <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
   divergence_count <- sum(vapply(sampler_params, function(x) sum(x[, "divergent__"]), numeric(1)))
   treedepth_hits <- sum(vapply(sampler_params, function(x) sum(x[, "treedepth__"] >= max_treedepth_used), numeric(1)))
   bfmi_vals <- compute_chain_bfmi(fit)
-  min_bfmi <- suppressWarnings(min(bfmi_vals, na.rm = TRUE))
-  if (!is.finite(min_bfmi)) min_bfmi <- NA_real_
+  min_bfmi <- finite_min(bfmi_vals)
   
   needs_refit <- (
     (!is.na(max_rhat) && max_rhat >= 1.01) ||
@@ -870,7 +751,8 @@ sample_with_retry <- function(stan_model_obj, stan_data, seed) {
   list(fit = fit_try_2, diagnostics = diag2, refit_used = TRUE, fit_error = NA_character_)
 }
 
-## 🟠 Helpers: posterior prediction ===============================
+# 🔴 Define: posterior metric helpers ===============================
+## 🟠 Helpers: prediction, calibration, and contrast ===============================
 thin_draw_matrix <- function(draw_mat, max_draws = 1000L) {
   if (nrow(draw_mat) <= max_draws) return(draw_mat)
   idx <- unique(round(seq(1, nrow(draw_mat), length.out = max_draws)))
@@ -932,9 +814,12 @@ predict_from_fit <- function(
     family_id,
     years,
     force_all_susceptible = FALSE,
-    alpha0_gp = external_info$alpha0_gp
+    alpha0_gp = external_info$alpha0_gp,
+    max_draws = prediction_draws_max,
+    return_subject_yearly = TRUE,
+    return_mean_risk_draws = TRUE
 ) {
-  draw_mat <- extract_core_draws(fit, P = ncol(latency_obj$X), max_draws = prediction_draws_max)
+  draw_mat <- extract_core_draws(fit, P = ncol(latency_obj$X), max_draws = max_draws)
   S <- nrow(draw_mat)
   N <- nrow(df)
   
@@ -980,9 +865,9 @@ predict_from_fit <- function(
     cure_prob_ucl = apply(1 - pi_mat, 2, stats::quantile, probs = 0.975)
   )
   
-  yearly_list <- vector("list", length(years))
   mean_risk_draws <- matrix(NA_real_, nrow = S, ncol = length(years))
   colnames(mean_risk_draws) <- paste0("year_", years)
+  subject_yearly_list <- if (isTRUE(return_subject_yearly)) vector("list", length(years)) else NULL
   
   km_tail_cut <- if (any(df$event_primary == 1L)) max(df$time_years[df$event_primary == 1L]) else NA_real_
   max_followup <- max(df$time_years, na.rm = TRUE)
@@ -994,23 +879,25 @@ predict_from_fit <- function(
     Risk <- 1 - Spop
     mean_risk_draws[, k_idx] <- rowMeans(Risk)
     
-    yearly_list[[k_idx]] <- tibble::tibble(
-      subject_id = df$subject_id,
-      year = yr,
-      survival_mean = colMeans(Spop),
-      survival_median = apply(Spop, 2, stats::median),
-      survival_lcl = apply(Spop, 2, stats::quantile, probs = 0.025),
-      survival_ucl = apply(Spop, 2, stats::quantile, probs = 0.975),
-      risk_mean = colMeans(Risk),
-      risk_median = apply(Risk, 2, stats::median),
-      risk_lcl = apply(Risk, 2, stats::quantile, probs = 0.025),
-      risk_ucl = apply(Risk, 2, stats::quantile, probs = 0.975),
-      is_extrapolated = yr > max_followup,
-      tail_flag = yr > km_tail_cut
-    )
+    if (isTRUE(return_subject_yearly)) {
+      subject_yearly_list[[k_idx]] <- tibble::tibble(
+        subject_id = df$subject_id,
+        year = yr,
+        survival_mean = colMeans(Spop),
+        survival_median = apply(Spop, 2, stats::median),
+        survival_lcl = apply(Spop, 2, stats::quantile, probs = 0.025),
+        survival_ucl = apply(Spop, 2, stats::quantile, probs = 0.975),
+        risk_mean = colMeans(Risk),
+        risk_median = apply(Risk, 2, stats::median),
+        risk_lcl = apply(Risk, 2, stats::quantile, probs = 0.025),
+        risk_ucl = apply(Risk, 2, stats::quantile, probs = 0.975),
+        is_extrapolated = yr > max_followup,
+        tail_flag = yr > km_tail_cut
+      )
+    }
   }
   
-  subject_yearly <- dplyr::bind_rows(yearly_list)
+  subject_yearly <- if (isTRUE(return_subject_yearly)) dplyr::bind_rows(subject_yearly_list) else NULL
   
   mean_yearly <- purrr::map_dfr(seq_along(years), function(k_idx) {
     yr <- years[k_idx]
@@ -1045,7 +932,111 @@ predict_from_fit <- function(
     delta_summary = delta_summary,
     kappa_summary = kappa_summary,
     sigma_summary = sigma_summary,
-    mean_risk_draws = mean_risk_draws
+    mean_risk_draws = if (isTRUE(return_mean_risk_draws)) mean_risk_draws else NULL
+  )
+}
+
+rebuild_subject_predictions_from_fit_rds <- function(fit_rds_path, years = prediction_years, max_draws = prediction_draws_max) {
+  obj <- readRDS(fit_rds_path)
+  latency_obj <- build_latency_matrix(
+    df = obj$data_used,
+    cohort_id = obj$model_info$cohort_id,
+    latency_spec_id = obj$model_info$latency_spec_id
+  )
+  
+  predict_from_fit(
+    fit = obj$fit,
+    df = obj$data_used,
+    latency_obj = latency_obj,
+    family_id = obj$model_info$family_id,
+    years = years,
+    force_all_susceptible = obj$model_info$force_all_susceptible,
+    alpha0_gp = obj$prior_settings$alpha0_gp,
+    max_draws = max_draws,
+    return_subject_yearly = TRUE,
+    return_mean_risk_draws = FALSE
+  )
+}
+
+safe_timeROC_auc <- function(time, event, score, t_eval) {
+  if (length(unique(stats::na.omit(score))) < 2L) return(NA_real_)
+  if (sum(event == 1 & time <= t_eval, na.rm = TRUE) < 2L) return(NA_real_)
+  if (sum(time > t_eval, na.rm = TRUE) < 2L) return(NA_real_)
+  out <- tryCatch(
+    timeROC::timeROC(
+      T = time,
+      delta = event,
+      marker = score,
+      cause = 1,
+      weighting = "marginal",
+      times = t_eval,
+      iid = FALSE,
+      ROC = FALSE
+    ),
+    error = function(e) NULL
+  )
+  if (is.null(out)) return(NA_real_)
+  as.numeric(out$AUC[1])
+}
+
+compute_ipcw_brier <- function(time, event, surv_prob, t_eval) {
+  sf_g <- survival::survfit(survival::Surv(time, 1 - event) ~ 1)
+  g_t <- summary(sf_g, times = t_eval, extend = TRUE)$surv
+  g_t <- pmax(g_t, 1e-8)
+  eps <- 1e-8
+  g_tminus <- summary(sf_g, times = pmax(time - eps, 0), extend = TRUE)$surv
+  g_tminus <- pmax(g_tminus, 1e-8)
+  
+  part1 <- as.numeric(time <= t_eval & event == 1L) * ((0 - surv_prob)^2 / g_tminus)
+  part2 <- as.numeric(time > t_eval) * ((1 - surv_prob)^2 / g_t)
+  mean(part1 + part2, na.rm = TRUE)
+}
+
+compute_ibs <- function(year_grid, brier_values) {
+  keep <- which(is.finite(year_grid) & is.finite(brier_values))
+  if (length(keep) < 2L) return(NA_real_)
+  x <- year_grid[keep]
+  y <- brier_values[keep]
+  dx <- diff(x)
+  avg_y <- (head(y, -1L) + tail(y, -1L)) / 2
+  sum(dx * avg_y) / (max(x) - min(x))
+}
+
+build_calibration_data <- function(time, event, risk, eval_time, n_bins = 10L) {
+  if (all(!is.finite(risk))) return(NULL)
+  if (length(unique(stats::na.omit(risk))) < 2L) return(NULL)
+  bins <- min(n_bins, length(unique(stats::na.omit(risk))))
+  if (bins < 2L) return(NULL)
+  
+  df <- tibble::tibble(time = time, event = event, risk = risk) %>%
+    dplyr::mutate(bin = dplyr::ntile(risk, bins))
+  
+  split(df, df$bin) %>%
+    purrr::imap_dfr(function(dat, bin_name) {
+      sf <- survival::survfit(survival::Surv(time, event) ~ 1, data = dat)
+      s_eval <- summary(sf, times = eval_time, extend = TRUE)$surv[1]
+      tibble::tibble(
+        bin = as.integer(bin_name),
+        n = nrow(dat),
+        mean_pred_risk = mean(dat$risk, na.rm = TRUE),
+        observed_risk_km = 1 - s_eval,
+        year = eval_time
+      )
+    })
+}
+
+compute_ppc_summary <- function(mean_yearly_df, km_df) {
+  joined <- mean_yearly_df %>%
+    dplyr::left_join(
+      km_df %>% dplyr::select(year, Risk_KM),
+      by = "year"
+    ) %>%
+    dplyr::mutate(abs_diff = abs(meanRisk_mean - Risk_KM))
+  
+  tibble::tibble(
+    ppc_rmse = sqrt(mean((joined$meanRisk_mean - joined$Risk_KM)^2, na.rm = TRUE)),
+    tail_fit_absdiff_10 = joined$abs_diff[joined$year == max(joined$year)][1] %||% NA_real_,
+    tail_fit_flag = dplyr::if_else((joined$abs_diff[joined$year == max(joined$year)][1] %||% Inf) <= tail_fit_absdiff_threshold, TRUE, FALSE, missing = FALSE)
   )
 }
 
@@ -1105,7 +1096,7 @@ compute_fit_metrics <- function(df, subject_yearly_df, mean_yearly_df, km_df_coh
 
 compute_selected_contrast <- function(draw_mat_1, draw_mat_2, years, direction_label) {
   n_draws <- min(nrow(draw_mat_1), nrow(draw_mat_2))
-  if (is.null(n_draws) || !is.finite(n_draws) || n_draws < 10L) {
+  if (!is.finite(n_draws) || n_draws < 10L) {
     return(tibble::tibble(
       year = years,
       contrast_label = direction_label,
@@ -1117,11 +1108,8 @@ compute_selected_contrast <- function(draw_mat_1, draw_mat_2, years, direction_l
     ))
   }
   
-  idx1 <- seq_len(n_draws)
-  idx2 <- seq_len(n_draws)
-  
   purrr::map_dfr(seq_along(years), function(j) {
-    diff_draw <- drop(draw_mat_1[idx1, j, drop = FALSE]) - drop(draw_mat_2[idx2, j, drop = FALSE])
+    diff_draw <- drop(draw_mat_1[seq_len(n_draws), j, drop = FALSE]) - drop(draw_mat_2[seq_len(n_draws), j, drop = FALSE])
     tibble::tibble(
       year = years[j],
       contrast_label = direction_label,
@@ -1134,101 +1122,20 @@ compute_selected_contrast <- function(draw_mat_1, draw_mat_2, years, direction_l
   })
 }
 
-## 🟠 Helpers: remission competing-risk summaries ===============================
-extract_cif_at_times <- function(cif_obj, failcode, times) {
-  nm <- grep(paste0("^", failcode), names(cif_obj), value = TRUE)[1]
-  if (is.na(nm) || length(nm) == 0L) {
-    return(rep(NA_real_, length(times)))
-  }
-  obj <- cif_obj[[nm]]
-  stats::approx(
-    x = c(0, obj$time),
-    y = c(0, obj$est),
-    xout = times,
-    method = "constant",
-    yleft = 0,
-    rule = 2,
-    f = 0
-  )$y
-}
-
-run_competing_risk_summary <- function(master_df, cohort_id, years) {
-  prep <- prepare_branch_data(master_df, cohort_id, age_support_trim = FALSE)
-  df <- prep$data %>% dplyr::mutate(fstatus = status_num)
-  
-  if (!any(df$fstatus == 2L)) {
-    return(list(
-      yearly = tibble::tibble(
-        cohort_id = cohort_id,
-        year = years,
-        transition_cif = NA_real_,
-        remission_cif = NA_real_
-      ),
-      coef = tibble::tibble(
-        cohort_id = cohort_id,
-        term = character(0),
-        estimate = numeric(0),
-        se = numeric(0),
-        z = numeric(0),
-        p_value = numeric(0)
-      )
-    ))
-  }
-  
-  cif_obj <- cmprsk::cuminc(ftime = df$time_years, fstatus = df$fstatus, cencode = 0)
-  yearly <- tibble::tibble(
-    cohort_id = cohort_id,
-    year = years,
-    transition_cif = extract_cif_at_times(cif_obj, failcode = 1, times = years),
-    remission_cif = extract_cif_at_times(cif_obj, failcode = 2, times = years)
-  )
-  
-  X_fg <- as.matrix(df %>% dplyr::transmute(age_s = age_s, sex = sex))
-  fg_fit <- tryCatch(
-    cmprsk::crr(ftime = df$time_years, fstatus = df$fstatus, cov1 = X_fg, failcode = 1, cencode = 0),
-    error = function(e) NULL
-  )
-  
-  coef_tbl <- if (is.null(fg_fit)) {
-    tibble::tibble(
-      cohort_id = cohort_id,
-      term = character(0),
-      estimate = numeric(0),
-      se = numeric(0),
-      z = numeric(0),
-      p_value = numeric(0)
-    )
-  } else {
-    se <- sqrt(diag(fg_fit$var))
-    z <- fg_fit$coef / se
-    p <- 2 * stats::pnorm(abs(z), lower.tail = FALSE)
-    tibble::tibble(
-      cohort_id = cohort_id,
-      term = names(fg_fit$coef),
-      estimate = unname(fg_fit$coef),
-      se = unname(se),
-      z = unname(z),
-      p_value = unname(p)
-    )
-  }
-  
-  list(yearly = yearly, coef = coef_tbl)
-}
-
-# 🔴 Load: raw input file ===============================
+# 🔴 Load: raw CSV data ===============================
 raw_data <- readr::read_csv(data_path, show_col_types = FALSE, progress = FALSE)
 
-# 🔴 Transform: cleaned analysis dataset ===============================
+# 🔴 Transform: analysis-ready master frame ===============================
 master_data <- prepare_master_data(raw_data)
 
-# 🔴 Summarize: cohort QC and KM benchmark ===============================
+# 🔴 Summarize: branch QC and KM benchmark ===============================
 branch_qc <- purrr::map_dfr(c("merged", "PNU", "SNU"), function(cohort_id) {
   prepare_branch_data(master_data, cohort_id, age_support_trim = FALSE)$meta
 })
 
 km_yearly_summary <- compute_km_yearly_summary(master_data, prediction_years)
 
-# 🔴 Compile: inline Stan model ===============================
+# 🔴 Compile: inline Stan program ===============================
 stan_code <- "
 functions {
   real log_surv_u(real t, real mu, real sigma, int family_id) {
@@ -1312,6 +1219,7 @@ transformed parameters {
   real<lower=0> sigma;
   vector[N] eta_inc;
   vector[N] mu_lat;
+
   sigma = family_id == 1 ? 1.0 : exp(log_sigma);
 
   for (i in 1:N) {
@@ -1411,17 +1319,15 @@ compiled_stan_model <- rstan::stan_model(
   model_name = paste0("chr_bayes_cure_inline_", format(Sys.time(), "%Y%m%d_%H%M%S"))
 )
 
-# 🔴 Fit: Bayesian grid ===============================
-fit_store <- list()
-registry_results <- list()
+# 🔴 Fit: Bayesian grid and write per-model RDS ===============================
 subject_static_store <- list()
-subject_yearly_store <- list()
 mean_yearly_store <- list()
 metrics_store <- list()
 mcmc_store <- list()
 calibration_store <- list()
 cohort_draw_store <- list()
 weight_summary_store <- list()
+registry_results <- list()
 
 subject_static_template <- tibble::tibble(
   model_id = character(),
@@ -1446,32 +1352,6 @@ subject_static_template <- tibble::tibble(
   cure_prob_median = double(),
   cure_prob_lcl = double(),
   cure_prob_ucl = double()
-)
-
-subject_yearly_template <- tibble::tibble(
-  model_id = character(),
-  bundle_id = character(),
-  cohort_id = character(),
-  family_name = character(),
-  latency_spec_id = character(),
-  incidence_spec_id = character(),
-  latency_prior_id = character(),
-  subject_id = character(),
-  site = character(),
-  sex = integer(),
-  age_base = double(),
-  age_group = character(),
-  year = double(),
-  survival_mean = double(),
-  survival_median = double(),
-  survival_lcl = double(),
-  survival_ucl = double(),
-  risk_mean = double(),
-  risk_median = double(),
-  risk_lcl = double(),
-  risk_ucl = double(),
-  is_extrapolated = logical(),
-  tail_flag = logical()
 )
 
 mean_yearly_template <- tibble::tibble(
@@ -1549,6 +1429,17 @@ calibration_template <- tibble::tibble(
   year = double()
 )
 
+weight_template <- tibble::tibble(
+  model_id = character(),
+  mean_weight = double(),
+  sd_weight = double(),
+  min_weight = double(),
+  max_weight = double(),
+  p01_weight = double(),
+  p99_weight = double(),
+  remission_events = integer()
+)
+
 for (row_idx in seq_len(nrow(model_registry))) {
   row_info <- model_registry[row_idx, ]
   
@@ -1557,8 +1448,8 @@ for (row_idx in seq_len(nrow(model_registry))) {
     cohort_id = row_info$cohort_id,
     age_support_trim = row_info$age_support_trim
   )
-  
   df <- prep$data
+  
   latency_obj <- build_latency_matrix(df, row_info$cohort_id, row_info$latency_spec_id)
   prior_settings <- build_prior_settings(row_info$bundle_id, external_info)
   latency_prior_settings <- build_latency_prior_settings(row_info$latency_prior_id)
@@ -1567,7 +1458,8 @@ for (row_idx in seq_len(nrow(model_registry))) {
     ipcw_obj <- compute_remission_ipcw_weights(df)
     obs_weight <- ipcw_obj$weights
     weight_summary_store[[row_info$model_id]] <- ipcw_obj$weight_summary %>%
-      dplyr::mutate(model_id = row_info$model_id)
+      dplyr::mutate(model_id = row_info$model_id) %>%
+      dplyr::select(model_id, mean_weight, sd_weight, min_weight, max_weight, p01_weight, p99_weight, remission_events)
   } else {
     ipcw_obj <- NULL
     obs_weight <- rep(1, nrow(df))
@@ -1592,11 +1484,7 @@ for (row_idx in seq_len(nrow(model_registry))) {
     obs_weight = obs_weight
   )
   
-  fit_result <- sample_with_retry(
-    stan_model_obj = compiled_stan_model,
-    stan_data = stan_data,
-    seed = sampling_seed + row_idx
-  )
+  fit_result <- sample_with_retry(compiled_stan_model, stan_data, sampling_seed + row_idx)
   
   if (is.null(fit_result$fit)) {
     registry_results[[row_idx]] <- row_info %>%
@@ -1604,6 +1492,7 @@ for (row_idx in seq_len(nrow(model_registry))) {
         fit_status = "failed",
         refit_used = FALSE,
         fit_error = fit_result$fit_error,
+        fit_rds_path = NA_character_,
         n_analysis = nrow(df),
         n_transition = sum(df$event_primary == 1L),
         n_censored_primary = sum(df$event_primary == 0L),
@@ -1642,8 +1531,34 @@ for (row_idx in seq_len(nrow(model_registry))) {
   fit_obj <- fit_result$fit
   fit_diag <- fit_result$diagnostics
   
-  fit_store[[row_info$model_id]] <- list(
-    fit = if (save_stanfit_inside_master_rds) fit_obj else NULL,
+  pred_cache <- predict_from_fit(
+    fit = fit_obj,
+    df = df,
+    latency_obj = latency_obj,
+    family_id = row_info$family_id,
+    years = prediction_years,
+    force_all_susceptible = row_info$force_all_susceptible,
+    alpha0_gp = external_info$alpha0_gp,
+    max_draws = prediction_draws_max,
+    return_subject_yearly = TRUE,
+    return_mean_risk_draws = TRUE
+  )
+  
+  km_df_cohort <- km_yearly_summary %>% dplyr::filter(cohort_id == row_info$cohort_id)
+  
+  fit_metrics <- compute_fit_metrics(
+    df = df,
+    subject_yearly_df = pred_cache$subject_yearly,
+    mean_yearly_df = pred_cache$mean_yearly,
+    km_df_cohort = km_df_cohort,
+    fit = fit_obj
+  )
+  
+  fit_rds_path <- file.path(export_path, paste0("fit_", row_info$model_id, ".rds"))
+  
+  fit_payload <- list(
+    model_info = row_info,
+    branch_meta = prep$meta,
     data_used = df,
     design_info = list(
       cohort_id = row_info$cohort_id,
@@ -1655,34 +1570,44 @@ for (row_idx in seq_len(nrow(model_registry))) {
     ),
     prior_settings = prior_settings,
     latency_prior_settings = latency_prior_settings,
+    prediction_years = prediction_years,
     obs_weight = obs_weight,
-    ipcw_censor_model = ipcw_obj$censor_model %||% NULL
-  )
-  
-  pred_cache <- predict_from_fit(
+    ipcw_censor_model = ipcw_obj$censor_model %||% NULL,
+    ipcw_weight_summary = weight_summary_store[[row_info$model_id]],
     fit = fit_obj,
-    df = df,
-    latency_obj = latency_obj,
-    family_id = row_info$family_id,
-    years = prediction_years,
-    force_all_susceptible = row_info$force_all_susceptible,
-    alpha0_gp = external_info$alpha0_gp
+    predictions_small = list(
+      subject_static = pred_cache$subject_static,
+      mean_yearly = fit_metrics$mean_yearly_with_km
+    ),
+    summaries = list(
+      cure_frac_summary = pred_cache$cure_frac_summary,
+      delta_summary = pred_cache$delta_summary,
+      kappa_summary = pred_cache$kappa_summary,
+      sigma_summary = pred_cache$sigma_summary,
+      yearly_metrics = fit_metrics$yearly_metrics,
+      ibs = fit_metrics$ibs,
+      looic = fit_metrics$looic,
+      elpd_loo = fit_metrics$elpd_loo,
+      p_loo = fit_metrics$p_loo,
+      waic = fit_metrics$waic,
+      elpd_waic = fit_metrics$elpd_waic,
+      p_waic = fit_metrics$p_waic,
+      ppc = fit_metrics$ppc,
+      diagnostics = fit_diag
+    ),
+    km_yearly_cohort = km_df_cohort
   )
   
-  km_df_cohort <- km_yearly_summary %>% dplyr::filter(cohort_id == row_info$cohort_id)
-  fit_metrics <- compute_fit_metrics(
-    df = df,
-    subject_yearly_df = pred_cache$subject_yearly,
-    mean_yearly_df = pred_cache$mean_yearly,
-    km_df_cohort = km_df_cohort,
-    fit = fit_obj
-  )
+  if (isTRUE(save_fit_rds_per_model)) {
+    safe_save_rds(fit_payload, fit_rds_path, overwrite_existing_exports)
+  }
   
   registry_results[[row_idx]] <- row_info %>%
     dplyr::mutate(
       fit_status = "ok",
       refit_used = fit_result$refit_used,
       fit_error = fit_result$fit_error,
+      fit_rds_path = fit_rds_path,
       n_analysis = nrow(df),
       n_transition = sum(df$event_primary == 1L),
       n_censored_primary = sum(df$event_primary == 0L),
@@ -1733,28 +1658,6 @@ for (row_idx in seq_len(nrow(model_registry))) {
       event_primary, susceptible_prob_mean, susceptible_prob_median,
       susceptible_prob_lcl, susceptible_prob_ucl, cure_prob_mean,
       cure_prob_median, cure_prob_lcl, cure_prob_ucl
-    )
-  
-  subject_yearly_store[[row_info$model_id]] <- pred_cache$subject_yearly %>%
-    dplyr::left_join(
-      pred_cache$subject_static %>% dplyr::select(subject_id, site, sex, age_base, age_group),
-      by = "subject_id"
-    ) %>%
-    dplyr::mutate(
-      model_id = row_info$model_id,
-      bundle_id = row_info$bundle_id,
-      cohort_id = row_info$cohort_id,
-      family_name = row_info$family_name,
-      latency_spec_id = row_info$latency_spec_id,
-      incidence_spec_id = row_info$incidence_spec_id,
-      latency_prior_id = row_info$latency_prior_id
-    ) %>%
-    dplyr::select(
-      model_id, bundle_id, cohort_id, family_name,
-      latency_spec_id, incidence_spec_id, latency_prior_id,
-      subject_id, site, sex, age_base, age_group,
-      year, survival_mean, survival_median, survival_lcl, survival_ucl,
-      risk_mean, risk_median, risk_lcl, risk_ucl, is_extrapolated, tail_flag
     )
   
   mean_yearly_store[[row_info$model_id]] <- fit_metrics$mean_yearly_with_km %>%
@@ -1813,13 +1716,10 @@ for (row_idx in seq_len(nrow(model_registry))) {
     )
   
   calibration_store[[row_info$model_id]] <- purrr::map_dfr(calibration_years, function(yr) {
-    risk_vec <- subject_yearly_store[[row_info$model_id]] %>%
-      dplyr::filter(year == !!yr) %>%
-      dplyr::pull(risk_mean)
-    
-    cal <- build_calibration_data(df$time_years, df$event_primary, risk_vec, yr, n_bins = 10L)
+    subj_pred_this_year <- pred_cache$subject_yearly %>% dplyr::filter(year == !!yr)
+    if (nrow(subj_pred_this_year) == 0L) return(NULL)
+    cal <- build_calibration_data(df$time_years, df$event_primary, subj_pred_this_year$risk_mean, yr, n_bins = 10L)
     if (is.null(cal)) return(NULL)
-    
     cal %>%
       dplyr::mutate(
         model_id = row_info$model_id,
@@ -1842,67 +1742,67 @@ for (row_idx in seq_len(nrow(model_registry))) {
     years = prediction_years
   )
   
+  rm(fit_obj, fit_payload, pred_cache, fit_metrics)
   gc()
 }
 
-model_registry_final <- bind_rows_or_template(registry_results, model_registry %>% dplyr::mutate(
-  fit_status = character(),
-  refit_used = logical(),
-  fit_error = character(),
-  n_analysis = integer(),
-  n_transition = integer(),
-  n_censored_primary = integer(),
-  age_center = double(),
-  age_scale_2sd = double(),
-  delta_mean = double(),
-  delta_median = double(),
-  delta_lcl = double(),
-  delta_ucl = double(),
-  kappa_mean = double(),
-  kappa_median = double(),
-  kappa_lcl = double(),
-  kappa_ucl = double(),
-  sigma_mean = double(),
-  sigma_median = double(),
-  sigma_lcl = double(),
-  sigma_ucl = double(),
-  posterior_cure_fraction_mean = double(),
-  posterior_cure_fraction_median = double(),
-  posterior_cure_fraction_lcl = double(),
-  posterior_cure_fraction_ucl = double(),
-  looic = double(),
-  elpd_loo = double(),
-  p_loo = double(),
-  waic = double(),
-  elpd_waic = double(),
-  p_waic = double(),
-  IBS = double(),
-  ppc_rmse = double(),
-  tail_fit_absdiff_10 = double(),
-  tail_fit_flag = logical()
-))
+# 🔴 Summarize: assembled fit outputs ===============================
+subject_static_template <- subject_static_template[0, , drop = FALSE]
+mean_yearly_template <- mean_yearly_template[0, , drop = FALSE]
+metrics_template <- metrics_template[0, , drop = FALSE]
+mcmc_template <- mcmc_template[0, , drop = FALSE]
+calibration_template <- calibration_template[0, , drop = FALSE]
+weight_template <- weight_template[0, , drop = FALSE]
+
+model_registry_final <- bind_rows_or_template(
+  registry_results,
+  model_registry %>% dplyr::mutate(
+    fit_status = character(),
+    refit_used = logical(),
+    fit_error = character(),
+    fit_rds_path = character(),
+    n_analysis = integer(),
+    n_transition = integer(),
+    n_censored_primary = integer(),
+    age_center = double(),
+    age_scale_2sd = double(),
+    delta_mean = double(),
+    delta_median = double(),
+    delta_lcl = double(),
+    delta_ucl = double(),
+    kappa_mean = double(),
+    kappa_median = double(),
+    kappa_lcl = double(),
+    kappa_ucl = double(),
+    sigma_mean = double(),
+    sigma_median = double(),
+    sigma_lcl = double(),
+    sigma_ucl = double(),
+    posterior_cure_fraction_mean = double(),
+    posterior_cure_fraction_median = double(),
+    posterior_cure_fraction_lcl = double(),
+    posterior_cure_fraction_ucl = double(),
+    looic = double(),
+    elpd_loo = double(),
+    p_loo = double(),
+    waic = double(),
+    elpd_waic = double(),
+    p_waic = double(),
+    IBS = double(),
+    ppc_rmse = double(),
+    tail_fit_absdiff_10 = double(),
+    tail_fit_flag = logical()
+  )
+)
 
 bayes_subject_static <- bind_rows_or_template(subject_static_store, subject_static_template)
-bayes_subject_predictions <- bind_rows_or_template(subject_yearly_store, subject_yearly_template)
 bayes_yearly_predictions <- bind_rows_or_template(mean_yearly_store, mean_yearly_template)
 bayes_metrics <- bind_rows_or_template(metrics_store, metrics_template)
 bayes_mcmc_diagnostics <- bind_rows_or_template(mcmc_store, mcmc_template)
 bayes_calibration <- bind_rows_or_template(calibration_store, calibration_template)
-bayes_weight_summary <- bind_rows_or_template(
-  weight_summary_store,
-  tibble::tibble(
-    model_id = character(),
-    mean_weight = double(),
-    sd_weight = double(),
-    min_weight = double(),
-    max_weight = double(),
-    p01_weight = double(),
-    p99_weight = double(),
-    remission_events = integer()
-  )
-)
+bayes_weight_summary <- bind_rows_or_template(weight_summary_store, weight_template)
 
-# 🔴 Run: remission competing-risk summaries ===============================
+# 🔴 Run: competing-risk supplementary analysis ===============================
 if (isTRUE(run_remission_competing_risk)) {
   remission_cr_results <- purrr::map(c("merged", "PNU"), ~ run_competing_risk_summary(master_data, .x, prediction_years))
   names(remission_cr_results) <- c("merged", "PNU")
@@ -1914,8 +1814,7 @@ if (isTRUE(run_remission_competing_risk)) {
   remission_crr_coef <- tibble::tibble()
 }
 
-# 🔴 Compare: prior utility and posterior contrasts ===============================
-## 🟠 Compare: prior utility matrix ===============================
+# 🔴 Compare: prior utility evidence matrix ===============================
 selected_year_summary <- bayes_yearly_predictions %>%
   dplyr::filter(year %in% selected_contrast_years) %>%
   dplyr::mutate(CrI_width_meanRisk = meanRisk_ucl - meanRisk_lcl) %>%
@@ -1932,15 +1831,9 @@ utility_base <- model_registry_final %>%
     model_id, bundle_id, cohort_id, family_name, latency_spec_id,
     looic, waic, ppc_rmse, posterior_cure_fraction_mean,
     delta_mean, kappa_mean
-  )
-
-utility_base_selected <- utility_base %>%
+  ) %>%
   tidyr::crossing(year = selected_contrast_years) %>%
   dplyr::left_join(selected_year_summary, by = c("model_id", "year"))
-
-get_model_key <- function(bundle_id, cohort_id, family_name, latency_spec_id) {
-  paste(bundle_id, cohort_id, latency_spec_id, family_name, sep = "__")
-}
 
 extract_utility_row <- function(model_id, utility_df, year) {
   utility_df %>% dplyr::filter(model_id == !!model_id, year == !!year)
@@ -1996,11 +1889,11 @@ bayes_prior_utility <- purrr::pmap_dfr(
     year = selected_contrast_years
   ),
   function(cohort_id, latency_spec_id, family_name, year) {
-    compute_utility_pairs(cohort_id, family_name, latency_spec_id, year, utility_base_selected)
+    compute_utility_pairs(cohort_id, family_name, latency_spec_id, year, utility_base)
   }
 )
 
-## 🟠 Compare: posterior contrasts ===============================
+# 🔴 Compare: posterior contrasts across fits ===============================
 contrast_rows <- list()
 
 for (family_name in family_lookup$family_name) {
@@ -2086,7 +1979,7 @@ bayes_posterior_contrasts <- bind_rows_or_template(
 ) %>%
   dplyr::relocate(model_id_1, model_id_2, .before = year)
 
-# 🔴 Export: source-of-truth files and master RDS ===============================
+# 🔴 Export: compact source-of-truth files ===============================
 analysis_spec <- tibble::tibble(
   data_path = data_path,
   export_path = export_path,
@@ -2106,7 +1999,7 @@ analysis_spec <- tibble::tibble(
   max_treedepth_refit = max_treedepth_refit,
   prediction_draws_max = prediction_draws_max,
   tail_fit_absdiff_threshold = tail_fit_absdiff_threshold,
-  prior_spec_rstan_version = "bayes_meta_informative_incidence_v_final_rstan_inline_v2",
+  prior_spec_rstan_version = "bayes_meta_informative_incidence_v_final_rstan_inline_v5",
   incidence_core_structure = "fixed informative incidence with sex + age_group (<20,20-29,30+)",
   latency_primary_structure = "continuous age_s + sex + optional age_s:sex and optional site(latency only)",
   family_set = "exponential;weibull;loglogistic;lognormal",
@@ -2114,56 +2007,46 @@ analysis_spec <- tibble::tibble(
   raw_time_unit = "days",
   remission_main_rule = "treated_as_censoring",
   remission_ic_rule = "IPCW-weighted Bayesian cure model",
-  remission_cr_rule = "Aalen-Johansen + Fine-Gray"
+  remission_cr_rule = "Aalen-Johansen + Fine-Gray",
+  subject_predictions_csv_exported = FALSE,
+  subject_predictions_rebuild_helper = "rebuild_subject_predictions_from_fit_rds(fit_rds_path)"
 )
 
 bayes_model_registry_csv <- model_registry_final %>%
   dplyr::left_join(bayes_weight_summary, by = "model_id")
 
-exported_files <- c(
+exported_csv_files <- c(
   safe_write_csv(analysis_spec, file.path(export_path, "analysis_spec_bayes.csv"), overwrite_existing_exports),
   safe_write_csv(branch_qc, file.path(export_path, "bayes_branch_qc.csv"), overwrite_existing_exports),
   safe_write_csv(km_yearly_summary, file.path(export_path, "km_yearly_summary.csv"), overwrite_existing_exports),
   safe_write_csv(bayes_model_registry_csv, file.path(export_path, "bayes_model_registry.csv"), overwrite_existing_exports),
-  safe_write_csv(bayes_subject_static, file.path(export_path, "bayes_subject_static.csv"), overwrite_existing_exports),
-  safe_write_csv(bayes_subject_predictions, file.path(export_path, "bayes_subject_predictions.csv"), overwrite_existing_exports),
   safe_write_csv(bayes_yearly_predictions, file.path(export_path, "bayes_yearly_predictions.csv"), overwrite_existing_exports),
   safe_write_csv(bayes_metrics, file.path(export_path, "bayes_metrics.csv"), overwrite_existing_exports),
   safe_write_csv(bayes_prior_utility, file.path(export_path, "bayes_prior_utility.csv"), overwrite_existing_exports),
   safe_write_csv(bayes_posterior_contrasts, file.path(export_path, "bayes_posterior_contrasts.csv"), overwrite_existing_exports),
-  safe_write_csv(bayes_mcmc_diagnostics, file.path(export_path, "bayes_mcmc_diagnostics.csv"), overwrite_existing_exports),
-  safe_write_csv(bayes_calibration, file.path(export_path, "bayes_calibration.csv"), overwrite_existing_exports),
-  safe_write_csv(remission_cr_yearly, file.path(export_path, "bayes_remission_cr_yearly.csv"), overwrite_existing_exports),
-  safe_write_csv(remission_crr_coef, file.path(export_path, "bayes_remission_crr_coef.csv"), overwrite_existing_exports)
+  safe_write_csv(bayes_mcmc_diagnostics, file.path(export_path, "bayes_mcmc_diagnostics.csv"), overwrite_existing_exports)
 )
 
-master_results <- list(
-  analysis_spec = analysis_spec,
-  branch_qc = branch_qc,
-  external_info = external_info,
-  model_registry = model_registry_final,
-  km_yearly_summary = km_yearly_summary,
-  fits = fit_store,
-  subject_static = bayes_subject_static,
-  subject_predictions = bayes_subject_predictions,
-  yearly_predictions = bayes_yearly_predictions,
-  metrics = bayes_metrics,
-  prior_utility = bayes_prior_utility,
-  posterior_contrasts = bayes_posterior_contrasts,
-  mcmc_diagnostics = bayes_mcmc_diagnostics,
-  calibration = bayes_calibration,
-  remission_competing_risk = list(
-    yearly = remission_cr_yearly,
-    finegray_coef = remission_crr_coef,
-    raw_objects = remission_cr_results
-  ),
-  weight_summary = bayes_weight_summary,
-  stan_code = stan_code
-)
+if (isTRUE(export_subject_static_csv)) {
+  exported_csv_files <- c(
+    exported_csv_files,
+    safe_write_csv(bayes_subject_static, file.path(export_path, "bayes_subject_static.csv"), overwrite_existing_exports)
+  )
+}
 
-exported_files <- c(
-  exported_files,
-  safe_save_rds(master_results, file.path(export_path, "bayes_all_fits_master.rds"), overwrite_existing_exports)
-)
+if (isTRUE(export_calibration_csv)) {
+  exported_csv_files <- c(
+    exported_csv_files,
+    safe_write_csv(bayes_calibration, file.path(export_path, "bayes_calibration.csv"), overwrite_existing_exports)
+  )
+}
 
-invisible(exported_files)
+if (isTRUE(export_remission_competing_risk_csv)) {
+  exported_csv_files <- c(
+    exported_csv_files,
+    safe_write_csv(remission_cr_yearly, file.path(export_path, "bayes_remission_cr_yearly.csv"), overwrite_existing_exports),
+    safe_write_csv(remission_crr_coef, file.path(export_path, "bayes_remission_crr_coef.csv"), overwrite_existing_exports)
+  )
+}
+
+invisible(exported_csv_files)
