@@ -1,0 +1,43 @@
+item,value
+stage7_code_version,2026-03-24_shard50_auto20_v1
+stage7_run_tag,<none>
+run_namespace,stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000
+run_root_dir,C:/Users/clair/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000
+common_dir,C:/Users/clair/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000/_common
+bootstrap_root_dir,C:/Users/clair/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000/_bootstrap_shards
+orchestrator_dir,C:/Users/clair/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000/_orchestrator
+merged_file,C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv
+stage6_screening_file,<none>
+pnu_site_label,PNU
+snu_site_label,SNU
+common_horizons_year,"1,2,3,4,5,6,7,8,9,10"
+risk_thresholds,"0.05,0.1,0.15,0.2"
+bootstrap_reps,1000
+bootstrap_reps_per_shard,20
+bootstrap_total_shards,50
+bootstrap_save_every_reps,1
+bootstrap_auto_merge_when_all_done,TRUE
+worker_claim_mode,keep_claiming
+bootstrap_run_seed,518940
+bootstrap_rng_kind,L'Ecuyer-CMRG
+keep_model_rds,FALSE
+keep_individual_fit_rds,TRUE
+reuse_wrapped_fit_rds,TRUE
+reuse_wrapped_main_cache,TRUE
+force_refit_nonconverged_main,TRUE
+fit_time_limit_sec,240
+prediction_time_limit_sec,120
+smcure_emmax,200
+smcure_eps,1e-07
+optim_maxit,800
+main_event_code,1
+main_censor_codes,"0,2"
+epsilon_time,1e-08
+epsilon_prob,1e-10
+epsilon_loglik,1e-12
+merged_file_stamp,C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv|26607|2026-03-24 12:06:57.395016
+stage6_screening_stamp,NA
+base_signature,"epsilon_loglik=1e-12|epsilon_prob=1e-10|epsilon_time=1e-08|fit_time_limit_sec=240|main_censor_codes=0,2|main_event_code=1|merged_file=C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv|merged_file_stamp=C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv|26607|2026-03-24 12:06:57.395016|optim_maxit=800|pnu_site_label=PNU|prediction_time_limit_sec=120|smcure_emmax=200|smcure_eps=1e-07|snu_site_label=SNU|stage6_screening_stamp=<NA>|stage7_code_version=2026-03-24_shard50_auto20_v1"
+main_signature,"base_signature=epsilon_loglik=1e-12|epsilon_prob=1e-10|epsilon_time=1e-08|fit_time_limit_sec=240|main_censor_codes=0,2|main_event_code=1|merged_file=C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv|merged_file_stamp=C:/Users/clair/Dropbox/Data Analysis/MERGED_dataset3_pnu_snu.csv|26607|2026-03-24 12:06:57.395016|optim_maxit=800|pnu_site_label=PNU|prediction_time_limit_sec=120|smcure_emmax=200|smcure_eps=1e-07|snu_site_label=SNU|stage6_screening_stamp=<NA>|stage7_code_version=2026-03-24_shard50_auto20_v1|common_horizons_year=1,2,3,4,5,6,7,8,9,10|design_registry_signature=000069cd0000f983|model_registry_signature=0000b0b700004c16|risk_thresholds=0.05,0.1,0.15,0.2"
+run_created_at,2026-03-24 21:48:44.466683
+run_initializer_session,20260324214843.503909_pid43248_YIDO

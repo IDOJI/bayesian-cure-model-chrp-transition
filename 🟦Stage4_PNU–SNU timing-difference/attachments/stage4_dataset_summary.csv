@@ -1,0 +1,4 @@
+dataset,n_rows,n_unique_person_id,n_transition,n_remission,n_right_censoring,n_main_censoring,person_time_years,median_followup_years,max_followup_years,stage4_role,n_primary_supported_horizons,source_description,site_values
+PNU,54,54,12,13,29,42,54.71321013004789,1.111567419575633,2.6694045174537986,separate_cohort_descriptive_and_contrast,1,derived_from_merged:PNU,PNU
+SNU,208,208,38,0,170,170,735.7891854893907,3.798767967145791,10.105407255304586,separate_cohort_descriptive_and_contrast,2,derived_from_merged:SNU,SNU
+merged,262,262,50,13,199,212,790.5023956194384,2.0739219712525667,10.105407255304586,site_free_descriptive_plus_site_adjusted_contrast,2,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧0.생존 데이터 처리와 요약/🟦2.데이터3 처리/attachments/MERGED_dataset3_pnu_snu.csv,PNU|SNU

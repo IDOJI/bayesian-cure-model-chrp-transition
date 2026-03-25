@@ -1,0 +1,4 @@
+dataset,center_mean_age_exact_entry,sd_age_exact_entry,scale_rule
+PNU,24.869387955962548,5.251524234348547,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))
+SNU,21.21065221084029,4.131244157487493,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))
+merged,21.964742784262434,4.618985698156824,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))

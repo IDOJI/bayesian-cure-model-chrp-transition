@@ -1,0 +1,13 @@
+model_id,model_class,model_block,model_family,latency_type,fit_engine,is_cure_model,needs_fit,matched_nocure_model_id
+benchmark_km,km_benchmark,benchmark,km,benchmark,survfit,FALSE,FALSE,NA
+nocure_exp,no_cure,no_cure_anchor,exp,parametric_aft,custom_mle,FALSE,TRUE,NA
+nocure_weibull,no_cure,no_cure_anchor,weibull,parametric_aft,custom_mle,FALSE,TRUE,NA
+nocure_lnorm,no_cure,no_cure_anchor,lnorm,parametric_aft,custom_mle,FALSE,TRUE,NA
+nocure_llogis,no_cure,no_cure_anchor,llogis,parametric_aft,custom_mle,FALSE,TRUE,NA
+nocure_coxph,no_cure,no_cure_anchor,coxph,cox_ph,survival::coxph,FALSE,TRUE,NA
+cure_exp,parametric_mixture_cure,frequentist_cure_main,exp,parametric_aft,custom_mle,TRUE,TRUE,nocure_exp
+cure_weibull,parametric_mixture_cure,frequentist_cure_main,weibull,parametric_aft,custom_mle,TRUE,TRUE,nocure_weibull
+cure_lnorm,parametric_mixture_cure,frequentist_cure_main,lnorm,parametric_aft,custom_mle,TRUE,TRUE,nocure_lnorm
+cure_llogis,parametric_mixture_cure,frequentist_cure_main,llogis,parametric_aft,custom_mle,TRUE,TRUE,nocure_llogis
+cure_coxlatency,semiparametric_cox_latency_cure,frequentist_cure_main,coxph,cox_ph,smcure,TRUE,TRUE,nocure_coxph
+cure_aft_sensitivity,aft_latency_cure_sensitivity,frequentist_cure_sensitivity,aft,aft_semiparametric,smcure,TRUE,TRUE,NA

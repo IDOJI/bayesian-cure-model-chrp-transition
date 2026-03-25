@@ -1,0 +1,14 @@
+validation_group,check_name,status,n_problem_rows,check_note
+cross_dataset_consistency,merged_site_consistency_horizon,pass,0,Merged site_adjusted site-specific horizon summaries must match the corresponding single-site overall summaries.
+cross_dataset_consistency,merged_site_consistency_reverse_km,pass,0,Merged site-specific reverse-KM summaries must match the corresponding single-site overall reverse-KM summaries.
+cross_dataset_consistency,site_support_label_alignment,pass,0,Merged site panels must inherit support-tier labels from the corresponding single-site cohort in both horizon summaries and numbers-at-risk tables.
+internal_consistency,composition_totals,pass,0,Composition proportions must sum to 1 at every dataset/subgroup/view/time combination.
+internal_consistency,horizon_monotonicity,pass,0,Risk-set and eligibility counts must decline with horizon; cumulative event/censoring counts must not decrease.
+internal_consistency,numbers_at_risk_monotonic,pass,0,Numbers-at-risk must be monotone non-increasing within each dataset/subgroup series.
+internal_consistency,reporting_preference_rule,pass,0,Preferred-reporting fields must mark merged overall/sex site_adjusted completeness as primary and site_free as sensitivity only.
+internal_consistency,required_stage2_views,pass,0,Every analysis_structure must include both transition_only and remission_sensitive summaries.
+internal_consistency,site_contribution_alignment,pass,0,Merged site-contribution totals must reproduce eligible_n in the merged overall/sex completeness summaries.
+internal_consistency,site_dominance_warning_gate,pass,0,"Merged site-dominance warnings must follow the late-horizon gate: single_site_only always warns; single_site_dominant warns only from year 3 onward and, when configured, outside primary-supported horizons."
+raw_reconstruction,group_size_alignment_to_raw,pass,0,"Raw group sizes must match Stage 2 n_total fields, time-0 numbers at risk, and reverse-KM record counts."
+raw_reconstruction,numbers_at_risk_reconstruction_from_raw,pass,0,"Numbers-at-risk values at 0,1,...,10 years must be reproducible directly from the raw Stage 2 group data."
+raw_reconstruction,site_admin_lookup_reconstruction,pass,0,Site-level and merged administrative end dates must be reproducible directly from the merged Stage 2 raw data.

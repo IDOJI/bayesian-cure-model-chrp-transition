@@ -1,0 +1,8 @@
+dataset,formula_variant,model_id,failure_type,n_failure_rows,n_replicates,example_rep_ids
+PNU,interaction,cure_coxlatency,fit_and_prediction_failed,113,113,3|10|11|19|33|45|68|70|81|105|112|114|126|135|153|161|165|167|173|177
+PNU,interaction,cure_aft_sensitivity,fit_and_prediction_failed,63,63,8|10|15|21|25|37|42|57|78|84|109|116|138|190|203|210|214|238|261|280
+SNU,interaction,cure_aft_sensitivity,fit_and_prediction_failed,25,25,57|112|156|157|186|187|266|328|421|463|522|532|558|563|570|588|628|657|726|776
+PNU,base,cure_aft_sensitivity,fit_and_prediction_failed,16,16,22|195|238|250|354|397|417|510|526|573|628|658|673|787|818|968
+PNU,base,cure_coxlatency,fit_and_prediction_failed,12,12,161|226|489|507|584|635|662|669|743|762|955|997
+merged,interaction_siteadjusted,cure_aft_sensitivity,fit_and_prediction_failed,10,10,110|289|318|440|598|623|755|763|799|971
+merged,interaction_sitefree,cure_aft_sensitivity,fit_and_prediction_failed,10,10,226|270|300|481|514|641|763|767|938|971

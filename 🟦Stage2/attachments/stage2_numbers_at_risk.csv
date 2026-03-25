@@ -1,0 +1,122 @@
+dataset,subgroup_kind,subgroup_value,group_id,panel_label,time_year,n_risk,n_total,n_risk_fraction,interpretation_tier,support_tier_standard,support_display_group,support_display_label,risk_table_label
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,0,54,54,1,baseline,baseline,baseline,Baseline,54
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,1,28,54,0.5185185185185185,primary-supported,primary_supported,primary_supported,Primary supported,28
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,2,1,54,0.018518518518518517,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,1
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,3,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,4,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,5,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,6,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,7,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,8,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,9,0,54,0,projection,projection,projection,Projection,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,10,0,54,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,0,26,26,1,baseline,baseline,baseline,Baseline,26
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,1,11,26,0.4230769230769231,primary-supported,primary_supported,primary_supported,Primary supported,11
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,2,0,26,0,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,3,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,4,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,5,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,6,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,7,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,8,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,9,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Female,PNU__sex__Female,PNU | Sex = Female,10,0,26,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,0,28,28,1,baseline,baseline,baseline,Baseline,28
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,1,17,28,0.6071428571428571,primary-supported,primary_supported,primary_supported,Primary supported,17
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,2,1,28,0.03571428571428571,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,1
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,3,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,4,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,5,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,6,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,7,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,8,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,9,0,28,0,projection,projection,projection,Projection,0
+PNU,sex,Male,PNU__sex__Male,PNU | Sex = Male,10,0,28,0,projection,projection,projection,Projection,0
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,0,208,208,1,baseline,baseline,baseline,Baseline,208
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,1,163,208,0.7836538461538461,primary-supported,primary_supported,primary_supported,Primary supported,163
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,2,134,208,0.6442307692307693,primary-supported,primary_supported,primary_supported,Primary supported,134
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,3,117,208,0.5625,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,117
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,4,103,208,0.4951923076923077,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,103
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,5,64,208,0.3076923076923077,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,64
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,6,30,208,0.14423076923076922,projection,projection,projection,Projection,30
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,7,22,208,0.10576923076923077,projection,projection,projection,Projection,22
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,8,16,208,0.07692307692307693,projection,projection,projection,Projection,16
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,9,3,208,0.014423076923076924,projection,projection,projection,Projection,3
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,10,1,208,0.004807692307692308,projection,projection,projection,Projection,1
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,0,66,66,1,baseline,baseline,baseline,Baseline,66
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,1,53,66,0.803030303030303,primary-supported,primary_supported,primary_supported,Primary supported,53
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,2,43,66,0.6515151515151515,primary-supported,primary_supported,primary_supported,Primary supported,43
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,3,35,66,0.5303030303030303,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,35
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,4,30,66,0.45454545454545453,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,30
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,5,19,66,0.2878787878787879,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,19
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,6,12,66,0.18181818181818182,projection,projection,projection,Projection,12
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,7,10,66,0.15151515151515152,projection,projection,projection,Projection,10
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,8,8,66,0.12121212121212122,projection,projection,projection,Projection,8
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,9,1,66,0.015151515151515152,projection,projection,projection,Projection,1
+SNU,sex,Female,SNU__sex__Female,SNU | Sex = Female,10,0,66,0,projection,projection,projection,Projection,0
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,0,142,142,1,baseline,baseline,baseline,Baseline,142
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,1,110,142,0.7746478873239436,primary-supported,primary_supported,primary_supported,Primary supported,110
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,2,91,142,0.6408450704225352,primary-supported,primary_supported,primary_supported,Primary supported,91
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,3,82,142,0.5774647887323944,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,82
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,4,73,142,0.5140845070422535,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,73
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,5,45,142,0.31690140845070425,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,45
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,6,18,142,0.1267605633802817,projection,projection,projection,Projection,18
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,7,12,142,0.08450704225352113,projection,projection,projection,Projection,12
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,8,8,142,0.056338028169014086,projection,projection,projection,Projection,8
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,9,2,142,0.014084507042253521,projection,projection,projection,Projection,2
+SNU,sex,Male,SNU__sex__Male,SNU | Sex = Male,10,1,142,0.007042253521126761,projection,projection,projection,Projection,1
+merged,overall,Overall,merged__overall__Overall,merged | Overall,0,262,262,1,baseline,baseline,baseline,Baseline,262
+merged,overall,Overall,merged__overall__Overall,merged | Overall,1,191,262,0.7290076335877863,primary-supported,primary_supported,primary_supported,Primary supported,191
+merged,overall,Overall,merged__overall__Overall,merged | Overall,2,135,262,0.5152671755725191,primary-supported,primary_supported,primary_supported,Primary supported,135
+merged,overall,Overall,merged__overall__Overall,merged | Overall,3,117,262,0.44656488549618323,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,117
+merged,overall,Overall,merged__overall__Overall,merged | Overall,4,103,262,0.3931297709923664,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,103
+merged,overall,Overall,merged__overall__Overall,merged | Overall,5,64,262,0.24427480916030533,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,64
+merged,overall,Overall,merged__overall__Overall,merged | Overall,6,30,262,0.11450381679389313,projection,projection,projection,Projection,30
+merged,overall,Overall,merged__overall__Overall,merged | Overall,7,22,262,0.08396946564885496,projection,projection,projection,Projection,22
+merged,overall,Overall,merged__overall__Overall,merged | Overall,8,16,262,0.061068702290076333,projection,projection,projection,Projection,16
+merged,overall,Overall,merged__overall__Overall,merged | Overall,9,3,262,0.011450381679389313,projection,projection,projection,Projection,3
+merged,overall,Overall,merged__overall__Overall,merged | Overall,10,1,262,0.003816793893129771,projection,projection,projection,Projection,1
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,0,92,92,1,baseline,baseline,baseline,Baseline,92
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,1,64,92,0.6956521739130435,primary-supported,primary_supported,primary_supported,Primary supported,64
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,2,43,92,0.4673913043478261,primary-supported,primary_supported,primary_supported,Primary supported,43
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,3,35,92,0.3804347826086957,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,35
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,4,30,92,0.32608695652173914,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,30
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,5,19,92,0.20652173913043478,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,19
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,6,12,92,0.13043478260869565,projection,projection,projection,Projection,12
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,7,10,92,0.10869565217391304,projection,projection,projection,Projection,10
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,8,8,92,0.08695652173913043,projection,projection,projection,Projection,8
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,9,1,92,0.010869565217391304,projection,projection,projection,Projection,1
+merged,sex,Female,merged__sex__Female,merged | Sex = Female,10,0,92,0,projection,projection,projection,Projection,0
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,0,170,170,1,baseline,baseline,baseline,Baseline,170
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,1,127,170,0.7470588235294118,primary-supported,primary_supported,primary_supported,Primary supported,127
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,2,92,170,0.5411764705882353,primary-supported,primary_supported,primary_supported,Primary supported,92
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,3,82,170,0.4823529411764706,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,82
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,4,73,170,0.4294117647058823,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,73
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,5,45,170,0.2647058823529412,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,45
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,6,18,170,0.10588235294117647,projection,projection,projection,Projection,18
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,7,12,170,0.07058823529411765,projection,projection,projection,Projection,12
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,8,8,170,0.047058823529411764,projection,projection,projection,Projection,8
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,9,2,170,0.011764705882352941,projection,projection,projection,Projection,2
+merged,sex,Male,merged__sex__Male,merged | Sex = Male,10,1,170,0.0058823529411764705,projection,projection,projection,Projection,1
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,0,54,54,1,baseline,baseline,baseline,Baseline,54
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,1,28,54,0.5185185185185185,primary-supported,primary_supported,primary_supported,Primary supported,28
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,2,1,54,0.018518518518518517,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,1
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,3,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,4,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,5,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,6,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,7,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,8,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,9,0,54,0,projection,projection,projection,Projection,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,10,0,54,0,projection,projection,projection,Projection,0
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,0,208,208,1,baseline,baseline,baseline,Baseline,208
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,1,163,208,0.7836538461538461,primary-supported,primary_supported,primary_supported,Primary supported,163
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,2,134,208,0.6442307692307693,primary-supported,primary_supported,primary_supported,Primary supported,134
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,3,117,208,0.5625,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,117
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,4,103,208,0.4951923076923077,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,103
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,5,64,208,0.3076923076923077,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,64
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,6,30,208,0.14423076923076922,projection,projection,projection,Projection,30
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,7,22,208,0.10576923076923077,projection,projection,projection,Projection,22
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,8,16,208,0.07692307692307693,projection,projection,projection,Projection,16
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,9,3,208,0.014423076923076924,projection,projection,projection,Projection,3
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,10,1,208,0.004807692307692308,projection,projection,projection,Projection,1

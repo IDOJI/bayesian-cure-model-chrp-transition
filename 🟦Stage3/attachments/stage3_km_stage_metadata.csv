@@ -1,0 +1,26 @@
+metadata_group,metadata_name,metadata_value
+stage,stage_name,Stage 3 KM benchmark classifier
+stage,stage_role,Operationalize overall KM as the primary benchmark classifier and retain merged site-adjusted structure.
+stage,model_fitting_allowed,TRUE_KM_only
+documents,canonical_common_rules,2.General Model Specifications_🇬🇧ENG.md
+inputs,data_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments
+inputs,export_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage3/attachments
+inputs,stage1_bundle_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_backbone_bundle.rds
+inputs,stage1_analysis_datasets_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_analysis_datasets.rds
+inputs,stage1_manifest_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_export_manifest.csv
+inputs,stage1_dataset_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_dataset_registry.csv
+inputs,stage1_horizon_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_horizon_registry.csv
+inputs,stage1_threshold_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_threshold_registry.csv
+event,event_definition,status_num == 1
+event,main_censoring_definition,"status_num %in% c(0, 2)"
+horizons,horizon_vector,"1,2,3,4,5,6,7,8,9,10"
+thresholds,threshold_vector,"0.05,0.10,0.15,0.20"
+benchmark,primary_benchmark_rule,overall KM is the primary benchmark classifier
+benchmark,merged_site_structure_rule,merged retains both site-free overall KM and site-adjusted site-specific KM assignment
+benchmark,benchmark_output_source_of_truth,stage3_km_subject_horizon_predictions.csv
+benchmark,classification_output_file,stage3_km_benchmark_classification.csv
+subgroup,run_subgroup_km,FALSE
+subgroup,subgroup_variables,sex_label
+subgroup,subgroup_min_n,30
+outputs,stage1_created_at,2026-03-22 20:36:09.631347
+outputs,stage1_common_rule_file,2.General Model Specifications_🇬🇧ENG.md

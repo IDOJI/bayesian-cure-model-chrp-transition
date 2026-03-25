@@ -1,0 +1,44 @@
+metadata_group,metadata_name,metadata_value
+stage,stage_name,Stage 2 follow-up maturity
+stage,stage_role,Describe follow-up maturity before any cure claim
+stage,model_fitting_allowed,FALSE
+stage,patch_level,patched_user_specified_paths_preferred_site_adjusted_reporting_v7
+inputs,data_path_resolved,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments
+inputs,data_path_configuration_rule,Use the user-specified data_path directly; do not auto-resolve from project root or legacy paths.
+inputs,stage1_analysis_datasets_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_analysis_datasets.rds
+inputs,stage1_backbone_bundle_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_backbone_bundle.rds
+inputs,stage1_scaling_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_scaling_registry.csv
+inputs,stage1_horizon_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_horizon_registry.csv
+inputs,stage1_threshold_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_threshold_registry.csv
+inputs,stage1_metadata_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_metadata_registry.csv
+inputs,stage1_dataset_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_dataset_registry.csv
+time,analysis_time_variable,days_followup / time_year
+time,horizon_vector_year,"1,2,3,4,5,6,7,8,9,10"
+time,plot_grid_year,"0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.25,3.5,3.75,4,4.25,4.5,4.75,5,5.25,5.5,5.75,6,6.25,6.5,6.75,7,7.25,7.5,7.75,8,8.25,8.5,8.75,9,9.25,9.5,9.75,10"
+time,threshold_vector_from_stage1,"0.05,0.10,0.15,0.20"
+summaries,main_transition_only_rule,"transition_only = status_num == 1 as event; status_num %in% c(0,2) as censoring"
+summaries,remission_sensitive_rule,"remission_sensitive = status_num %in% c(1,2) as informative terminal outcomes; status_num == 0 as censoring"
+summaries,reverse_km_note,Reverse KM is descriptive of follow-up maturity and should not be over-interpreted as a direct follow-up-rate estimator.
+summaries,followup_completeness_note,"percentage_method, CCI, and SPT are retained as raw maturity indicators; plotting masks horizons with zero eligible subjects or zero risk set."
+summaries,analysis_structure_note,Merged overall and merged sex summaries retain both site_free and site_adjusted completeness structures; merged site-stratified summaries use site_adjusted completeness.
+summaries,preferred_reporting_rule,"For merged overall and merged sex completeness outputs, site_adjusted is the preferred reporting view; site_free is retained only as sensitivity."
+summaries,horizon_summary_scope_note,"stage2_followup_horizon_summary.csv contains horizon-level metrics plus merged site-contribution descriptors, late-horizon site-dominance warning fields, plot-masking flags, and explicit preferred_for_reporting fields."
+summaries,completeness_plot_source_note,stage2_followup_completeness_plot_data.csv is the explicit source-of-truth for the completeness plot and is derived directly from stage2_followup_horizon_summary.csv.
+merged,site_specific_admin_end_date_sites,PNU|SNU
+merged,merged_global_admin_end_date,2024-03-12
+merged,merged_completeness_rule,Use site-specific administrative end date for merged site_adjusted completeness; use pooled merged administrative end date for merged site_free completeness.
+merged,site_dominance_rule,"Describe site composition for all merged overall/sex horizons, but escalate warnings only when one site fully remains eligible or when one site exceeds 80% of eligible subjects at horizons >= 3 years outside primary-supported support tiers."
+merged,site_dominance_primary_supported_exemption,TRUE
+plots,numbers_at_risk_plot_note,Numbers-at-risk page uses table-like tiles; fill encodes simplified horizon-support groups and avoids the prior floating-text layout.
+plots,completeness_plot_masking_rule,Mask completeness plot points when eligible_n <= 0 or risk_set_n <= 0; keep sparse points visible with caution thresholds risk_set_n < 10 and risk_set_fraction < 0.10.
+plots,completeness_plot_reporting_note,"For merged overall/sex panels, site_adjusted is the preferred reporting view and site_free is retained as sensitivity."
+plots,support_display_group_note,support_display_group collapses secondary and sensitivity horizons for display only; merged site panels inherit support tiers from the matched single-site cohort when available.
+plots,main_plot_panels,PNU | Overall | SNU | Overall | merged | Overall | merged | Site = PNU | merged | Site = SNU
+plots,sex_plot_panels,PNU | Sex = Female | PNU | Sex = Male | SNU | Sex = Female | SNU | Sex = Male | merged | Sex = Female | merged | Sex = Male
+validation,validation_log_note,Write stage2_validation_summary.csv and stage2_validation_issue_rows.csv before any failure stop so audit traces remain inspectable.
+validation,quality_flag_note,"stage2_quality_flags.csv centralizes non-fatal sparse-tail, masking, reverse-KM CI, and late-horizon merged site-dominance cautions after the primary-supported exemption gate is applied."
+validation,raw_reconstruction_note,"Validation now includes direct raw-data reconstructions of group sizes, numbers at risk, merged site administrative end dates, and preferred-reporting flags in addition to internal cross-output consistency checks."
+validation,sex_plot_exported,TRUE
+outputs,export_path_resolved,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage2/attachments
+outputs,export_path_configuration_rule,Use the user-specified export_path directly; do not auto-resolve from project root or legacy paths.
+outputs,threshold_vector_loaded_from_stage1,"0.05,0.10,0.15,0.20"

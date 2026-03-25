@@ -1,0 +1,4 @@
+dataset,variable,scaled_variable,center_mean,scale_sd,scale_two_sd,scaling_rule
+PNU,age_exact_entry,age_s,24.86938795596255,5.251524234348547,10.503048468697093,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))
+SNU,age_exact_entry,age_s,21.210652210840287,4.131244157487492,8.262488314974984,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))
+merged,age_exact_entry,age_s,21.964742784262434,4.618985698156823,9.237971396313647,(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))
