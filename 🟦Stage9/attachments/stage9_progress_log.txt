@@ -1,0 +1,24 @@
+[2026-03-24 20:05:40] [INFO] Stage 9 started. 
+[2026-03-24 20:05:40] [INFO] Stage 1 backbone loaded. Datasets=PNU, SNU, merged; thresholds=0.05, 0.10, 0.15, 0.20 
+[2026-03-24 20:05:41] [INFO] Building benchmark sensitivity outputs for dataset=PNU 
+[2026-03-24 20:05:41] [INFO] Building benchmark sensitivity outputs for dataset=SNU 
+[2026-03-24 20:05:41] [INFO] Building benchmark sensitivity outputs for dataset=merged 
+[2026-03-24 20:05:42] [INFO] Cause-specific mirror fitting: dataset=PNU, formula_id=PNU__base 
+[2026-03-24 20:05:42] [INFO] Cause-specific mirror fitting: dataset=PNU, formula_id=PNU__interaction 
+[2026-03-24 20:05:42] [INFO] Cause-specific mirror fitting: dataset=SNU, formula_id=SNU__base 
+[2026-03-24 20:05:42] [WARN] Remission Cox fit unavailable for dataset=SNU, formula_id=SNU__base :: too_few_remission_events. Transition CIF will be generated with remission hazard fixed at zero. 
+[2026-03-24 20:05:42] [INFO] Cause-specific mirror fitting: dataset=SNU, formula_id=SNU__interaction 
+[2026-03-24 20:05:42] [WARN] Remission Cox fit unavailable for dataset=SNU, formula_id=SNU__interaction :: too_few_remission_events. Transition CIF will be generated with remission hazard fixed at zero. 
+[2026-03-24 20:05:43] [INFO] Cause-specific mirror fitting: dataset=merged, formula_id=merged__base 
+[2026-03-24 20:05:43] [INFO] Cause-specific mirror fitting: dataset=merged, formula_id=merged__interaction 
+[2026-03-24 20:05:44] [INFO] Cause-specific mirror fitting: dataset=merged, formula_id=merged__site_added 
+[2026-03-24 20:05:45] [INFO] Cause-specific mirror fitting: dataset=merged, formula_id=merged__site_interaction 
+[2026-03-24 20:05:46] [INFO] Fine-Gray fitting: dataset=PNU, formula_id=PNU__base 
+[2026-03-24 20:05:46] [INFO] Fine-Gray fitting: dataset=PNU, formula_id=PNU__interaction 
+[2026-03-24 20:05:46] [INFO] Fine-Gray fitting: dataset=SNU, formula_id=SNU__base 
+[2026-03-24 20:05:46] [INFO] Fine-Gray fitting: dataset=SNU, formula_id=SNU__interaction 
+[2026-03-24 20:05:47] [INFO] Fine-Gray fitting: dataset=merged, formula_id=merged__base 
+[2026-03-24 20:05:47] [INFO] Fine-Gray fitting: dataset=merged, formula_id=merged__interaction 
+[2026-03-24 20:05:49] [INFO] Fine-Gray fitting: dataset=merged, formula_id=merged__site_added 
+[2026-03-24 20:05:50] [INFO] Fine-Gray fitting: dataset=merged, formula_id=merged__site_interaction 
+[2026-03-24 20:06:01] [INFO] Stage 9 completed in 19.4 sec. 

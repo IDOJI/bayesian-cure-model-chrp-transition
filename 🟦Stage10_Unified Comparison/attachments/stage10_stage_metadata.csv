@@ -1,0 +1,20 @@
+metadata_group,metadata_name,metadata_value
+stage,stage_name,Stage 10 unified comparison engine
+stage,stage_role,"Combine KM benchmark, no-cure, frequentist cure, and Bayesian cure outputs on one common comparison grid."
+stage,allow_partial_stage10_build,TRUE
+stage,stage6_optional_join,absent_or_not_joined
+paths,data_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments
+paths,stage3_export_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage3/attachments
+paths,stage5_export_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage5_non-cure block/attachments
+paths,stage7_export_path,/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000
+paths,stage8_export_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage8_베이지안 방법/attachments
+paths,export_path,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage10_Unified Comparison/attachments
+inputs,stage1_analysis_datasets_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_analysis_datasets.rds
+inputs,stage1_formula_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_formula_registry.csv
+inputs,stage1_horizon_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_horizon_registry.csv
+inputs,stage1_threshold_registry_file,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage1/attachments/stage1_threshold_registry.csv
+comparison,common_horizon_vector,"1,2,3,4,5,6,7,8,9,10"
+comparison,comparison_threshold_vector,"0.05,0.10,0.15,0.20"
+comparison,primary_output_source_of_truth,stage10_master_comparison_long.csv
+comparison,plot_pdf_file,stage10_summary_plots.pdf
+notes,main_scientific_priority,Time-wise false-positive rate comparison and time-wise risk probability comparison remain the primary Stage 10 tables.

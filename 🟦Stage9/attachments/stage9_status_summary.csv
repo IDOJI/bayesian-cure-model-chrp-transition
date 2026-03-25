@@ -1,0 +1,8 @@
+summary_level,dataset,group_variable,group_value,n_subjects,n_status_0_right_censor,n_status_1_transition,n_status_2_remission,prop_status_0_right_censor,prop_status_1_transition,prop_status_2_remission,median_followup_years,max_followup_years,note
+dataset,PNU,dataset,PNU,54,29,12,13,0.5370370370370371,0.2222222222222222,0.24074074074074073,1.111567419575633,2.6694045174537986,Right censoring and remission separated explicitly.
+dataset_by_site,PNU,site,PNU,54,29,12,13,0.5370370370370371,0.2222222222222222,0.24074074074074073,1.111567419575633,2.6694045174537986,Site-specific status composition retained for remission sensitivity.
+dataset,SNU,dataset,SNU,208,170,38,0,0.8173076923076923,0.18269230769230768,0,3.798767967145791,10.105407255304586,Remission is structurally absent or near-absent if encoded as 2.
+dataset_by_site,SNU,site,SNU,208,170,38,0,0.8173076923076923,0.18269230769230768,0,3.798767967145791,10.105407255304586,Site-specific status composition retained for remission sensitivity.
+dataset,merged,dataset,merged,262,199,50,13,0.7595419847328244,0.19083969465648856,0.04961832061068702,2.0739219712525667,10.105407255304586,Merged cohort retains original site-specific status patterns.
+dataset_by_site,merged,site,PNU,54,29,12,13,0.5370370370370371,0.2222222222222222,0.24074074074074073,1.111567419575633,2.6694045174537986,Site-specific status composition retained for remission sensitivity.
+dataset_by_site,merged,site,SNU,208,170,38,0,0.8173076923076923,0.18269230769230768,0,3.798767967145791,10.105407255304586,Site-specific status composition retained for remission sensitivity.

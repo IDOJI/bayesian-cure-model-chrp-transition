@@ -1,0 +1,6 @@
+source_stage,configured_path,path_exists,loaded_primary_output,stage_requirement
+Stage 3,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage3/attachments,TRUE,TRUE,required
+Stage 5,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage5_non-cure block/attachments,TRUE,TRUE,required
+Stage 7,/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/STAGE7/stage7_run__2026-03-24_shard50_auto20_v1__00009fe20000,TRUE,TRUE,optional
+Stage 8,/Volumes/ObsidianVault/Obsidian/☔️Papers_Writing(논문 쓰기)/📙Currently working/⬛조현병 베이지안 생존분석/🟧1.데이터 분석 New/🟦Stage8_베이지안 방법/attachments,TRUE,TRUE,optional
+Stage 9,NA,FALSE,FALSE,optional
