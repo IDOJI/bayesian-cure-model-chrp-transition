@@ -1,4 +1,0 @@
-dataset,n_rows,n_unique_person_id,n_status1_transition,n_status2_remission,n_status0_right_censoring,n_main_censoring_0_or_2,person_time_days,person_time_years,median_followup_days,median_followup_years,max_followup_days,max_followup_years
-PNU,54,54,12,13,29,42,19984,54.71321013004789,406,1.111567419575633,975,2.6694045174537986
-SNU,208,208,38,0,170,170,268747,735.7891854893907,1387.5,3.798767967145791,3691,10.105407255304586
-merged,262,262,50,13,199,212,288731,790.5023956194384,757.5,2.0739219712525667,3691,10.105407255304586

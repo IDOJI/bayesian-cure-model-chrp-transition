@@ -1,5 +1,0 @@
-threshold_id,threshold,threshold_label,positive_rule,applies_to,editable_in_script_config
-threshold_1,0.05,5%,Classify as high risk when predicted risk >= threshold,all_datasets_all_model_classes_all_horizons,TRUE
-threshold_2,0.1,10%,Classify as high risk when predicted risk >= threshold,all_datasets_all_model_classes_all_horizons,TRUE
-threshold_3,0.15,15%,Classify as high risk when predicted risk >= threshold,all_datasets_all_model_classes_all_horizons,TRUE
-threshold_4,0.2,20%,Classify as high risk when predicted risk >= threshold,all_datasets_all_model_classes_all_horizons,TRUE

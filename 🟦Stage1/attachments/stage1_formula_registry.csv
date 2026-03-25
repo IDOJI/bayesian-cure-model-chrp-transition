@@ -1,9 +1,0 @@
-dataset,formula_id,formula_name,formula_label,formula_rhs,formula_full,uses_site,uses_age_sex_interaction,site_branch,interaction_branch
-PNU,PNU__base,base,Base,age_s + sex_num,~ age_s + sex_num,FALSE,FALSE,site_free,no_age_sex_interaction
-PNU,PNU__interaction,interaction,Interaction,age_s + sex_num + age_s:sex_num,~ age_s + sex_num + age_s:sex_num,FALSE,TRUE,site_free,age_sex_interaction
-SNU,SNU__base,base,Base,age_s + sex_num,~ age_s + sex_num,FALSE,FALSE,site_free,no_age_sex_interaction
-SNU,SNU__interaction,interaction,Interaction,age_s + sex_num + age_s:sex_num,~ age_s + sex_num + age_s:sex_num,FALSE,TRUE,site_free,age_sex_interaction
-merged,merged__base,base,Base,age_s + sex_num,~ age_s + sex_num,FALSE,FALSE,site_free,no_age_sex_interaction
-merged,merged__interaction,interaction,Interaction,age_s + sex_num + age_s:sex_num,~ age_s + sex_num + age_s:sex_num,FALSE,TRUE,site_free,age_sex_interaction
-merged,merged__site_added,site_added,Site-added,age_s + sex_num + site,~ age_s + sex_num + site,TRUE,FALSE,site_adjusted,no_age_sex_interaction
-merged,merged__site_interaction,site_interaction,Site + interaction,age_s + sex_num + age_s:sex_num + site,~ age_s + sex_num + age_s:sex_num + site,TRUE,TRUE,site_adjusted,age_sex_interaction
