@@ -1,9 +1,0 @@
-dataset,formula_variant,incidence_rhs,latency_rhs,site_branch,interaction_branch,design_id
-PNU,base,age_s + sex_num,age_s + sex_num,site_free,no_age_sex_interaction,PNU__base
-PNU,interaction,age_s + sex_num + age_s:sex_num,age_s + sex_num + age_s:sex_num,site_free,age_sex_interaction,PNU__interaction
-SNU,base,age_s + sex_num,age_s + sex_num,site_free,no_age_sex_interaction,SNU__base
-SNU,interaction,age_s + sex_num + age_s:sex_num,age_s + sex_num + age_s:sex_num,site_free,age_sex_interaction,SNU__interaction
-merged,base_sitefree,age_s + sex_num,age_s + sex_num,site_free,no_age_sex_interaction,merged__base_sitefree
-merged,base_siteadjusted,age_s + sex_num,age_s + sex_num + site_snu,site_adjusted,no_age_sex_interaction,merged__base_siteadjusted
-merged,interaction_sitefree,age_s + sex_num + age_s:sex_num,age_s + sex_num + age_s:sex_num,site_free,age_sex_interaction,merged__interaction_sitefree
-merged,interaction_siteadjusted,age_s + sex_num + age_s:sex_num,age_s + sex_num + age_s:sex_num + site_snu,site_adjusted,age_sex_interaction,merged__interaction_siteadjusted
