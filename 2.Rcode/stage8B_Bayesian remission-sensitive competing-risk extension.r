@@ -3193,76 +3193,59 @@ ppc_summary <- apply_prior_tail_sensitive(ppc_summary, has_threshold = FALSE)
 uncured_supporting_decomposition <- apply_prior_tail_sensitive(uncured_supporting_decomposition, has_threshold = FALSE)
 
 # 🔴 Compare: Stage 8B against Stage 8A and compute horizon-level performance ===============================
-stage8a_cohort_tbl <- tibble::as_tibble(stage8a_outputs_aug$posterior_cohort_yearly)
-stage8a_class_tbl <- tibble::as_tibble(stage8a_outputs_aug$posterior_classification)
+stage8a_cohort_key <- tibble::as_tibble(stage8a_delta_keys$cohort_key)
+stage8a_class_key <- tibble::as_tibble(stage8a_delta_keys$class_key)
 
-stage8a_cohort_dataset_col <- first_existing_name(stage8a_cohort_tbl, c("dataset", "dataset_key"))
-stage8a_cohort_horizon_col <- first_existing_name(stage8a_cohort_tbl, c("horizon_year", "horizon"))
-stage8a_cohort_transition_col <- first_existing_name(stage8a_cohort_tbl, c("meanRisk_Bayes_mean", "transition_risk_mean", "transition_only_risk_mean", "transition_cif_mean"))
-stage8a_cohort_cure_col <- first_existing_name(stage8a_cohort_tbl, c("cohort_mean_cure_fraction_mean", "cure_fraction_mean"))
-stage8a_class_dataset_col <- first_existing_name(stage8a_class_tbl, c("dataset", "dataset_key"))
-stage8a_class_horizon_col <- first_existing_name(stage8a_class_tbl, c("horizon_year", "horizon"))
-stage8a_class_threshold_col <- first_existing_name(stage8a_class_tbl, c("threshold", "risk_threshold"))
+stage8a_has_cohort_key <- nrow_or_zero(stage8a_cohort_key) > 0L &&
+  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "stage8a_transition_risk", "stage8a_cure_fraction") %in% names(stage8a_cohort_key))
 
-stage8a_cohort_key <- if (nrow_or_zero(stage8a_cohort_tbl) > 0L && !is.null(stage8a_cohort_dataset_col)) {
-  stage8a_cohort_tbl %>%
-    transmute(
-      dataset_key = as.character(.data[[stage8a_cohort_dataset_col]]),
-      structural_model_id = as.character(structural_model_id),
-      formula_anchor = as.character(formula_anchor),
-      family_code = as.character(family_code),
-      horizon = if (!is.null(stage8a_cohort_horizon_col)) as.integer(safe_numeric(.data[[stage8a_cohort_horizon_col]])) else NA_integer_,
-      stage8a_transition_risk = if (!is.null(stage8a_cohort_transition_col)) safe_numeric(.data[[stage8a_cohort_transition_col]]) else NA_real_,
-      stage8a_cure_fraction = if (!is.null(stage8a_cohort_cure_col)) safe_numeric(.data[[stage8a_cohort_cure_col]]) else NA_real_
-    )
-} else {
-  tibble()
+stage8a_has_class_key <- nrow_or_zero(stage8a_class_key) > 0L &&
+  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold", "stage8a_false_positive_burden", "stage8a_FP100", "stage8a_NB", "stage8a_PPV", "stage8a_TPR") %in% names(stage8a_class_key))
+
+delta_vs_stage8a_parts <- list(
+  if (stage8a_has_cohort_key) {
+    posterior_cohort_yearly %>%
+      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "transition_cif", delta_field = metric_to_stage8a_delta_field("transition_cif"), stage8b_estimate = transition_cif_mean, stage8a_estimate = stage8a_transition_risk, delta_8B_minus_8A = transition_cif_mean - stage8a_transition_risk)
+  },
+  if (stage8a_has_cohort_key) {
+    posterior_cohort_yearly %>%
+      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "cure_fraction", delta_field = metric_to_stage8a_delta_field("cure_fraction"), stage8b_estimate = cohort_mean_cure_fraction_mean, stage8a_estimate = stage8a_cure_fraction, delta_8B_minus_8A = cohort_mean_cure_fraction_mean - stage8a_cure_fraction)
+  },
+  if (stage8a_has_class_key) {
+    posterior_classification_raw %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "false_positive_burden", delta_field = metric_to_stage8a_delta_field("false_positive_burden"), stage8b_estimate = false_positive_burden_mean, stage8a_estimate = stage8a_false_positive_burden, delta_8B_minus_8A = false_positive_burden_mean - stage8a_false_positive_burden)
+  },
+  if (stage8a_has_class_key) {
+    posterior_classification_raw %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "FP100", delta_field = metric_to_stage8a_delta_field("FP100"), stage8b_estimate = FP100_mean, stage8a_estimate = stage8a_FP100, delta_8B_minus_8A = FP100_mean - stage8a_FP100)
+  },
+  if (stage8a_has_class_key) {
+    posterior_classification_raw %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "NB", delta_field = metric_to_stage8a_delta_field("NB"), stage8b_estimate = NB_mean, stage8a_estimate = stage8a_NB, delta_8B_minus_8A = NB_mean - stage8a_NB)
+  },
+  if (stage8a_has_class_key) {
+    posterior_classification_raw %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "PPV", delta_field = metric_to_stage8a_delta_field("PPV"), stage8b_estimate = PPV_mean, stage8a_estimate = stage8a_PPV, delta_8B_minus_8A = PPV_mean - stage8a_PPV)
+  },
+  if (stage8a_has_class_key) {
+    posterior_classification_raw %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "TPR", delta_field = metric_to_stage8a_delta_field("TPR"), stage8b_estimate = TPR_mean, stage8a_estimate = stage8a_TPR, delta_8B_minus_8A = TPR_mean - stage8a_TPR)
+  }
+)
+
+delta_vs_stage8a <- bind_rows_safe(delta_vs_stage8a_parts)
+if (nrow_or_zero(delta_vs_stage8a) > 0L) {
+  delta_vs_stage8a <- delta_vs_stage8a %>%
+    left_join_replacing_columns(horizon_annotation, by = c("dataset_key", "horizon")) %>%
+    arrange(factor(model_id, levels = model_order), horizon, threshold, metric)
 }
-
-stage8a_class_key <- if (nrow_or_zero(stage8a_class_tbl) > 0L && !is.null(stage8a_class_dataset_col)) {
-  stage8a_class_tbl %>%
-    transmute(
-      dataset_key = as.character(.data[[stage8a_class_dataset_col]]),
-      structural_model_id = as.character(structural_model_id),
-      formula_anchor = as.character(formula_anchor),
-      family_code = as.character(family_code),
-      horizon = if (!is.null(stage8a_class_horizon_col)) as.integer(safe_numeric(.data[[stage8a_class_horizon_col]])) else NA_integer_,
-      threshold = if (!is.null(stage8a_class_threshold_col)) as.numeric(safe_numeric(.data[[stage8a_class_threshold_col]])) else NA_real_,
-      stage8a_false_positive_burden = safe_numeric(false_positive_burden_mean),
-      stage8a_FP100 = safe_numeric(FP100_mean),
-      stage8a_NB = safe_numeric(NB_mean),
-      stage8a_PPV = safe_numeric(PPV_mean),
-      stage8a_TPR = safe_numeric(TPR_mean)
-    )
-} else {
-  tibble()
-}
-
-delta_vs_stage8a <- bind_rows(
-  posterior_cohort_yearly %>%
-    left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "transition_cif", delta_field = metric_to_stage8a_delta_field("transition_cif"), stage8b_estimate = transition_cif_mean, stage8a_estimate = stage8a_transition_risk, delta_8B_minus_8A = transition_cif_mean - stage8a_transition_risk),
-  posterior_cohort_yearly %>%
-    left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "cure_fraction", delta_field = metric_to_stage8a_delta_field("cure_fraction"), stage8b_estimate = cohort_mean_cure_fraction_mean, stage8a_estimate = stage8a_cure_fraction, delta_8B_minus_8A = cohort_mean_cure_fraction_mean - stage8a_cure_fraction),
-  posterior_classification_raw %>%
-    left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "false_positive_burden", delta_field = metric_to_stage8a_delta_field("false_positive_burden"), stage8b_estimate = false_positive_burden_mean, stage8a_estimate = stage8a_false_positive_burden, delta_8B_minus_8A = false_positive_burden_mean - stage8a_false_positive_burden),
-  posterior_classification_raw %>%
-    left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "FP100", delta_field = metric_to_stage8a_delta_field("FP100"), stage8b_estimate = FP100_mean, stage8a_estimate = stage8a_FP100, delta_8B_minus_8A = FP100_mean - stage8a_FP100),
-  posterior_classification_raw %>%
-    left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "NB", delta_field = metric_to_stage8a_delta_field("NB"), stage8b_estimate = NB_mean, stage8a_estimate = stage8a_NB, delta_8B_minus_8A = NB_mean - stage8a_NB),
-  posterior_classification_raw %>%
-    left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "PPV", delta_field = metric_to_stage8a_delta_field("PPV"), stage8b_estimate = PPV_mean, stage8a_estimate = stage8a_PPV, delta_8B_minus_8A = PPV_mean - stage8a_PPV),
-  posterior_classification_raw %>%
-    left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "TPR", delta_field = metric_to_stage8a_delta_field("TPR"), stage8b_estimate = TPR_mean, stage8a_estimate = stage8a_TPR, delta_8B_minus_8A = TPR_mean - stage8a_TPR)
-) %>%
-  left_join_replacing_columns(horizon_annotation, by = c("dataset_key", "horizon")) %>%
-  arrange(factor(model_id, levels = model_order), horizon, threshold, metric)
 
 truth_lookup <- bind_rows(lapply(names(analysis_datasets), function(ds) {
   analysis_datasets[[ds]] %>%
