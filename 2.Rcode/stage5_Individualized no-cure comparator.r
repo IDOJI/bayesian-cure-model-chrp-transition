@@ -4,6 +4,7 @@
 # 3) existing core reuse is rejected if legacy calibration bug signatures are detected
 # 4) QC now fails when calibration support exists but all calibration regressions fail,
 #    or when supported rows contain explicit fitting errors
+# 5) observed_ipcw_risk is now suppressed when IPCW case/control support is unavailable
 
 # 🔴 Configure: paths and controls ===============================
 data_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage1_Backbone lock'
@@ -757,9 +758,10 @@ build_ipcw_cache <- function(data, horizons_year) {
     case_support_flag <- is.finite(case_count_ipcw) && case_count_ipcw > 0
     nonevent_support_flag <- is.finite(nonevent_count_ipcw) && nonevent_count_ipcw > 0
     binary_outcome_support_flag <- case_support_flag && nonevent_support_flag
+    ipcw_total <- case_count_ipcw + nonevent_count_ipcw
     
-    observed_ipcw_risk <- if ((case_count_ipcw + nonevent_count_ipcw) > 0) {
-      case_count_ipcw / (case_count_ipcw + nonevent_count_ipcw)
+    observed_ipcw_risk <- if (binary_outcome_support_flag && is.finite(ipcw_total) && ipcw_total > 0) {
+      case_count_ipcw / ipcw_total
     } else {
       NA_real_
     }
@@ -1831,6 +1833,14 @@ build_stage5_qc_summary <- function(
     filter(metric_domain == "threshold_summary", metric_name %in% threshold_outcome_metric_names) %>%
     left_join(support_lookup, by = c("model_id", "horizon_year"))
   
+  observed_reference_check <- model_performance_long %>%
+    filter(
+      metric_domain == "horizon_reference",
+      metric_name %in% c("observed_ipcw_risk", "case_count_ipcw", "nonevent_count_ipcw")
+    ) %>%
+    select(model_id, horizon_year, metric_name, metric_value) %>%
+    tidyr::pivot_wider(names_from = metric_name, values_from = metric_value)
+  
   unsupported_auc_nonmissing_count <- sum(
     auc_check$binary_outcome_support_flag == 0 & !is.na(auc_check$metric_value),
     na.rm = TRUE
@@ -1845,6 +1855,21 @@ build_stage5_qc_summary <- function(
     threshold_check$binary_outcome_support_flag == 0 & !is.na(threshold_check$metric_value),
     na.rm = TRUE
   )
+  
+  unsupported_observed_ipcw_nonmissing_count <- if (nrow(observed_reference_check) > 0) {
+    sum(
+      (
+        !is.finite(observed_reference_check$case_count_ipcw) |
+          observed_reference_check$case_count_ipcw <= 0 |
+          !is.finite(observed_reference_check$nonevent_count_ipcw) |
+          observed_reference_check$nonevent_count_ipcw <= 0
+      ) &
+        !is.na(observed_reference_check$observed_ipcw_risk),
+      na.rm = TRUE
+    )
+  } else {
+    0L
+  }
   
   supported_mean_calibration_difference_missing_count <- if (nrow(calibration_diagnostics_long) > 0) {
     sum(
@@ -1922,6 +1947,7 @@ build_stage5_qc_summary <- function(
     unsupported_auc_nonmissing_count = as.integer(unsupported_auc_nonmissing_count),
     unsupported_brier_nonmissing_count = as.integer(unsupported_brier_nonmissing_count),
     unsupported_threshold_outcome_nonmissing_count = as.integer(unsupported_threshold_outcome_nonmissing_count),
+    unsupported_observed_ipcw_nonmissing_count = as.integer(unsupported_observed_ipcw_nonmissing_count),
     supported_mean_calibration_difference_missing_count =
       as.integer(supported_mean_calibration_difference_missing_count),
     unsupported_mean_calibration_difference_nonmissing_count =
@@ -1973,6 +1999,13 @@ validate_stage5_outputs <- function(qc) {
   
   if (qc$unsupported_threshold_outcome_nonmissing_count > 0) {
     stop("Stage 5 threshold outcome metrics remained populated despite binary outcome support being unavailable.", call. = FALSE)
+  }
+  
+  if (qc$unsupported_observed_ipcw_nonmissing_count > 0) {
+    stop(
+      "Stage 5 observed_ipcw_risk remained populated despite IPCW case/nonevent support being unavailable.",
+      call. = FALSE
+    )
   }
   
   if (qc$supported_mean_calibration_difference_missing_count > 0) {
