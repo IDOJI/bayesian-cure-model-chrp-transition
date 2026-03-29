@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stage 2 — Follow-up Maturity Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --red:#dc2626;
+    --red-bg:#fef2f2;
+    --slate:#475569;
+    --slate-bg:#f8fafc;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.75;
+    font-size:15px;
+  }
+  .container{max-width:1040px;margin:0 auto;padding:36px 24px 84px;}
+  .hero{
+    position:relative;overflow:hidden;padding:34px 32px 30px;border-radius:var(--radius-xl);
+    background:
+      radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%),
+      linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;box-shadow:0 24px 60px rgba(15,23,42,.18);margin-bottom:18px;
+  }
+  .hero::after{
+    content:'';position:absolute;right:-48px;top:-42px;width:200px;height:200px;border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);pointer-events:none;
+  }
+  .hero .label{
+    display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono', monospace;font-size:12px;font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;color:#bfdbfe;padding:7px 12px;border-radius:999px;
+    background:rgba(255,255,255,.06);border:1px solid var(--line-dark);margin-bottom:14px;
+  }
+  .hero h1{font-size:clamp(30px, 4vw, 42px);line-height:1.12;letter-spacing:-.03em;margin-bottom:12px;max-width:920px;}
+  .hero .sub{max-width:860px;font-size:15px;color:#d1d5db;}
+  .tab-shell{position:sticky;top:16px;z-index:12;margin-bottom:18px;}
+  .tabs{
+    display:flex;gap:10px;flex-wrap:wrap;padding:14px;border-radius:22px;background:rgba(255,255,255,.82);
+    backdrop-filter:blur(16px);border:1px solid rgba(229,231,235,.9);box-shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+  .tabs button{
+    appearance:none;border:1px solid var(--border);background:#fff;color:var(--text-soft);padding:10px 16px;border-radius:999px;
+    cursor:pointer;font-size:14px;font-weight:700;transition:.18s ease;box-shadow:0 1px 0 rgba(15,23,42,.02);
+  }
+  .tabs button:hover{transform:translateY(-1px);color:var(--text);border-color:#cbd5e1;}
+  .tabs button.active{background:linear-gradient(180deg,#eff6ff,#dbeafe);color:var(--accent-strong);border-color:#bfdbfe;box-shadow:0 8px 18px rgba(37,99,235,.14);}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .panel-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .panel-kicker{font-family:'JetBrains Mono', monospace;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:6px;}
+  .panel-title{font-size:26px;line-height:1.2;letter-spacing:-.02em;}
+  .panel-sub{color:var(--text-soft);max-width:780px;margin-top:8px;}
+  .panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow);padding:28px;margin-bottom:18px;}
+  .grid{display:grid;grid-template-columns:repeat(12, 1fr);gap:16px;}
+  .card{grid-column:span 6;background:linear-gradient(180deg, var(--surface), var(--surface-2));border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--card-shadow);padding:22px 20px;min-height:180px;}
+  .card.full{grid-column:1/-1}
+  .card.wide{grid-column:span 8}
+  .card.narrow{grid-column:span 4}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.03em;margin-bottom:12px;background:var(--accent-soft);color:var(--accent-strong);}
+  .eyebrow.green{background:var(--green-bg); color:var(--green)}
+  .eyebrow.amber{background:var(--amber-bg); color:var(--amber)}
+  .eyebrow.purple{background:var(--purple-bg); color:var(--purple)}
+  .eyebrow.red{background:var(--red-bg); color:var(--red)}
+  .card h3,.block h3{font-size:19px;line-height:1.3;margin-bottom:10px;letter-spacing:-.01em;}
+  .card p,.card li,.block p,.block li{color:var(--text-soft);}
+  .card ul,.block ul{margin-left:18px;}
+  .summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px;}
+  .summary-item{border:1px solid var(--border);background:var(--surface-2);border-radius:16px;padding:16px;}
+  .summary-item .label{font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+  .summary-item .value{font-size:15px;color:var(--text);font-weight:700;}
+  .ref-list{margin-left:22px;}
+  .ref-list li + li{margin-top:12px;}
+  .footer-note{margin-top:28px;text-align:center;color:#94a3b8;font-size:13px;}
+
+  .section-flow{display:flex;flex-direction:column;gap:16px;}
+  .block{
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    padding:22px 20px;
+  }
+  .block h4{font-size:16px;line-height:1.35;margin-bottom:8px;letter-spacing:-.01em;color:var(--text);}
+  .section-lead{font-size:16px;color:var(--text);font-weight:700;margin-bottom:8px;}
+  .subtle{font-size:13px;color:#64748b;}
+  .mono{font-family:'JetBrains Mono', monospace;color:var(--text);font-size:13px;}
+  .source-note{padding:14px 16px;border-radius:16px;background:#fafcff;border:1px solid var(--border);font-size:14px;color:var(--text-soft);}
+  .callout{padding:18px 20px;border-radius:18px;border:1px solid var(--border);background:#fafcff;color:var(--text);}
+  .callout strong{color:var(--accent-strong);}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .stat-grid.three{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .stat-grid.two{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .stat-card{border:1px solid var(--border);background:var(--surface-2);border-radius:16px;padding:16px;box-shadow:0 6px 16px rgba(15,23,42,.03);}
+  .stat-card .kicker{font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+  .stat-card .value{font-size:24px;line-height:1.15;color:var(--text);font-weight:800;letter-spacing:-.02em;}
+  .stat-card .desc{font-size:13px;color:var(--text-soft);margin-top:6px;line-height:1.55;}
+  .pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .pill{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--text);font-size:13px;font-weight:600;}
+  .tag{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
+  .tag.primary{background:var(--green-bg);color:var(--green);}
+  .tag.secondary{background:var(--amber-bg);color:var(--amber);}
+  .tag.sensitivity{background:var(--purple-bg);color:var(--purple);}
+  .tag.projection{background:var(--slate-bg);color:var(--slate);}
+  .tag.stable{background:var(--green-bg);color:var(--green);}
+  .tag.caution{background:var(--amber-bg);color:var(--amber);}
+  .tag.warning{background:var(--red-bg);color:var(--red);}
+  .tag.masked{background:var(--slate-bg);color:var(--slate);}
+  .tag.neutral{background:var(--slate-bg);color:var(--slate);}
+  .table-wrap{overflow-x:auto;margin-top:14px;}
+  .report-table{width:100%;min-width:820px;border-collapse:separate;border-spacing:0;font-size:14px;}
+  .report-table th{padding:12px 10px;text-align:left;font-size:13px;color:var(--text);background:#f8fafc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .report-table td{padding:11px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-soft);background:#fff;}
+  .report-table tbody tr:hover td{background:#fafcff;}
+  .report-table .mono{font-size:12.5px;}
+  .report-table strong{color:var(--text);}
+  .read-guide{padding:14px 16px;border-radius:14px;background:#fafcff;border:1px solid var(--border);color:var(--text-soft);font-size:14px;}
+  .under-table{margin-top:10px;font-size:13px;color:#64748b;}
+  .bar-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+  .bar-panel{border:1px solid var(--border);background:var(--surface-2);border-radius:18px;padding:18px 16px;}
+  .bar-panel h4{font-size:16px;color:var(--text);margin-bottom:8px;}
+  .bar-row{display:grid;grid-template-columns:190px 1fr 82px;gap:12px;align-items:center;margin:10px 0;}
+  .bar-label{font-weight:600;color:var(--text);font-size:14px;}
+  .bar-track{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden;position:relative;}
+  .bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#93c5fd,#2563eb);}
+  .bar-fill.green{background:linear-gradient(90deg,#86efac,#16a34a);}
+  .bar-fill.amber{background:linear-gradient(90deg,#fcd34d,#d97706);}
+  .bar-fill.purple{background:linear-gradient(90deg,#d8b4fe,#7c3aed);}
+  .bar-fill.red{background:linear-gradient(90deg,#fca5a5,#dc2626);}
+  .bar-value{text-align:right;font-family:'JetBrains Mono', monospace;color:var(--text);font-size:13px;}
+  .mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+  .mini-grid.two{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .mini-panel{border:1px solid var(--border);background:var(--surface-2);border-radius:18px;padding:16px;}
+  .mini-panel h4{font-size:16px;color:var(--text);margin-bottom:10px;}
+  .micro-row{display:grid;grid-template-columns:48px 1fr 64px;gap:10px;align-items:center;margin:8px 0;}
+  .micro-label{font-size:13px;color:var(--text);font-weight:700;}
+  .micro-track{height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;}
+  .micro-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#86efac,#16a34a);}
+  .micro-fill.blue{background:linear-gradient(90deg,#93c5fd,#2563eb);}
+  .micro-fill.amber{background:linear-gradient(90deg,#fcd34d,#d97706);}
+  .micro-fill.purple{background:linear-gradient(90deg,#d8b4fe,#7c3aed);}
+  .micro-fill.red{background:linear-gradient(90deg,#fca5a5,#dc2626);}
+  .micro-value{font-size:12.5px;color:var(--text);font-family:'JetBrains Mono', monospace;text-align:right;}
+  .divider{height:1px;background:linear-gradient(90deg, transparent, #e5e7eb, transparent);margin:4px 0;}
+  .quote-end{padding:16px 18px;border-radius:18px;border:1px solid var(--border);background:linear-gradient(180deg,#ffffff,#f8fbff);font-size:15px;color:var(--text);}
+  .quote-end strong{color:var(--accent-strong);}
+  .tight p + p{margin-top:10px;}
+  .note-list li + li{margin-top:6px;}
+  .small-gap{margin-top:10px;}
+  @media (max-width:900px){
+    .card,.card.wide,.card.narrow{grid-column:1/-1;}
+    .summary-strip,.stat-grid,.mini-grid,.bar-grid{grid-template-columns:1fr;}
+    .bar-row{grid-template-columns:1fr;gap:8px;}
+    .micro-row{grid-template-columns:48px 1fr 72px;}
+  }
+  @media (max-width:640px){
+    .container{padding:22px 16px 64px}
+    .hero{padding:26px 22px 24px}
+    .panel-card{padding:20px}
+    .tabs{padding:10px}
+    .tabs button{width:100%; text-align:left}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<header class="hero">
+<div class="label">Stage 2 report</div>
+<h1>Stage 2 — Follow-up maturity before any cure claim</h1>
+<p class="sub">이번 단계는 cure를 주장하기 전에, 각 코호트의 관찰 기간이 얼마나 성숙했는지와 어느 horizon까지 결과를 비교적 안전하게 읽을 수 있는지를 정리하는 단계입니다.</p>
+</header>
+<div class="tab-shell">
+<nav aria-label="Stage tabs" class="tabs">
+<button class="active" data-tab="overview">개요</button>
+<button data-tab="results-overview">결과 개요</button>
+<button data-tab="result-1">결과 1</button>
+<button data-tab="result-2">결과 2</button>
+<button data-tab="result-3">결과 3</button>
+<button data-tab="synthesis">종합 해석</button>
+<button data-tab="references">References</button>
+</nav>
+</div>
+<section class="panel active" data-panel="overview">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Overview</div>
+<h2 class="panel-title">이 단계는 무엇을 보는가</h2>
+<p class="panel-sub">Stage 2는 현재 자료가 어느 정도의 follow-up maturity, 즉 관찰 성숙도를 갖는지부터 점검합니다. 목적은 cure를 판단하는 것이 아니라, 앞으로의 해석이 어느 horizon까지 직접 관찰에 의해 지지되는지 먼저 정리하는 것입니다.</p>
+</div>
+</div>
+<div class="grid">
+<article class="card">
+<div class="eyebrow">Stage role</div>
+<h3>전체 흐름에서의 역할</h3>
+<p>이 단계는 <strong>“지금 보이는 tail을 얼마나 믿고 읽을 수 있는가”</strong>를 정리하는 선행 단계입니다. Kaplan–Meier, reverse Kaplan–Meier, numbers at risk, 그리고 연도별 completeness 지표를 이용해 관찰이 충분한 구간과 조심해서 봐야 하는 구간을 나눕니다.</p>
+</article>
+<article class="card">
+<div class="eyebrow green">Reader takeaway</div>
+<h3>먼저 기억할 핵심</h3>
+<p>PNU는 짧은 관찰창을, SNU는 훨씬 긴 관찰창을 제공합니다. 따라서 1–2년 이후의 해석 강도는 코호트마다 크게 다르며, merged의 장기 horizon은 표본 수가 커 보여도 실제로는 점점 SNU 중심으로 바뀝니다.</p>
+</article>
+<article class="card full">
+<div class="eyebrow amber">Interpretation boundary</div>
+<h3>어디까지 직접 읽고, 어디부터 조심해야 하는가</h3>
+<p>이 단계의 수치는 follow-up maturity를 보여주는 기술적 요약입니다. reverse-KM median follow-up, Percentage, CCI, SPT가 크다고 해서 곧바로 cure를 뜻하지는 않습니다. 반대로 late tail이 약하다고 해서 1–2년 구간의 해석까지 무효가 되는 것도 아닙니다. 이 단계에서는 <strong>직접 관찰이 충분한 구간</strong>과 <strong>모델 의존성이 커지는 구간</strong>을 분리해서 읽는 것이 핵심입니다.</p>
+</article>
+</div>
+<div class="section-flow small-gap">
+
+<div class="block">
+<div class="eyebrow">Modeling table</div>
+<h3>이 Stage에서 실제로 수행한 분석 블록</h3>
+<p class="subtle">코드 문법 대신 논문식 표기로 정리했습니다. 이 Stage는 추정 계수나 p-value를 내는 단계가 아니라, follow-up maturity와 해석 경계를 정리하는 단계입니다.</p>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">분석 블록</th><th class="">무엇을 했는가</th><th class="">명시적 설정</th><th class="">주요 산출물</th></tr></thead><tbody><tr><td class="">Overall / subgroup Kaplan–Meier benchmark</td><td class="">전체·성별·site 패널에서 생존곡선과 numbers at risk를 계산합니다.</td><td class="">transition_only: Ŝ_tr(t), event = 1{status_num = 1}; remission_sensitive: Ŝ_rs(t), event = 1{status_num ∈ {1,2}}</td><td class="">KM curve source data, numbers-at-risk table, cumulative state counts</td></tr><tr><td class="">Reverse-KM follow-up maturity</td><td class="">관찰창이 얼마나 성숙했는지를 기술적으로 요약합니다.</td><td class="">reverse-KM: transition_only에서는 status_num ∈ {0,2}를 follow-up completion 사건으로, remission_sensitive에서는 status_num = 0을 사건으로 둡니다.</td><td class="">median follow-up, 95% interval, max observed follow-up</td></tr><tr><td class="">Horizon-specific completeness summaries</td><td class="">연도별 horizon에서 관찰의 충분성을 세 가지 지표로 정리합니다.</td><td class="">eligible_n(h)= #{potential follow-up ≥ h}; risk_set_n(h)= #{observed follow-up ≥ h}; Percentage(h)= complete(h)/eligible_n(h); CCI(h), SPT(h)= person-time based maturity summaries</td><td class="">eligible_n, risk_set_n, Percentage, CCI, SPT, sparse-tail status</td></tr><tr><td class="">Merged completeness sensitivity</td><td class="">merged overall/sex에서 pooled end date와 site-specific end date를 나눠 비교합니다.</td><td class="">site_adjusted: site별 administrative end date 사용; site_free: merged 전체의 단일 administrative end date 사용</td><td class="">site_adjusted / site_free completeness table, preferred_for_reporting flag</td></tr><tr><td class="">Validation and reporting flags</td><td class="">숫자 정합성과 late-tail caution을 구조적으로 기록합니다.</td><td class="">pass/fail consistency audit이며 형식적 가설검정 H₀/H₁는 없습니다.</td><td class="">validation summary, issue rows, sparse-tail flags, site-dominance flags, reverse-KM CI flag</td></tr></tbody></table></div>
+<p class="under-table">먼저 볼 포인트는 세 가지입니다. 첫째, <span class="mono">transition_only</span>와 <span class="mono">remission_sensitive</span>는 같은 질문이 아니라 서로 다른 상태 규칙을 반영합니다. 둘째, <span class="mono">reverse-KM</span>은 직접적인 follow-up rate가 아니라 관찰 성숙도의 기술적 요약입니다. 셋째, merged overall/sex에서는 <span class="mono">site_adjusted</span>가 주보고용이고 <span class="mono">site_free</span>는 민감도 비교용입니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow green">Support rule</div>
+<h3>해석 강도를 나누는 horizon 규칙</h3>
+<p>이 Stage는 같은 1–10년 축을 유지하되, 각 코호트에서 어느 구간이 직접 관찰에 더 가깝고 어느 구간이 모델 의존적 해석으로 넘어가는지를 미리 나눠 읽습니다. 아래 표는 결과 해석에서 실제로 써야 하는 지원 구간을 코호트별로 정리한 것입니다.</p>
+<div class="stat-grid three">
+<div class="stat-card">
+<div class="kicker">PNU</div>
+<div class="value">1y → 2y → 3y+</div>
+<div class="desc">1년은 주해석 구간이고, 2년은 sensitivity로만 읽습니다. 3년 이상은 projection으로 두셔야 합니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">SNU</div>
+<div class="value">1–2y → 3–5y → 6y+</div>
+<div class="desc">1–2년은 직접 관찰에 가장 가깝고, 3–5년은 보조 해석, 6년 이후는 projection입니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">merged</div>
+<div class="value">1–2y → 3–5y → 6y+</div>
+<div class="desc">horizon 구간은 SNU와 같지만, late horizon은 점점 SNU 기여에 기대게 된다는 점을 함께 읽어야 합니다.</div>
+</div>
+</div>
+<div class="table-wrap">
+<table class="report-table">
+<thead>
+<tr>
+<th>Dataset</th>
+<th>직접적으로 읽는 구간</th>
+<th>조심해서 확장하는 구간</th>
+<th>Projection 구간</th>
+<th>읽는 법</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PNU</td>
+<td><span class="tag primary">1y · primary supported</span></td>
+<td><span class="tag sensitivity">2y · sensitivity</span></td>
+<td><span class="tag projection">3–10y · projection</span></td>
+<td>1년은 직접 관찰에 가장 가깝고, 2년은 조심스러운 민감도 해석입니다. 3년부터는 수치를 보여주더라도 주장을 세게 하면 안 됩니다.</td>
+</tr>
+<tr>
+<td>SNU</td>
+<td><span class="tag primary">1–2y · primary supported</span></td>
+<td><span class="tag secondary">3–5y · secondary</span></td>
+<td><span class="tag projection">6–10y · projection</span></td>
+<td>5년까지는 보조 해석이 가능하지만, 6년 이후는 직접 관찰보다 tail 의존성이 커집니다.</td>
+</tr>
+<tr>
+<td>merged</td>
+<td><span class="tag primary">1–2y · primary supported</span></td>
+<td><span class="tag secondary">3–5y · secondary</span></td>
+<td><span class="tag projection">6–10y · projection</span></td>
+<td>초반은 pooled cohort처럼 읽을 수 있지만, 장기 구간은 점점 SNU 중심으로 해석해야 합니다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="under-table">같은 5년 수치라도 PNU에서는 projection에 가깝고, SNU와 merged에서는 secondary 구간입니다. 즉 horizon 숫자만 보지 말고, 그 숫자가 어느 support tier에 놓였는지를 함께 보셔야 합니다.</p>
+</div>
+<div class="block tight">
+<div class="eyebrow amber">Hypothesis test</div>
+<h3>형식적 검정이 있는가</h3>
+<p>이번 Stage에는 p-value 기반의 형식적 가설검정이 없습니다. <strong>validation summary는 귀무가설–대립가설 검정이라기보다 산출물끼리 숫자가 서로 맞는지 확인한 내부 정합성 점검표</strong>입니다. 따라서 “통과”는 표와 파생 산출물이 서로 모순되지 않았다는 뜻이지, 장기 해석이 자동으로 강해졌다는 뜻은 아닙니다.</p>
+<div class="callout"><strong>관련 참고문헌</strong> follow-up maturity를 “현재 Kaplan–Meier 추정이 얼마나 안정적인가”의 문제로 읽는 관점은 Betensky(2015)에 가깝고, person-time 기반 completeness 지표 해석은 Xue 등(2017)의 맥락과 맞닿아 있습니다.</div>
+</div>
+</div>
+</div>
+</section>
+<section class="panel" data-panel="results-overview">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Results overview</div>
+<h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+<p class="panel-sub">먼저 관찰창 자체를 보고, 다음으로 horizon별 completeness를 확인한 뒤, 마지막으로 remission 처리와 subgroup/site 구조가 해석을 얼마나 바꾸는지 읽으시면 됩니다.</p>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">Result group 1</div>
+<div class="value">코호트별 관찰 길이와 reverse-KM 성숙도</div>
+</div>
+<div class="summary-item">
+<div class="label">Result group 2</div>
+<div class="value">horizon별 completeness와 merged 보고 우선순위</div>
+</div>
+<div class="summary-item">
+<div class="label">Result group 3</div>
+<div class="value">remission 처리, site dominance, sex subgroup 경계</div>
+</div>
+</div>
+<div class="section-flow small-gap">
+<div class="stat-grid">
+<div class="stat-card">
+<div class="kicker">Total panels</div>
+<div class="value">11</div>
+<div class="desc">실제 산출 패널 수는 11개이지만, 읽을 때는 3묶음으로 나누면 훨씬 쉽습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">PNU short tail</div>
+<div class="value">2y risk set 1/54</div>
+<div class="desc">PNU는 2년에서 이미 tail support가 급격히 얇아집니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">SNU long tail</div>
+<div class="value">5y risk set 64/208</div>
+<div class="desc">SNU는 5년에도 장기 해석의 근거가 비교적 남아 있습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">Merged late horizon</div>
+<div class="value">5y+ = SNU only</div>
+<div class="desc">merged overall의 장기 eligible set은 5년부터 사실상 전부 SNU에서 옵니다.</div>
+</div>
+</div>
+<div class="block tight">
+<div class="eyebrow">Reading map</div>
+<h3>읽는 순서</h3>
+<p>결과 1에서는 코호트가 실제로 얼마나 오래 관찰되었는지와 risk set이 얼마나 남는지를 먼저 봅니다. 결과 2에서는 그 관찰창을 바탕으로 어느 horizon까지 completeness가 상대적으로 안정적인지, 그리고 왜 merged overall/sex에서 <span class="mono">site_adjusted</span>를 주보고용으로 써야 하는지를 확인합니다. 결과 3에서는 remission을 event-like terminal state로 볼 때 early burden이 얼마나 달라지는지, 그리고 merged 장기 horizon과 sex subgroup을 어디까지 읽을 수 있는지를 정리합니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow purple">Analysis inventory</div>
+<h3>이번 Stage의 실제 보고 패널</h3>
+<div class="read-guide">이 Stage는 총 11개 패널을 만들었지만, 읽을 때는 <strong>overall 3개</strong>, <strong>merged site 2개</strong>, <strong>sex 6개</strong>의 세 묶음으로 이해하시면 훨씬 쉽습니다. 아래 표의 <strong>n</strong>은 각 패널에 포함된 baseline 인원수입니다.</div>
+<div class="table-wrap">
+<table class="report-table">
+<thead>
+<tr>
+<th>패널 묶음</th>
+<th>들어 있는 패널</th>
+<th>n</th>
+<th>이 Stage에서 하는 일</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overall 패널 3개</td>
+<td>PNU Overall · SNU Overall · merged Overall</td>
+<td>54 · 208 · 262</td>
+<td>각 코호트의 follow-up maturity를 가장 먼저 판단하는 기본 패널입니다. 결과 1과 결과 2의 핵심 해석은 여기서 시작합니다.</td>
+</tr>
+<tr>
+<td>merged site 패널 2개</td>
+<td>merged Site = PNU · merged Site = SNU</td>
+<td>54 · 208</td>
+<td>pooled merged 결과가 실제로 어느 site 정보에 기대는지 분해해서 보여줍니다. 장기 horizon에서 merged가 왜 SNU 중심으로 읽히는지 확인하는 데 필요합니다.</td>
+</tr>
+<tr>
+<td>Sex 패널 6개</td>
+<td>PNU Female/Male · SNU Female/Male · merged Female/Male</td>
+<td>26/28 · 66/142 · 92/170</td>
+<td>성별 subgroup에서 tail support가 얼마나 빨리 약해지는지, 그리고 sex-specific long-tail을 어디까지 읽을 수 있는지 점검합니다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="under-table">따라서 읽는 순서는 overall 3개를 먼저 보고, 그 다음 merged site 2개로 pooled 결과의 실제 기여 구조를 확인한 뒤, 마지막으로 sex 6개에서 subgroup 해석의 경계를 보는 방식이 가장 자연스럽습니다.</p>
+</div>
+
+</div>
+</div>
+</section>
+<section class="panel" data-panel="result-1">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 1</div>
+<h2 class="panel-title">코호트가 실제로 얼마나 오래, 얼마나 안정적으로 관찰되었는가</h2>
+<p class="panel-sub">이 결과는 각 코호트의 관찰창 길이와 risk set 유지 정도를 직접 보여줍니다. 값이 길고 많이 남을수록 장기 tail을 더 직접적으로 읽을 수 있고, 값이 짧고 적을수록 해석은 빨리 약해집니다.</p>
+</div>
+</div>
+<div class="section-flow">
+<div class="block tight">
+<div class="eyebrow">Question</div>
+<h3>이 결과가 답하는 질문</h3>
+<p>각 코호트가 같은 1–10년 축을 공유하더라도, 실제로는 얼마나 긴 관찰창을 가졌는지, 그리고 그 창 안에서 몇 명이 risk set에 남아 있는지가 다릅니다. 이 결과는 바로 그 차이를 보여주며, 뒤에서 completeness를 읽는 기준선을 제공합니다.</p>
+</div>
+<div class="stat-grid">
+<div class="stat-card">
+<div class="kicker">PNU max observed</div>
+<div class="value">2.67</div>
+<div class="desc">PNU의 최대 관찰 길이는 2.67년으로 짧았습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">SNU max observed</div>
+<div class="value">10.11</div>
+<div class="desc">SNU는 10.11년까지 관찰되어 장기 tail 근거가 훨씬 길었습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">PNU 2y risk set</div>
+<div class="value">1/54</div>
+<div class="desc">PNU는 2년 시점에 risk set이 사실상 소진되었습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">SNU 5y risk set</div>
+<div class="value">64/208</div>
+<div class="desc">SNU는 5년에도 장기 해석을 어느 정도 지지하는 표본이 남아 있었습니다.</div>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow green">Representative comparison</div>
+<h3>가장 먼저 봐야 하는 비교</h3>
+<p>PNU는 짧은 관찰창 안에서 early pattern을 보여주고, SNU는 더 긴 관찰창 안에서 later pattern을 보여줍니다. merged는 초반에는 두 코호트를 함께 담지만, 장기로 갈수록 실제 내용은 SNU에 가까워집니다.</p>
+<div class="bar-grid">
+<div class="bar-panel">
+<h4>최대 관찰 길이</h4>
+<p class="subtle">값이 길수록 그 코호트에서 더 긴 실제 관찰이 있었다는 뜻입니다.</p>
+<div class="bar-row">
+<div class="bar-label">PNU</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:26.4%"></div></div>
+<div class="bar-value">2.67년</div>
+</div>
+<div class="bar-row">
+<div class="bar-label">SNU</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:100.0%"></div></div>
+<div class="bar-value">10.11년</div>
+</div>
+<div class="bar-row">
+<div class="bar-label">merged</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:100.0%"></div></div>
+<div class="bar-value">10.11년</div>
+</div>
+</div>
+<div class="bar-panel">
+<h4>Overall reverse-KM median follow-up</h4>
+<p class="subtle">reverse-KM median follow-up은 현재 관찰창이 얼마나 성숙했는지를 보여주는 기술적 요약입니다. 실무적으로는 “코호트 절반 정도가 적어도 여기까지는 관찰되었다”는 감각으로 읽을 수 있습니다. 따라서 값이 1.4년이면 2년 구간은 이미 절반보다 적은 직접 관찰에 기대게 되고, 값이 4.9년이면 5년 부근까지는 절반 수준의 직접 관찰이 남아 있다는 뜻입니다. 다만 이 수치가 높다고 해서 completeness가 자동으로 충분하다는 뜻도, cure가 있다는 뜻도 아닙니다.</p>
+<div class="pill-row">
+<span class="pill">초록 = transition_only</span>
+<span class="pill">보라 = remission_sensitive</span>
+</div>
+<div class="bar-row">
+<div class="bar-label">PNU</div>
+<div class="bar-track"><div class="bar-fill green" style="width:27.4%"></div></div>
+<div class="bar-value">1.37년</div>
+</div><div class="bar-row">
+<div class="bar-label">SNU</div>
+<div class="bar-track"><div class="bar-fill green" style="width:98.3%"></div></div>
+<div class="bar-value">4.91년</div>
+</div><div class="bar-row">
+<div class="bar-label">merged</div>
+<div class="bar-track"><div class="bar-fill green" style="width:76.6%"></div></div>
+<div class="bar-value">3.83년</div>
+</div><div class="divider"></div><div class="bar-row">
+<div class="bar-label">PNU</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:31.4%"></div></div>
+<div class="bar-value">1.57년</div>
+</div><div class="bar-row">
+<div class="bar-label">SNU</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:98.3%"></div></div>
+<div class="bar-value">4.91년</div>
+</div><div class="bar-row">
+<div class="bar-label">merged</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:84.2%"></div></div>
+<div class="bar-value">4.21년</div>
+</div>
+<div class="callout"><strong>현재 수치를 어떻게 읽는가</strong> PNU의 1.37–1.57년은 2년 해석이 이미 소수의 직접 관찰에 기대는 수준임을 뜻합니다. SNU의 4.91년은 5년 근처까지는 비교적 읽을 만하지만 10년을 직접 지지하지는 않습니다. merged의 3.83–4.21년은 4년 전후부터 tail 의존성이 커지고, 그 이후 장기 해석은 점점 SNU 기여에 기대게 된다는 뜻입니다.</div>
+</div>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow">Table</div>
+<h3>코호트별 follow-up maturity 요약</h3>
+<div class="read-guide">이 표는 코호트 수준의 관찰창을 한 번에 보여줍니다. <strong>Max observed follow-up</strong>은 실제 관찰된 최장 follow-up이고, <strong>Reverse-KM median</strong>은 현재 KM tail이 얼마나 성숙했는지에 대한 기술적 요약입니다. <strong>Risk set</strong> 값은 해당 시점에 아직 관찰 중인 사람이 몇 명 남아 있는지를 뜻하며, 값이 작아질수록 long-tail 해석은 더 불안정해집니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Dataset</th><th class="">n</th><th class="">Max observed follow-up</th><th class="">Reverse-KM median (transition_only)</th><th class="">Reverse-KM median (remission_sensitive)</th><th class="">Risk set 1y</th><th class="">Risk set 2y</th><th class="">Risk set 5y</th><th class="">Risk set 10y</th></tr></thead><tbody><tr><td class="">PNU</td><td class="">54</td><td class="">2.67년</td><td class="">1.37 (0.76–1.61)</td><td class="">1.57 (1.14–2.00)</td><td class="">28</td><td class="">1</td><td class="">0</td><td class="">0</td></tr><tr><td class="">SNU</td><td class="">208</td><td class="">10.11년</td><td class="">4.91 (4.10–5.00)</td><td class="">4.91 (4.10–5.00)</td><td class="">163</td><td class="">134</td><td class="">64</td><td class="">1</td></tr><tr><td class="">merged</td><td class="">262</td><td class="">10.11년</td><td class="">3.83 (2.73–4.61)</td><td class="">4.21 (3.28–4.95)</td><td class="">191</td><td class="">135</td><td class="">64</td><td class="">1</td></tr></tbody></table></div>
+<p class="under-table">먼저 볼 포인트는 세 가지입니다. PNU는 2년에서 risk set이 1명뿐이고 5년부터는 0명입니다. SNU는 5년에도 64명이 남아 있어 3–5년 해석을 뒷받침합니다. merged는 표면적으로 표본 수가 커 보이지만, 장기 risk set은 SNU와 거의 같은 값으로 수렴합니다.</p>
+</div>
+<div class="block tight">
+<div class="eyebrow amber">Interpretation</div>
+<h3>그래서 무엇이 보였는가</h3>
+<p>PNU는 1년 구간이 실질적인 주해석 영역이고, 2년은 이미 매우 얇은 tail입니다. SNU는 1–2년이 가장 직접적으로 지지되며, 5년까지는 보조적으로 읽을 수 있습니다. merged는 early horizon에서는 두 코호트의 합이지만, late horizon으로 갈수록 SNU가 주된 근거가 됩니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section class="panel" data-panel="result-2">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 2</div>
+<h2 class="panel-title">어느 horizon까지 completeness를 비교적 신뢰할 수 있는가</h2>
+<p class="panel-sub">이 결과는 연도별 horizon에서 관찰이 얼마나 완결적으로 확보되었는지를 보여줍니다. 값이 높을수록 그 horizon에서 해석이 더 직접적이고, sparse/very sparse나 masked 상태는 tail support가 약하다는 뜻입니다.</p>
+</div>
+</div>
+<div class="section-flow">
+<div class="block tight">
+<div class="eyebrow purple">Question</div>
+<h3>이 결과가 답하는 질문</h3>
+<p>같은 1년, 2년, 5년, 10년이라도 코호트마다 직접 관찰이 얼마나 남아 있는지는 다릅니다. 또한 merged overall/sex에서는 pooled administrative end date를 쓰느냐, site별 administrative end date를 쓰느냐에 따라 completeness가 달라집니다. 이 결과는 그 차이를 정리합니다.</p>
+</div><div class="block">
+<div class="eyebrow purple">Metric guide</div>
+<h3>Percentage · CCI · SPT는 각각 무엇을 보는가</h3>
+<p>세 지표는 모두 “이 horizon 질문을 data가 얼마나 직접 답할 수 있는가”를 보여주는 completeness 지표입니다. 여기서는 <strong>remission_sensitive view</strong>를 기준으로 설명합니다. 즉 transition 또는 remission이 horizon 이전에 발생하면 그 horizon 질문은 이미 해결된 것으로 봅니다.</p>
+<div class="table-wrap">
+<table class="report-table">
+<thead>
+<tr>
+<th>지표</th>
+<th>어떻게 계산하는가</th>
+<th>값이 높을수록 뜻하는 것</th>
+<th>이번 Stage에서 읽는 법</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>eligible_n</strong></td>
+<td>선택한 administrative end-date 규칙 아래에서, 그 horizon까지 잠재적으로 관찰될 수 있었던 사람 수입니다.</td>
+<td>분모가 커질 수는 있지만, 그 자체로 completeness가 높다는 뜻은 아닙니다.</td>
+<td>같은 Percentage라도 eligible_n이 작아지면 late tail은 더 쉽게 불안정해집니다.</td>
+</tr>
+<tr>
+<td><strong>Percentage</strong></td>
+<td>eligible_n 중에서, transition/remission이 horizon 이전에 발생했거나 event 없이도 horizon까지 직접 관찰된 사람의 비율입니다.</td>
+<td>그 horizon 질문을 “직접” 답할 수 있었던 비율이 높다는 뜻입니다.</td>
+<td>가장 직관적인 completeness 요약입니다. disease risk가 아니라 관찰 성숙도입니다.</td>
+</tr>
+<tr>
+<td><strong>CCI</strong></td>
+<td>관찰된 person-time을 필요한 person-time과 비교한 값입니다. event나 remission이 horizon 이전에 일어난 경우에는 그 시점까지 관찰된 것으로 충분하다고 봅니다.</td>
+<td>사람-시간 관점에서 horizon 근처까지 정보가 더 잘 채워졌다는 뜻입니다.</td>
+<td>Percentage보다 부드럽게 움직이며, early event를 “완료된 관찰”로 취급하는 구조를 보여줍니다.</td>
+</tr>
+<tr>
+<td><strong>SPT</strong></td>
+<td>eligible_n × horizon을 기준 분모로 두고, early right-censor만 부분 person-time credit을 받도록 계산한 person-time 비율입니다.</td>
+<td>특히 early right-censor가 적고 horizon까지 정보가 더 많이 채워졌다는 뜻입니다.</td>
+<td>CCI와 함께 보면 early censoring이 completeness를 얼마나 깎는지 더 분명하게 보입니다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="under-table">즉 Percentage는 “직접 답할 수 있었는가”에 더 가깝고, CCI와 SPT는 “사람-시간이 얼마나 찼는가”에 더 가깝습니다. 세 값이 함께 높으면 그 horizon 해석이 더 직접적이고, 서로 벌어지면 early censoring 구조를 같이 보셔야 합니다.</p>
+</div>
+<div class="stat-grid">
+<div class="stat-card">
+<div class="kicker">PNU 1y Percentage</div>
+<div class="value">83.0%</div>
+<div class="desc">PNU 1년은 아직 비교적 직접적으로 읽을 수 있는 구간입니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">PNU 2y status</div>
+<div class="value">1/54</div>
+<div class="desc">2년 risk set이 1명뿐이어서 매우 조심해서 봐야 합니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">SNU 5y Percentage</div>
+<div class="value">63.7%</div>
+<div class="desc">SNU는 5년까지도 보조적 해석이 가능한 수준의 completeness를 보입니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">merged 10y Percentage</div>
+<div class="value">29.7%</div>
+<div class="desc">10년은 projection 성격이 강한 late tail입니다.</div>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow">HTML-native visual summary</div>
+<h3>주보고용 completeness 비교</h3>
+<p>아래 미니 바는 <strong>remission_sensitive 기준</strong>의 <span class="mono">Percentage</span>를 선택한 대표 horizon에서 보여줍니다. 이 값은 eligible_n을 분모로 하여, 그 horizon 질문을 직접 답할 수 있었던 비율을 나타냅니다. 따라서 값이 높을수록 그 horizon까지 follow-up이 더 충분했다는 뜻이며, disease risk나 cumulative incidence를 뜻하는 숫자는 아닙니다.</p>
+<div class="mini-grid">
+<div class="mini-panel">
+<h4>PNU | Overall</h4>
+<div class="micro-row">
+<div class="micro-label">1y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:83.0%"></div></div>
+<div class="micro-value">83.0%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">2y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:62.9%"></div></div>
+<div class="micro-value">62.9%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">5y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:0.0%"></div></div>
+<div class="micro-value">masked</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">10y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:0.0%"></div></div>
+<div class="micro-value">masked</div>
+</div>
+</div>
+<div class="mini-panel">
+<h4>SNU | Overall</h4>
+<div class="micro-row">
+<div class="micro-label">1y</div>
+<div class="micro-track"><div class="micro-fill blue" style="width:91.1%"></div></div>
+<div class="micro-value">91.1%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">2y</div>
+<div class="micro-track"><div class="micro-fill blue" style="width:86.9%"></div></div>
+<div class="micro-value">86.9%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">5y</div>
+<div class="micro-track"><div class="micro-fill blue" style="width:63.7%"></div></div>
+<div class="micro-value">63.7%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">10y</div>
+<div class="micro-track"><div class="micro-fill blue" style="width:29.7%"></div></div>
+<div class="micro-value">29.7%</div>
+</div>
+</div>
+<div class="mini-panel">
+<h4>merged | Overall (site_adjusted)</h4>
+<div class="micro-row">
+<div class="micro-label">1y</div>
+<div class="micro-track"><div class="micro-fill purple" style="width:89.5%"></div></div>
+<div class="micro-value">89.5%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">2y</div>
+<div class="micro-track"><div class="micro-fill purple" style="width:82.9%"></div></div>
+<div class="micro-value">82.9%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">5y</div>
+<div class="micro-track"><div class="micro-fill purple" style="width:63.7%"></div></div>
+<div class="micro-value">63.7%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">10y</div>
+<div class="micro-track"><div class="micro-fill purple" style="width:29.7%"></div></div>
+<div class="micro-value">29.7%</div>
+</div>
+</div>
+</div><div class="callout"><strong>예시로 읽기</strong> PNU 2년 remission_sensitive에서는 eligible_n이 35명이고 Percentage가 62.9%이므로, 약 22명만이 2년 질문을 직접 답할 수 있었습니다. SNU 5년은 eligible_n 146명 중 약 93명이 직접 답할 수 있었고, merged overall(site_adjusted) 2년은 eligible_n 210명 중 약 174명이 직접 답할 수 있었습니다. 반대로 PNU 5년과 10년은 0%가 아니라 <strong>eligible subject가 없어 masked된 구간</strong>으로 읽어야 합니다.</div>
+</div>
+<div class="block">
+<div class="eyebrow green">Preferred reporting view</div>
+<h3>왜 merged overall에서는 site_adjusted를 주보고용으로 써야 하는가</h3>
+<p>site_adjusted는 각 사람의 잠재 follow-up을 자기 site의 administrative end date까지만 계산합니다. 반면 site_free는 merged 전체의 가장 늦은 end date를 모든 사람에게 공통 적용합니다. site별 종료 시점이 다르면, 후자는 어떤 사람에게는 실제보다 더 긴 관찰 기회를 가정하게 되어 eligible_n을 키우고 completeness를 인위적으로 낮출 수 있습니다.</p><div class="stat-grid four">
+<div class="stat-card">
+<div class="kicker">1y gap</div>
+<div class="value">+4.8%p</div>
+<div class="desc">site_adjusted 89.5% vs site_free 84.7%입니다. eligible_n도 238 vs 255로 다릅니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">2y gap</div>
+<div class="value">+9.6%p</div>
+<div class="desc">site_adjusted 82.9% vs site_free 73.3%입니다. pooled end-date를 쓰면 early horizon에서도 completeness가 더 낮아집니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">5y gap</div>
+<div class="value">+15.7%p</div>
+<div class="desc">site_adjusted 63.7% vs site_free 48.0%입니다. 이 시점부터 merged late horizon의 왜곡이 특히 커집니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">10y gap</div>
+<div class="value">+6.8%p</div>
+<div class="desc">site_adjusted 29.7% vs site_free 22.9%이고, eligible_n은 64 vs 144로 크게 벌어집니다.</div>
+</div>
+</div>
+<div class="read-guide">이 비교에서 먼저 볼 것은 <strong>eligible_n</strong>과 <strong>Percentage</strong>가 함께 어떻게 움직이는지입니다. site_free는 10년 horizon에서 eligible_n을 144명까지 늘리지만, 이는 실제 site별 관찰 가능성이라기보다 pooled merged end date를 모든 사람에게 공통 적용한 결과입니다. 그래서 completeness가 22.9%로 더 낮아집니다. CCI와 SPT도 같은 방향으로 낮아지지만, 여기서는 가장 직관적인 Percentage를 먼저 보여드립니다.</div><div class="mini-grid two">
+<div class="mini-panel">
+<h4>site_adjusted</h4>
+<div class="micro-row">
+<div class="micro-label">1y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:89.5%"></div></div>
+<div class="micro-value">89.5%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">2y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:82.9%"></div></div>
+<div class="micro-value">82.9%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">5y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:63.7%"></div></div>
+<div class="micro-value">63.7%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">10y</div>
+<div class="micro-track"><div class="micro-fill green" style="width:29.7%"></div></div>
+<div class="micro-value">29.7%</div>
+</div>
+</div>
+<div class="mini-panel">
+<h4>site_free</h4>
+<div class="micro-row">
+<div class="micro-label">1y</div>
+<div class="micro-track"><div class="micro-fill amber" style="width:84.7%"></div></div>
+<div class="micro-value">84.7%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">2y</div>
+<div class="micro-track"><div class="micro-fill amber" style="width:73.3%"></div></div>
+<div class="micro-value">73.3%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">5y</div>
+<div class="micro-track"><div class="micro-fill amber" style="width:48.0%"></div></div>
+<div class="micro-value">48.0%</div>
+</div>
+<div class="micro-row">
+<div class="micro-label">10y</div>
+<div class="micro-track"><div class="micro-fill amber" style="width:22.9%"></div></div>
+<div class="micro-value">22.9%</div>
+</div>
+</div>
+</div><div class="table-wrap">
+<table class="report-table">
+<thead>
+<tr>
+<th>Horizon</th>
+<th>site_adjusted eligible_n</th>
+<th>site_adjusted Percentage</th>
+<th>site_free eligible_n</th>
+<th>site_free Percentage</th>
+<th>읽는 포인트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1y</td>
+<td>238</td>
+<td>89.5%</td>
+<td>255</td>
+<td>84.7%</td>
+<td>차이는 작지만 이미 pooled end-date가 completeness를 약간 낮추기 시작합니다.</td>
+</tr>
+<tr>
+<td>2y</td>
+<td>210</td>
+<td>82.9%</td>
+<td>243</td>
+<td>73.3%</td>
+<td>site_free는 실제보다 더 많은 사람을 2년 질문의 분모에 올려두기 때문에 Percentage가 더 낮아집니다.</td>
+</tr>
+<tr>
+<td>5y</td>
+<td>146</td>
+<td>63.7%</td>
+<td>204</td>
+<td>48.0%</td>
+<td>late horizon으로 갈수록 eligible_n 차이가 커지며, completeness 차이도 함께 커집니다.</td>
+</tr>
+<tr>
+<td>10y</td>
+<td>64</td>
+<td>29.7%</td>
+<td>144</td>
+<td>22.9%</td>
+<td>실제 site-specific 관찰 기회보다 큰 분모를 쓰면 merged tail이 실제보다 더 비어 보입니다.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow">Table</div>
+<h3>주보고용 completeness 요약</h3>
+<div class="read-guide"><strong>eligible_n</strong>은 해당 horizon까지 판단할 잠재 follow-up이 충분한 사람 수이고, <strong>risk_set_n</strong>은 실제로 그 시점에 아직 관찰 중인 사람 수입니다. <strong>Percentage</strong>는 horizon 정보를 직접 확인할 수 있는 비율, <strong>CCI</strong>와 <strong>SPT</strong>는 person-time을 반영한 completeness 요약입니다. 세 지표 모두 값이 높을수록 관찰이 더 성숙했다는 뜻이며, disease severity가 높다는 뜻은 아닙니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Dataset</th><th class="">Horizon (y)</th><th class="">Reporting view</th><th class="">Support tier</th><th class="">Tail status</th><th class="">eligible_n</th><th class="">risk_set_n</th><th class="">Percentage</th><th class="">CCI</th><th class="">SPT</th></tr></thead><tbody><tr><td class="">PNU</td><td class="">1</td><td class="">single_site</td><td class=""><span class="tag primary">Primary supported</span></td><td class=""><span class="tag stable">stable</span></td><td class="">47</td><td class="">28</td><td class="">83.0%</td><td class="">88.5%</td><td class="">90.3%</td></tr><tr><td class="">PNU</td><td class="">2</td><td class="">single_site</td><td class=""><span class="tag sensitivity">Sensitivity</span></td><td class=""><span class="tag warning">very sparse</span></td><td class="">35</td><td class="">1</td><td class="">62.9%</td><td class="">93.6%</td><td class="">95.4%</td></tr><tr><td class="">PNU</td><td class="">5</td><td class="">single_site</td><td class=""><span class="tag projection">Projection</span></td><td class=""><span class="tag masked">masked: no eligible</span></td><td class="">0</td><td class="">0</td><td class="">—</td><td class="">—</td><td class="">—</td></tr><tr><td class="">PNU</td><td class="">10</td><td class="">single_site</td><td class=""><span class="tag projection">Projection</span></td><td class=""><span class="tag masked">masked: no eligible</span></td><td class="">0</td><td class="">0</td><td class="">—</td><td class="">—</td><td class="">—</td></tr><tr><td class="">SNU</td><td class="">1</td><td class="">single_site</td><td class=""><span class="tag primary">Primary supported</span></td><td class=""><span class="tag stable">stable</span></td><td class="">191</td><td class="">163</td><td class="">91.1%</td><td class="">92.6%</td><td class="">92.8%</td></tr><tr><td class="">SNU</td><td class="">2</td><td class="">single_site</td><td class=""><span class="tag primary">Primary supported</span></td><td class=""><span class="tag stable">stable</span></td><td class="">175</td><td class="">134</td><td class="">86.9%</td><td class="">89.5%</td><td class="">90.1%</td></tr><tr><td class="">SNU</td><td class="">5</td><td class="">single_site</td><td class=""><span class="tag secondary">Secondary</span></td><td class=""><span class="tag stable">stable</span></td><td class="">146</td><td class="">64</td><td class="">63.7%</td><td class="">79.2%</td><td class="">81.9%</td></tr><tr><td class="">SNU</td><td class="">10</td><td class="">single_site</td><td class=""><span class="tag projection">Projection</span></td><td class=""><span class="tag warning">very sparse</span></td><td class="">64</td><td class="">1</td><td class="">29.7%</td><td class="">54.1%</td><td class="">64.3%</td></tr><tr><td class="">merged</td><td class="">1</td><td class="">site_adjusted</td><td class=""><span class="tag primary">Primary supported</span></td><td class=""><span class="tag stable">stable</span></td><td class="">238</td><td class="">191</td><td class="">89.5%</td><td class="">91.8%</td><td class="">92.3%</td></tr><tr><td class="">merged</td><td class="">2</td><td class="">site_adjusted</td><td class=""><span class="tag primary">Primary supported</span></td><td class=""><span class="tag stable">stable</span></td><td class="">210</td><td class="">135</td><td class="">82.9%</td><td class="">90.0%</td><td class="">91.0%</td></tr><tr><td class="">merged</td><td class="">5</td><td class="">site_adjusted</td><td class=""><span class="tag secondary">Secondary</span></td><td class=""><span class="tag stable">stable</span></td><td class="">146</td><td class="">64</td><td class="">63.7%</td><td class="">79.2%</td><td class="">81.9%</td></tr><tr><td class="">merged</td><td class="">10</td><td class="">site_adjusted</td><td class=""><span class="tag projection">Projection</span></td><td class=""><span class="tag warning">very sparse</span></td><td class="">64</td><td class="">1</td><td class="">29.7%</td><td class="">54.1%</td><td class="">64.3%</td></tr></tbody></table></div>
+<p class="under-table">먼저 볼 포인트는 PNU 2년부터 매우 sparse하다는 점, SNU 5년까지는 비교적 읽을 수 있다는 점, 그리고 merged 1–2년은 primary supported이지만 6년 이후는 projection-only라는 점입니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow amber">Sensitivity table</div>
+<h3>merged overall: site_adjusted vs site_free</h3>
+<div class="read-guide">이 표는 같은 merged overall이라도 administrative end date를 어떻게 두느냐에 따라 completeness summary가 얼마나 달라지는지를 보여줍니다. 같은 horizon에서 <strong>site_adjusted</strong> 값이 더 크면, site 구조를 반영하지 않은 pooled end date가 completeness를 낮게 본 것이라고 읽으시면 됩니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Horizon (y)</th><th class="">site_adjusted Percentage</th><th class="">site_adjusted CCI</th><th class="">site_adjusted SPT</th><th class="">site_free Percentage</th><th class="">site_free CCI</th><th class="">site_free SPT</th></tr></thead><tbody><tr><td class="">1</td><td class="">89.5%</td><td class="">91.8%</td><td class="">92.3%</td><td class="">84.7%</td><td class="">89.8%</td><td class="">90.4%</td></tr><tr><td class="">2</td><td class="">82.9%</td><td class="">90.0%</td><td class="">91.0%</td><td class="">73.3%</td><td class="">84.7%</td><td class="">86.2%</td></tr><tr><td class="">5</td><td class="">63.7%</td><td class="">79.2%</td><td class="">81.9%</td><td class="">48.0%</td><td class="">71.2%</td><td class="">74.6%</td></tr><tr><td class="">10</td><td class="">29.7%</td><td class="">54.1%</td><td class="">64.3%</td><td class="">22.9%</td><td class="">49.3%</td><td class="">58.0%</td></tr></tbody></table></div>
+<p class="under-table">특히 2년과 5년에서 차이가 큽니다. 예를 들어 5년 Percentage는 site_adjusted 63.7%, site_free 48.0%로 벌어져, merged overall을 한 줄로 보고할 때 site_adjusted를 주표로 쓰는 것이 더 방어적입니다.</p>
+</div>
+<div class="block tight">
+<div class="eyebrow amber">Interpretation</div>
+<h3>그래서 무엇이 보였는가</h3>
+<p>PNU는 1년이 실질적인 주해석 구간이고, 2년은 sensitivity 수준입니다. SNU는 1–2년이 가장 직접적으로 지지되고, 3–5년은 보조적으로 읽을 수 있습니다. merged overall/sex는 반드시 <span class="mono">site_adjusted</span>를 주보고용으로 읽어야 하며, 그렇지 않으면 completeness를 불필요하게 낮게 해석하게 됩니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section class="panel" data-panel="result-3">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 3</div>
+<h2 class="panel-title">remission 처리와 subgroup/site 구조가 해석을 얼마나 바꾸는가</h2>
+<p class="panel-sub"><span class="mono">transition_only</span>는 remission을 censoring으로 두고 transition만 사건으로 셉니다. <span class="mono">remission_sensitive</span>는 transition과 remission을 모두 event-like terminal state로 셉니다. 이 차이는 PNU에서 특히 크고, merged 장기 horizon의 해석 경계와도 연결됩니다.</p>
+</div>
+</div>
+<div class="section-flow">
+<div class="block tight">
+<div class="eyebrow">Question</div>
+<h3>이 결과가 답하는 질문</h3>
+<p>같은 cohort라도 remission을 어떻게 처리하느냐에 따라 early cumulative burden이 얼마나 달라지는지, merged long horizon이 실제로 어느 site에 의해 지배되는지, 그리고 sex subgroup tail을 어디까지 읽을 수 있는지를 보여줍니다.</p>
+</div>
+<div class="stat-grid">
+<div class="stat-card">
+<div class="kicker">PNU 2y burden</div>
+<div class="value">44.4% vs 22.2%</div>
+<div class="desc">PNU에서는 remission을 event-like로 포함하면 2년 누적 burden이 두 배 가까이 커집니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">merged 2y burden</div>
+<div class="value">17.6% vs 13.0%</div>
+<div class="desc">merged도 early horizon에서는 remission 처리의 영향을 일부 받습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">merged 4y site share</div>
+<div class="value">100% SNU</div>
+<div class="desc">4년 이후 merged overall eligible set은 사실상 SNU만 남습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">PNU female 2y risk set</div>
+<div class="value">0</div>
+<div class="desc">PNU 여성 subgroup의 long-tail 해석은 특히 약합니다.</div>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow green">Representative comparison</div>
+<h3>early cumulative burden에서 remission 처리의 영향</h3>
+<p>아래 막대는 overall panel에서 <strong>cumulative event-like burden</strong>을 비교한 것입니다. 값이 클수록 해당 horizon까지 event-like terminal state가 더 많이 누적되었다는 뜻입니다. 두 view 차이가 크면 remission 처리 규칙이 early pattern을 실제로 바꾼다고 읽으시면 됩니다.</p>
+<div class="mini-grid two">
+<div class="mini-panel">
+<h4>PNU | Overall</h4>
+<div class="micro-row"><div class="micro-label">1y T</div><div class="micro-track"><div class="micro-fill blue" style="width:14.8%"></div></div><div class="micro-value">14.8%</div></div>
+<div class="micro-row"><div class="micro-label">1y R</div><div class="micro-track"><div class="micro-fill red" style="width:20.4%"></div></div><div class="micro-value">20.4%</div></div>
+<div class="micro-row"><div class="micro-label">2y T</div><div class="micro-track"><div class="micro-fill blue" style="width:22.2%"></div></div><div class="micro-value">22.2%</div></div>
+<div class="micro-row"><div class="micro-label">2y R</div><div class="micro-track"><div class="micro-fill red" style="width:44.4%"></div></div><div class="micro-value">44.4%</div></div>
+</div>
+<div class="mini-panel">
+<h4>merged | Overall</h4>
+<div class="micro-row"><div class="micro-label">1y T</div><div class="micro-track"><div class="micro-fill blue" style="width:8.4%"></div></div><div class="micro-value">8.4%</div></div>
+<div class="micro-row"><div class="micro-label">1y R</div><div class="micro-track"><div class="micro-fill red" style="width:9.5%"></div></div><div class="micro-value">9.5%</div></div>
+<div class="micro-row"><div class="micro-label">2y T</div><div class="micro-track"><div class="micro-fill blue" style="width:13.0%"></div></div><div class="micro-value">13.0%</div></div>
+<div class="micro-row"><div class="micro-label">2y R</div><div class="micro-track"><div class="micro-fill red" style="width:17.6%"></div></div><div class="micro-value">17.6%</div></div>
+</div>
+</div>
+<p class="under-table">여기서 T는 <span class="mono">transition_only</span>, R은 <span class="mono">remission_sensitive</span>를 뜻합니다. SNU overall은 remission count가 구조적으로 0이어서 두 값이 사실상 동일합니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow">Table</div>
+<h3>transition_only vs remission_sensitive의 exact comparison</h3>
+<div class="read-guide">이 표는 1년과 2년에서 두 summary view의 누적 burden을 정확한 분자/분모로 보여줍니다. <strong>Included remissions</strong>는 remission_sensitive에서 추가로 포함된 remission 수입니다. 이 값이 0이면 두 view 차이는 거의 없다고 보시면 됩니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Dataset</th><th class="">Horizon (y)</th><th class="">transition_only cumulative event-like</th><th class="">remission_sensitive cumulative event-like</th><th class="">Included remissions</th></tr></thead><tbody><tr><td class="">PNU</td><td class="">1</td><td class="">8/54 (14.8%)</td><td class="">11/54 (20.4%)</td><td class="">3</td></tr><tr><td class="">PNU</td><td class="">2</td><td class="">12/54 (22.2%)</td><td class="">24/54 (44.4%)</td><td class="">12</td></tr><tr><td class="">SNU</td><td class="">1</td><td class="">14/208 (6.7%)</td><td class="">14/208 (6.7%)</td><td class="">0</td></tr><tr><td class="">SNU</td><td class="">2</td><td class="">22/208 (10.6%)</td><td class="">22/208 (10.6%)</td><td class="">0</td></tr><tr><td class="">merged</td><td class="">1</td><td class="">22/262 (8.4%)</td><td class="">25/262 (9.5%)</td><td class="">3</td></tr><tr><td class="">merged</td><td class="">2</td><td class="">34/262 (13.0%)</td><td class="">46/262 (17.6%)</td><td class="">12</td></tr></tbody></table></div>
+<p class="under-table">즉, PNU에서는 remission 처리 규칙이 early burden을 실제로 바꾸고, SNU에서는 거의 바꾸지 않습니다. merged는 PNU의 영향을 early horizon에서 일부 받지만, later horizon으로 갈수록 그 영향은 약해집니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow purple">Site contribution</div>
+<h3>merged overall의 장기 horizon은 누구의 자료인가</h3>
+<p>merged는 pooled cohort이지만, late horizon에서 어느 site가 eligible set을 구성하는지가 중요합니다. 아래 표는 <strong>site_adjusted 기준</strong>으로 merged overall eligible set을 site별로 나눠 보여줍니다. 한 site share가 100%에 가까울수록 pooled long-tail을 그 site의 패턴으로 읽어야 합니다.</p>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Horizon (y)</th><th class="">PNU eligible</th><th class="">SNU eligible</th><th class="">Total eligible</th><th class="">SNU share of eligible set</th><th class="">Merged dominance status</th></tr></thead><tbody><tr><td class="">1</td><td class="">47</td><td class="">191</td><td class="">238</td><td class="">80.3%</td><td class=""><span class="tag neutral">single_site_dominant</span></td></tr><tr><td class="">2</td><td class="">35</td><td class="">175</td><td class="">210</td><td class="">83.3%</td><td class=""><span class="tag neutral">single_site_dominant</span></td></tr><tr><td class="">3</td><td class="">8</td><td class="">172</td><td class="">180</td><td class="">95.6%</td><td class=""><span class="tag neutral">single_site_dominant</span></td></tr><tr><td class="">4</td><td class="">0</td><td class="">162</td><td class="">162</td><td class="">100.0%</td><td class=""><span class="tag neutral">single_site_only</span></td></tr><tr><td class="">5</td><td class="">0</td><td class="">146</td><td class="">146</td><td class="">100.0%</td><td class=""><span class="tag neutral">single_site_only</span></td></tr><tr><td class="">10</td><td class="">0</td><td class="">64</td><td class="">64</td><td class="">100.0%</td><td class=""><span class="tag neutral">single_site_only</span></td></tr></tbody></table></div>
+<p class="under-table">가장 먼저 볼 포인트는 1년에도 SNU 비중이 이미 80.3%, 2년에는 83.3%, 3년에는 95.6%라는 점입니다. 4년부터는 eligible set이 100% SNU라서, merged 장기 horizon을 “두 기관 공통 장기 패턴”으로 과장해서 읽으면 안 됩니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow amber">Subgroup boundary</div>
+<h3>sex subgroup tail support는 어디까지 남는가</h3>
+<div class="read-guide">이 표는 sex subgroup별 reverse-KM median follow-up과 selected risk set을 한 번에 보여줍니다. <strong>Risk set 2y/5y/10y</strong>가 작을수록 해당 subgroup tail은 해석 강도를 낮춰야 합니다. PNU 여성의 remission-sensitive upper CI가 미추정이라는 점도 함께 확인할 수 있습니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Dataset</th><th class="">Sex</th><th class="">n</th><th class="">Reverse-KM median (transition_only)</th><th class="">Reverse-KM median (remission_sensitive)</th><th class="">Risk set 1y</th><th class="">Risk set 2y</th><th class="">Risk set 5y</th><th class="">Risk set 10y</th><th class="">Note</th></tr></thead><tbody><tr><td class="">PNU</td><td class="">Female</td><td class="">26</td><td class="">1.12 (0.49–1.57)</td><td class="">1.37 (0.49–상한 미추정)</td><td class="">11</td><td class="">0</td><td class="">0</td><td class="">0</td><td class="">remission-sensitive upper CI not estimable</td></tr><tr><td class="">PNU</td><td class="">Male</td><td class="">28</td><td class="">1.55 (0.77–1.98)</td><td class="">2.00 (1.26–2.00)</td><td class="">17</td><td class="">1</td><td class="">0</td><td class="">0</td><td class="">—</td></tr><tr><td class="">SNU</td><td class="">Female</td><td class="">66</td><td class="">4.10 (2.73–5.00)</td><td class="">4.10 (2.73–5.00)</td><td class="">53</td><td class="">43</td><td class="">19</td><td class="">0</td><td class="">—</td></tr><tr><td class="">SNU</td><td class="">Male</td><td class="">142</td><td class="">4.95 (4.29–5.00)</td><td class="">4.95 (4.29–5.00)</td><td class="">110</td><td class="">91</td><td class="">45</td><td class="">1</td><td class="">—</td></tr><tr><td class="">merged</td><td class="">Female</td><td class="">92</td><td class="">2.73 (1.63–4.00)</td><td class="">3.35 (2.03–4.61)</td><td class="">64</td><td class="">43</td><td class="">19</td><td class="">0</td><td class="">—</td></tr><tr><td class="">merged</td><td class="">Male</td><td class="">170</td><td class="">4.29 (3.04–4.96)</td><td class="">4.75 (3.83–5.00)</td><td class="">127</td><td class="">92</td><td class="">45</td><td class="">1</td><td class="">—</td></tr></tbody></table></div>
+<p class="under-table">먼저 볼 포인트는 PNU 여성 2년 risk set이 0이고, PNU 남성도 1명만 남는다는 점입니다. SNU는 남녀 모두 2년까지는 비교적 안정적이고, 특히 남성 subgroup이 더 긴 tail support를 유지합니다.</p>
+</div>
+<div class="block tight">
+<div class="eyebrow amber">Interpretation</div>
+<h3>그래서 무엇이 보였는가</h3>
+<p>PNU에서는 remission 처리 방식이 early cumulative burden을 크게 바꾸므로, 이후 cure 해석에서도 transition timing과 remission pathway를 분리해서 봐야 합니다. merged long horizon은 이름은 pooled지만 실제 내용은 빠르게 SNU 중심으로 바뀝니다. 또한 sex subgroup, 특히 PNU 여성의 late tail은 시각적 plateau가 있더라도 강하게 해석하면 안 됩니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section class="panel" data-panel="synthesis">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Synthesis</div>
+<h2 class="panel-title">앞 결과를 묶어서 이번 Stage의 해석 범위를 정리합니다</h2>
+<p class="panel-sub">Stage 2의 핵심은 cure-like pattern을 직접 주장하는 것이 아니라, 이후 단계의 해석이 어디까지 직접 관찰에 기대고 어디서부터 late-tail caution이 필요한지를 분명히 해 두는 것입니다.</p>
+</div>
+</div>
+<div class="section-flow">
+<div class="stat-grid three">
+<div class="stat-card">
+<div class="kicker">Validation</div>
+<div class="value">12/12 pass</div>
+<div class="desc">수치 보고 구조 자체의 충돌은 발견되지 않았습니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">Direct reading</div>
+<div class="value">PNU 1y · SNU/merged 1–2y</div>
+<div class="desc">가장 직접적으로 지지되는 구간입니다.</div>
+</div>
+<div class="stat-card">
+<div class="kicker">Projection zone</div>
+<div class="value">PNU 3y+ · SNU/merged 6y+</div>
+<div class="desc">late-tail 및 extrapolation 의존성이 커지는 구간입니다.</div>
+</div>
+</div>
+<div class="block">
+<div class="eyebrow">Conclusion</div>
+<h3>최종 결론</h3>
+<p>Stage 2 결과를 종합하면, PNU는 짧은 관찰창을 가진 early-pattern cohort이고 SNU는 장기 follow-up 근거를 제공하는 cohort입니다. merged는 초반에는 두 코호트의 결합 결과로 볼 수 있지만, 4년 이후에는 사실상 SNU-only summary로 읽어야 합니다. 따라서 이후의 cure-oriented 해석은 코호트별 follow-up maturity 차이와 remission 처리 차이를 반드시 함께 전제해야 합니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow green">Directly readable range</div>
+<h3>비교적 직접 읽을 수 있는 부분</h3>
+<p>PNU는 1년, SNU와 merged는 1–2년이 가장 직접적으로 관찰에 의해 지지됩니다. SNU의 3–5년은 보조적으로 읽을 수 있으며, merged의 같은 구간도 실질적으로는 SNU 기여가 압도적이라는 전제를 붙일 때 해석할 수 있습니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow amber">Cautious interpretation</div>
+<h3>조심해서 읽어야 하는 부분</h3>
+<p>PNU 2년 이후, merged 4년 이후, 그리고 sex subgroup의 late tail은 모두 해석 강도를 낮춰야 합니다. 또한 site 차이는 실제 치료 효과라기보다 care pathway, selection, referral, follow-up structure의 proxy로 읽는 것이 안전합니다. merged long horizon을 “두 기관 공통의 장기 패턴”으로 표현하는 것은 피하셔야 합니다.</p>
+</div>
+<div class="block">
+<div class="eyebrow purple">Quality flags</div>
+<h3>late-tail caution은 어디에 집중되어 있는가</h3>
+<div class="read-guide">이 표는 비치명적 quality flag의 빈도를 보여줍니다. row 수가 많다는 것은 해당 종류의 주의 신호가 Stage 2 전반에 반복되었다는 뜻입니다. 특히 masked, very sparse, site dominance 관련 flag가 많으면 late-horizon 해석이 자연스럽게 제한됩니다.</div>
+<div class="table-wrap"><table class="report-table"><thead><tr><th class="">Flag type</th><th class="">Rows</th></tr></thead><tbody><tr><td class="">completeness masked no eligible</td><td class="">56</td></tr><tr><td class="">site dominance single site only</td><td class="">42</td></tr><tr><td class="">completeness very sparse</td><td class="">40</td></tr><tr><td class="">completeness low fraction</td><td class="">18</td></tr><tr><td class="">completeness masked no risk set</td><td class="">16</td></tr><tr><td class="">completeness sparse</td><td class="">12</td></tr><tr><td class="">site dominance single site dominant</td><td class="">6</td></tr><tr><td class="">reverse km median ci incomplete</td><td class="">1</td></tr></tbody></table></div>
+<p class="under-table">이번 Stage에서 가장 두드러진 것은 <strong>masked_no_eligible</strong>, <strong>very_sparse</strong>, 그리고 <strong>single_site_only</strong>입니다. 즉, late-tail 한계는 주로 follow-up maturity 부족과 merged site concentration에서 왔습니다.</p>
+</div>
+<div class="quote-end"><strong>한 줄로 정리하면</strong> 이번 Stage는 “PNU는 1년 중심, SNU는 1–5년 중심, 그리고 merged의 장기 tail은 빠르게 SNU 중심으로 바뀐다”는 해석 경계를 가장 분명하게 보여줍니다.</div>
+</div>
+</div>
+</section>
+<section class="panel" data-panel="references">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">References</div>
+<h2 class="panel-title">사용한 참고문헌</h2>
+<p class="panel-sub">정확한 수치는 Stage 2 structured result files와 source/stage2.r에서 읽었고, 아래 문헌은 follow-up maturity와 completeness 지표 해석의 배경 문헌입니다.</p>
+</div>
+</div>
+<div class="section-flow">
+<div class="source-note">Internal project sources used for this HTML: <span class="mono">source/stage2.r</span>, <span class="mono">stage2_metadata_registry.csv</span>, <span class="mono">stage2_reverse_km_summary.csv</span>, <span class="mono">stage2_numbers_at_risk.csv</span>, <span class="mono">stage2_followup_horizon_summary.csv</span>, <span class="mono">stage2_merged_site_contribution.csv</span>, <span class="mono">stage2_quality_flags.csv</span>, <span class="mono">stage2_validation_summary.csv</span>.</div>
+<ol class="ref-list">
+<li>Betensky RA. Measures of follow-up in time-to-event studies. <em>Clinical Trials</em>. 2015;12(4):403–408.</li>
+<li>Xue X, Agalliu I, Kim MY, Wang T, Lin J, Ghavamian R, Strickler HD. New methods for estimating follow-up rates in cohort studies. <em>BMC Medical Research Methodology</em>. 2017;17:155.</li>
+</ol>
+</div>
+</div>
+</section>
+<div class="footer-note">Stage 2 independent HTML report • dark-header template preserved • exact numbers from structured Stage 2 outputs</div>
+</div>
+<script>
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,4 +1,3 @@
-
 # 🔴 Configure: paths, reuse policy, and spec guards ===============================
 run_root_dir <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage6_Cure-appropriateness screening'
 # If the completed Stage 6 run already lives in the folder you want to export into,
@@ -38,6 +37,7 @@ reuse_existing_bootstrap_exports_if_present <- TRUE
 rebuild_visual_summary_pdf <- TRUE
 save_fit_objects <- TRUE
 reuse_existing_completed_run_only <- TRUE
+prune_legacy_stage6_run_manifest <- TRUE
 
 bootstrap_hist_bins <- 35L
 bootstrap_plot_width <- 11
@@ -401,6 +401,18 @@ compact_character_set <- function(x) {
   paste(sort(x), collapse = "|")
 }
 
+split_pipe_methods <- function(x) {
+  x <- normalize_blank_na_chr(x)
+  if (is.na(x) || !nzchar(x)) {
+    return(character())
+  }
+  trimws(unlist(strsplit(x, "\\|")))
+}
+
+drop_pipe_method <- function(x, method_name) {
+  compact_character_set(setdiff(split_pipe_methods(x), method_name))
+}
+
 normalize_flag_chr <- function(x, allowed = c("supportive", "equivocal", "unsupportive")) {
   out <- as.character(x)
   out[!out %in% allowed] <- NA_character_
@@ -757,7 +769,8 @@ patch_screening_method_results <- function(df) {
     "presence_support_flag", "followup_contradiction_flag", "followup_not_contradicted_flag",
     "xie_centered_bootstrap_p_value", "descriptive_tail_summary_flag", "supporting_methods",
     "contradicting_methods", "screening_note", "common_horizon_vector", "common_threshold_vector",
-    "stage6_final_class", "carry_forward_stage8"
+    "stage6_final_class", "carry_forward_stage8", "adjusted_p_value", "p_value_type",
+    "mz_alpha_n", "mz_q_n"
   )
   for (nm in setdiff(required_columns, names(out))) {
     out[[nm]] <- NA
@@ -776,10 +789,39 @@ patch_screening_method_results <- function(df) {
       latency_formula_rhs = as.character(latency_formula_rhs),
       incidence_formula_rhs = as.character(incidence_formula_rhs),
       implementation_label = as.character(implementation_label),
-      note = as.character(note)
+      note = as.character(note),
+      p_value_type = as.character(p_value_type),
+      p_value = as_numeric_or_na(p_value),
+      adjusted_p_value = as_numeric_or_na(adjusted_p_value),
+      mz_alpha_n = as_numeric_or_na(mz_alpha_n),
+      mz_q_n = as_numeric_or_na(mz_q_n)
     )
 
   out <- normalize_method_flag(out)
+
+  out <- out %>%
+    mutate(
+      method_role = dplyr::case_when(
+        method_name == "maller_zhou_alpha_n" ~ "descriptive_tail_summary",
+        TRUE ~ method_role
+      ),
+      method_flag = dplyr::case_when(
+        method_name == "maller_zhou_alpha_n" ~ NA_character_,
+        TRUE ~ method_flag
+      ),
+      p_value = dplyr::case_when(
+        method_name == "maller_zhou_alpha_n" ~ NA_real_,
+        TRUE ~ p_value
+      ),
+      adjusted_p_value = dplyr::case_when(
+        method_name == "maller_zhou_alpha_n" ~ NA_real_,
+        TRUE ~ adjusted_p_value
+      ),
+      p_value_type = dplyr::case_when(
+        method_name == "maller_zhou_alpha_n" ~ NA_character_,
+        TRUE ~ p_value_type
+      )
+    )
 
   required_methods <- method_order
   missing_methods <- setdiff(required_methods, unique(out$method_name))
@@ -888,6 +930,16 @@ patch_carry_forward_flag_table <- function(df, stage1_inputs, variant_registry, 
     )
   }
 
+  out <- out %>%
+    mutate(
+      supporting_methods = vapply(
+        supporting_methods,
+        drop_pipe_method,
+        character(1),
+        method_name = "xie_sufficient_followup"
+      )
+    )
+
   out %>% arrange(match(dataset_key, dataset_order_full))
 }
 
@@ -993,18 +1045,48 @@ patch_screening_summary <- function(df, carry_forward_flag_table, screening_meth
       source_description = as.character(source_description),
       analysis_variant = as.character(analysis_variant),
       screening_context = coalesce(as.character(screening_context), .env$screening_context),
-      decision_rule_version = .env$decision_rule_version
+      decision_rule_version = .env$decision_rule_version,
+      maller_zhou_alpha_flag = "descriptive_only",
+      supporting_methods = vapply(
+        supporting_methods,
+        drop_pipe_method,
+        character(1),
+        method_name = "xie_sufficient_followup"
+      )
     ) %>%
     arrange(match(dataset_key, dataset_order_full))
 }
 
-patch_stage6_metadata_registry <- function(df, stage1_inputs, reuse_completed_run = TRUE) {
+patch_stage6_metadata_registry <- function(
+    df,
+    stage1_inputs,
+    run_root_dir,
+    export_path,
+    data_path,
+    bootstrap_plot_index = NULL,
+    reuse_completed_run = TRUE
+) {
   out <- tibble::as_tibble(df)
   if (nrow(out) == 0L) {
     out <- tibble::tibble(metadata_group = character(), metadata_name = character(), metadata_value = character())
   }
 
   code_rules_file <- coalesce_chr_scalar(stage1_inputs$code_rules_file, code_rules_file_candidates[[1]])
+  xie_n_valid <- if (!is.null(bootstrap_plot_index) && nrow(bootstrap_plot_index) > 0L) {
+    safe_max(bootstrap_plot_index$n_valid[bootstrap_plot_index$task_type == "xie"])
+  } else {
+    NA_real_
+  }
+  hsu_n_valid <- if (!is.null(bootstrap_plot_index) && nrow(bootstrap_plot_index) > 0L) {
+    safe_max(bootstrap_plot_index$n_valid[bootstrap_plot_index$task_type == "hsu"])
+  } else {
+    NA_real_
+  }
+  bootstrap_valid_fraction_min <- if (!is.null(bootstrap_plot_index) && nrow(bootstrap_plot_index) > 0L) {
+    safe_min(bootstrap_plot_index$valid_fraction)
+  } else {
+    NA_real_
+  }
 
   patch_tbl <- tibble::tribble(
     ~metadata_group, ~metadata_name, ~metadata_value,
@@ -1021,8 +1103,6 @@ patch_stage6_metadata_registry <- function(df, stage1_inputs, reuse_completed_ru
     "documents", "stage6_specification_file", shared_master_spec_file,
     "documents", "stage6_specification_section", "6.6",
     "screening", "alpha_screening", as.character(alpha_screening),
-    "screening", "xie_bootstrap_reps", as.character(NA),
-    "screening", "hsu_bootstrap_reps", as.character(NA),
     "screening", "receus_candidate_families", paste(candidate_receus_families, collapse = "|"),
     "screening", "hsu_candidate_families", paste(candidate_hsu_families, collapse = "|"),
     "screening", "hsu_family_set_name", hsu_family_set_name,
@@ -1034,9 +1114,18 @@ patch_stage6_metadata_registry <- function(df, stage1_inputs, reuse_completed_ru
     "screening", "results_reuse_rule", "Reuse existing completed-run Stage 6 artifacts when compatible with the current Stage 1 backbone and revised Stage 6 specification; do not rerun heavy screening calculations unless compatibility fails.",
     "screening", "bootstrap_export_reuse_rule", "If refresh_bootstrap_exports = FALSE and existing bootstrap CSV/PDF exports are already present in export_path, reuse them and skip bootstrap reconstruction/regeneration.",
     "screening", "bootstrap_histogram_png_rule", "Each bootstrap histogram page is additionally saved as a standalone PNG that does not count toward the export file-number limit.",
+    "screening", "xie_bootstrap_reps", as.character(as.integer(xie_n_valid)),
+    "screening", "hsu_bootstrap_reps", as.character(as.integer(hsu_n_valid)),
+    "screening", "bootstrap_valid_fraction_min", format(bootstrap_valid_fraction_min, trim = TRUE, scientific = FALSE),
     "outputs", "save_folder_rule", "Write all outputs into the single user-specified run_root_dir without creating extra subfolders.",
+    "outputs", "canonical_export_path", normalize_existing_path(export_path),
     "inputs", "data_path", normalize_existing_path(data_path),
-    "inputs", "export_path", normalize_existing_path(export_path)
+    "inputs", "export_path", normalize_existing_path(export_path),
+    "inputs", "stage1_bundle_file", normalize_existing_path(file.path(data_path, "stage1_backbone_bundle.rds")),
+    "inputs", "stage1_datasets_file", normalize_existing_path(file.path(data_path, "stage1_analysis_datasets.rds")),
+    "runtime", "progress_log_file", normalize_existing_path(file.path(run_root_dir, "stage6_progress_log.txt")),
+    "runtime", "runtime_status_file", normalize_existing_path(file.path(run_root_dir, "stage6_runtime_status.csv")),
+    "runtime", "shard_registry_file", normalize_existing_path(file.path(export_path, "stage6_shard_registry.csv"))
   )
 
   out <- out %>%
@@ -1045,6 +1134,141 @@ patch_stage6_metadata_registry <- function(df, stage1_inputs, reuse_completed_ru
     distinct(metadata_group, metadata_name, .keep_all = TRUE)
 
   out %>% arrange(metadata_group, metadata_name)
+}
+
+merge_backfill_column <- function(current, fallback) {
+  if (is.logical(fallback)) {
+    return(coalesce(to_logical_column(current), fallback))
+  }
+  if (is.numeric(fallback)) {
+    return(coalesce(as_numeric_or_na(current), fallback))
+  }
+  coalesce(normalize_blank_na_chr(current), as.character(fallback))
+}
+
+backfill_screening_method_results <- function(screening_method_results, carry_forward_flag_table) {
+  dataset_level <- carry_forward_flag_table %>%
+    select(
+      dataset_key,
+      source_description,
+      screening_context,
+      primary_gate_method,
+      primary_gate_flag,
+      receus_aic_flag,
+      cure_model_eligibility_flag,
+      final_decision_flag,
+      receus_primary_class,
+      presence_modifier_flag,
+      cure_presence_support_flag,
+      presence_support_flag,
+      followup_contradiction_flag,
+      followup_not_contradicted_flag,
+      xie_centered_bootstrap_p_value,
+      descriptive_tail_summary_flag,
+      supporting_methods,
+      contradicting_methods,
+      screening_note,
+      common_horizon_vector,
+      common_threshold_vector,
+      stage6_final_class,
+      carry_forward_stage8
+    )
+
+  overlap_cols <- intersect(
+    setdiff(names(dataset_level), "dataset_key"),
+    names(screening_method_results)
+  )
+
+  out <- screening_method_results %>%
+    left_join(dataset_level, by = "dataset_key", suffix = c("", "__dataset"))
+
+  for (nm in overlap_cols) {
+    out[[nm]] <- merge_backfill_column(out[[nm]], out[[paste0(nm, "__dataset")]])
+  }
+
+  out %>%
+    select(-ends_with("__dataset")) %>%
+    arrange(match(dataset_key, dataset_order_full), match(method_name, method_order))
+}
+
+validate_stage6_exports <- function(
+    variant_registry,
+    screening_method_results,
+    receus_candidate_fits,
+    bootstrap_plot_index,
+    stage6_metadata_registry,
+    stage6_shard_registry,
+    export_path,
+    run_root_dir
+) {
+  stopifnot(nrow(variant_registry) == 4L)
+  stopifnot(nrow(screening_method_results) == length(dataset_order_full) * length(method_order))
+  stopifnot(nrow(receus_candidate_fits) == length(dataset_order_full) * length(candidate_receus_families))
+  stopifnot(nrow(bootstrap_plot_index) == 15L)
+
+  if (any(bootstrap_plot_index$n_valid != bootstrap_plot_index$n_bootstrap, na.rm = TRUE)) {
+    stop("Bootstrap plot index contains incomplete valid-count groups.", call. = FALSE)
+  }
+
+  required_canonical_cols <- c(
+    "primary_gate_method",
+    "primary_gate_flag",
+    "receus_aic_flag",
+    "cure_model_eligibility_flag",
+    "stage6_final_class",
+    "carry_forward_stage8"
+  )
+
+  blank_canonical <- vapply(required_canonical_cols, function(nm) {
+    vals <- screening_method_results[[nm]]
+    if (is.logical(vals) || is.numeric(vals)) {
+      return(all(is.na(vals)))
+    }
+    all(is.na(vals) | as.character(vals) == "")
+  }, logical(1))
+
+  if (any(blank_canonical)) {
+    stop(
+      sprintf(
+        "Blank canonical method-table columns: %s",
+        paste(names(blank_canonical)[blank_canonical], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  legacy_path_hits <- stage6_metadata_registry %>%
+    filter(stringr::str_detect(metadata_value, "^[A-Za-z]:/|^C:/"))
+
+  if (nrow(legacy_path_hits) > 0L) {
+    stop("Legacy completed-run paths still leaked into stage6_metadata_registry.", call. = FALSE)
+  }
+
+  absolute_registry_paths <- unique(c(
+    normalize_blank_na_chr(stage6_shard_registry$shard_file[is_absolute_path_chr(stage6_shard_registry$shard_file)]),
+    normalize_blank_na_chr(stage6_shard_registry$observed_file[is_absolute_path_chr(stage6_shard_registry$observed_file)])
+  ))
+
+  if (length(absolute_registry_paths) > 0L) {
+    stop(
+      paste0(
+        "stage6_shard_registry still contains absolute shard/observed paths; expected run-root-relative paths: ",
+        paste(utils::head(absolute_registry_paths, 5L), collapse = ", "),
+        if (length(absolute_registry_paths) > 5L) " ..." else ""
+      ),
+      call. = FALSE
+    )
+  }
+
+  legacy_run_manifest_file <- file.path(export_path, "stage6_run_manifest.csv")
+  if (file.exists(legacy_run_manifest_file)) {
+    warning(
+      "Legacy stage6_run_manifest.csv is still present in export_path and may conflict with stage6_export_manifest.csv.",
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
 }
 
 # 🔴 Define: plot builders for Stage 6 summary figures ===============================
@@ -1120,7 +1344,19 @@ make_screening_method_plot <- function(screening_method_results) {
       method_name = factor(method_name, levels = method_order),
       method_label = factor(stringr::str_replace_all(as.character(method_name), "_", "\n"), levels = stringr::str_replace_all(method_order, "_", "\n")),
       method_flag = factor(method_flag, levels = c("supportive", "equivocal", "unsupportive")),
+      plot_flag = case_when(
+        method_name == "maller_zhou_alpha_n" ~ "descriptive_only",
+        TRUE ~ as.character(method_flag)
+      ),
+      plot_flag = factor(
+        plot_flag,
+        levels = c("supportive", "equivocal", "unsupportive", "descriptive_only")
+      ),
       plot_label = case_when(
+        method_name == "maller_zhou_alpha_n" ~ paste0(
+          "alpha=", formatC(mz_alpha_n, format = "f", digits = 3),
+          "\nq=", formatC(mz_q_n, format = "f", digits = 3)
+        ),
         !is.na(p_value) ~ paste0("p=", formatC(p_value, format = "f", digits = 3)),
         !is.na(receus_ratio_hat) & !is.na(cure_fraction_hat) ~ paste0("r=", formatC(receus_ratio_hat, format = "f", digits = 2), "\ncf=", formatC(cure_fraction_hat, format = "f", digits = 2)),
         !is.na(statistic_value) ~ formatC(statistic_value, format = "f", digits = 2),
@@ -1128,10 +1364,14 @@ make_screening_method_plot <- function(screening_method_results) {
       )
     )
 
-  screening_method_plot <- ggplot2::ggplot(screening_method_plot_data, ggplot2::aes(x = method_label, y = dataset_key, fill = method_flag)) +
+  screening_method_plot <- ggplot2::ggplot(screening_method_plot_data, ggplot2::aes(x = method_label, y = dataset_key, fill = plot_flag)) +
     ggplot2::geom_tile(colour = "white", linewidth = 0.6) +
     ggplot2::geom_text(ggplot2::aes(label = plot_label), size = 2.6, lineheight = 0.95, na.rm = TRUE) +
-    ggplot2::scale_fill_manual(values = c(supportive = "#1B9E77", equivocal = "#E6AB02", unsupportive = "#D95F02"), drop = FALSE, na.value = "#D9D9D9") +
+    ggplot2::scale_fill_manual(
+      values = c(supportive = "#1B9E77", equivocal = "#E6AB02", unsupportive = "#D95F02", descriptive_only = "#BDBDBD"),
+      drop = FALSE,
+      na.value = "#D9D9D9"
+    ) +
     ggplot2::labs(
       title = "Stage 6 screening method flags",
       subtitle = "RECeUS-AIC primary gate, family-specific HSU rows, and HSU family-set row",
@@ -1303,6 +1543,182 @@ normalize_stage6_shard_registry <- function(df) {
       observed_file = normalize_blank_na_chr(observed_file)
     )
   out
+}
+
+is_absolute_path_chr <- function(x) {
+  x <- normalize_blank_na_chr(x)
+  !is.na(x) & grepl("^(?:[A-Za-z]:/|/)", x)
+}
+
+basename_or_na <- function(x) {
+  x <- normalize_blank_na_chr(x)
+  out <- rep(NA_character_, length(x))
+  keep <- !is.na(x)
+  out[keep] <- basename(x[keep])
+  out[out %in% c("", ".", "NA")] <- NA_character_
+  out
+}
+
+normalize_relative_path_chr <- function(...) {
+  gsub("\\\\", "/", file.path(...))
+}
+
+make_stage6_shard_file_name <- function(task_type, dataset_key, working_family = NA_character_, shard_id = NA_integer_, n_shards = NA_integer_) {
+  task_type <- tolower(normalize_blank_na_chr(task_type))
+  dataset_key <- normalize_blank_na_chr(dataset_key)
+  working_family <- normalize_blank_na_chr(working_family)
+  shard_id <- as_integer_or_na(shard_id)
+  n_shards <- as_integer_or_na(n_shards)
+
+  if (is.na(task_type) || is.na(dataset_key) || is.na(shard_id) || is.na(n_shards)) {
+    return(NA_character_)
+  }
+
+  if (task_type == "xie") {
+    return(sprintf("xie__%s__shard_%03d_of_%03d.rds", dataset_key, shard_id, n_shards))
+  }
+
+  if (task_type == "hsu" && !is.na(working_family)) {
+    return(sprintf("hsu__%s__%s__shard_%03d_of_%03d.rds", dataset_key, working_family, shard_id, n_shards))
+  }
+
+  NA_character_
+}
+
+make_stage6_observed_file_name <- function(task_type, dataset_key, working_family = NA_character_) {
+  task_type <- tolower(normalize_blank_na_chr(task_type))
+  dataset_key <- normalize_blank_na_chr(dataset_key)
+  working_family <- normalize_blank_na_chr(working_family)
+
+  if (is.na(task_type) || is.na(dataset_key)) {
+    return(NA_character_)
+  }
+
+  if (task_type == "xie") {
+    return(sprintf("xie__%s__observed.rds", dataset_key))
+  }
+
+  if (task_type == "hsu" && !is.na(working_family)) {
+    return(sprintf("hsu__%s__%s__observed.rds", dataset_key, working_family))
+  }
+
+  NA_character_
+}
+
+stage6_shard_registry_normalization_notes <- c(
+  "Shard/observed paths normalized to current run_root_dir during Stage 6 export refresh.",
+  "Shard/observed paths normalized to run-root-relative paths during Stage 6 export refresh."
+)
+
+split_note_parts_preserve_order <- function(note) {
+  note <- normalize_blank_na_chr(note)
+  if (is.na(note) || !nzchar(note)) {
+    return(character())
+  }
+  parts <- trimws(unlist(strsplit(note, "\\s+\\|\\s+")))
+  parts[!is.na(parts) & nzchar(parts)]
+}
+
+collapse_note_parts_preserve_order <- function(parts) {
+  parts <- as.character(parts)
+  parts <- parts[!is.na(parts) & nzchar(parts)]
+  if (length(parts) == 0L) {
+    return(NA_character_)
+  }
+  paste(unique(parts), collapse = " | ")
+}
+
+normalize_stage6_shard_registry_note <- function(note, normalization_note) {
+  parts <- split_note_parts_preserve_order(note)
+  parts <- parts[!parts %in% stage6_shard_registry_normalization_notes]
+  collapse_note_parts_preserve_order(c(parts, normalization_note))
+}
+
+repair_stage6_shard_registry_paths <- function(df, run_root_dir) {
+  out <- normalize_stage6_shard_registry(df)
+  if (nrow(out) == 0L) {
+    return(out)
+  }
+
+  normalization_note <- "Shard/observed paths normalized to run-root-relative paths during Stage 6 export refresh."
+
+  shard_basename_existing <- basename_or_na(out$shard_file)
+  observed_basename_existing <- basename_or_na(out$observed_file)
+
+  shard_basename_derived <- vapply(
+    seq_len(nrow(out)),
+    function(ii) {
+      make_stage6_shard_file_name(
+        task_type = out$task_type[[ii]],
+        dataset_key = out$dataset_key[[ii]],
+        working_family = out$working_family[[ii]],
+        shard_id = out$shard_id[[ii]],
+        n_shards = out$n_shards[[ii]]
+      )
+    },
+    character(1)
+  )
+
+  observed_basename_derived <- vapply(
+    seq_len(nrow(out)),
+    function(ii) {
+      make_stage6_observed_file_name(
+        task_type = out$task_type[[ii]],
+        dataset_key = out$dataset_key[[ii]],
+        working_family = out$working_family[[ii]]
+      )
+    },
+    character(1)
+  )
+
+  shard_basename_final <- dplyr::coalesce(shard_basename_existing, shard_basename_derived)
+  observed_basename_final <- dplyr::coalesce(observed_basename_existing, observed_basename_derived)
+
+  out <- out %>%
+    mutate(
+      shard_file = dplyr::case_when(
+        task_type == "xie" & !is.na(shard_basename_final) ~ normalize_relative_path_chr("shards", "xie", shard_basename_final),
+        task_type == "hsu" & !is.na(shard_basename_final) ~ normalize_relative_path_chr("shards", "hsu", shard_basename_final),
+        TRUE ~ normalize_blank_na_chr(shard_file)
+      ),
+      observed_file = dplyr::case_when(
+        !is.na(observed_basename_final) ~ normalize_relative_path_chr("observed", observed_basename_final),
+        TRUE ~ normalize_blank_na_chr(observed_file)
+      ),
+      note = vapply(note, normalize_stage6_shard_registry_note, character(1), normalization_note = normalization_note)
+    )
+
+  out
+}
+
+paths_with_foreign_root <- function(paths, root_dir) {
+  paths <- normalize_blank_na_chr(paths)
+  paths <- paths[!is.na(paths) & is_absolute_path_chr(paths)]
+  if (length(paths) == 0L) {
+    return(character())
+  }
+
+  absolute_paths <- normalize_existing_path(paths)
+  root_prefix <- paste0(normalize_existing_path(root_dir), "/")
+  absolute_paths[!startsWith(absolute_paths, root_prefix)]
+}
+
+remove_legacy_stage6_run_manifest <- function(export_path) {
+  target <- file.path(export_path, "stage6_run_manifest.csv")
+  if (!file.exists(target)) {
+    return(list(removed = character(), failed = character()))
+  }
+
+  ok <- tryCatch({
+    unlink(target, force = TRUE)
+    !file.exists(target)
+  }, error = function(e) FALSE)
+
+  if (isTRUE(ok)) {
+    return(list(removed = normalize_existing_path(target), failed = character()))
+  }
+
+  list(removed = character(), failed = normalize_existing_path(target))
 }
 
 parse_shard_file_metadata <- function(path) {
@@ -1924,6 +2340,10 @@ carry_forward_flag_table <- patch_carry_forward_flag_table(
   screening_method_results,
   followup_sufficiency_summary
 )
+screening_method_results <- backfill_screening_method_results(
+  screening_method_results,
+  carry_forward_flag_table
+)
 screening_summary <- patch_screening_summary(
   stage6_outputs$screening_summary,
   carry_forward_flag_table,
@@ -1931,7 +2351,6 @@ screening_summary <- patch_screening_summary(
   followup_sufficiency_summary,
   variant_registry
 )
-stage6_metadata_registry <- patch_stage6_metadata_registry(stage6_outputs$metadata_registry, stage1_inputs, reuse_completed_run = reuse_existing_completed_run_only)
 scanned_stage6_shard_registry <- build_scanned_shard_registry(
   shards_dir = stage6_objects$shards_dir,
   observed_dir = stage6_objects$observed_dir
@@ -1939,6 +2358,10 @@ scanned_stage6_shard_registry <- build_scanned_shard_registry(
 stage6_shard_registry <- choose_best_stage6_shard_registry(
   existing_registry = stage6_objects$shard_registry,
   scanned_registry = scanned_stage6_shard_registry
+)
+stage6_shard_registry <- repair_stage6_shard_registry_paths(
+  stage6_shard_registry,
+  run_root_dir = run_root_dir
 )
 fit_objects_final <- stage6_objects$fit_objects
 
@@ -1984,6 +2407,16 @@ if (!isTRUE(reuse_existing_bootstrap_tables)) {
   bootstrap_plot_index <- build_bootstrap_plot_index(bootstrap_results)
 }
 
+stage6_metadata_registry <- patch_stage6_metadata_registry(
+  stage6_outputs$metadata_registry,
+  stage1_inputs = stage1_inputs,
+  run_root_dir = run_root_dir,
+  export_path = export_path,
+  data_path = data_path,
+  bootstrap_plot_index = bootstrap_plot_index,
+  reuse_completed_run = reuse_existing_completed_run_only
+)
+
 reuse_existing_bootstrap_histograms <- isTRUE(reuse_existing_bootstrap_tables) &&
   isTRUE(reuse_existing_bootstrap_exports_if_present) &&
   !isTRUE(refresh_bootstrap_exports) &&
@@ -2018,6 +2451,40 @@ file_variants <- list(
   stage6_visual_summary_pdf = file.path(export_path, "stage6_visual_summary.pdf"),
   stage6_bootstrap_histograms_pdf = file.path(export_path, "stage6_bootstrap_histograms.pdf"),
   stage6_export_manifest = file.path(export_path, "stage6_export_manifest.csv")
+)
+
+legacy_run_manifest_cleanup <- list(removed = character(), failed = character())
+
+if (isTRUE(prune_legacy_stage6_run_manifest) && dir.exists(export_path)) {
+  legacy_run_manifest_cleanup <- remove_legacy_stage6_run_manifest(export_path)
+
+  if (length(legacy_run_manifest_cleanup$removed) > 0L) {
+    message(
+      "Removed legacy Stage 6 run manifest from export_path: ",
+      basename(legacy_run_manifest_cleanup$removed)
+    )
+  }
+
+  if (length(legacy_run_manifest_cleanup$failed) > 0L) {
+    warning(
+      paste0(
+        "Failed to remove legacy Stage 6 run manifest from export_path: ",
+        paste(basename(legacy_run_manifest_cleanup$failed), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+}
+
+validate_stage6_exports(
+  variant_registry = variant_registry,
+  screening_method_results = screening_method_results,
+  receus_candidate_fits = receus_candidate_fits,
+  bootstrap_plot_index = bootstrap_plot_index,
+  stage6_metadata_registry = stage6_metadata_registry,
+  stage6_shard_registry = stage6_shard_registry,
+  export_path = export_path,
+  run_root_dir = run_root_dir
 )
 
 safe_write_csv_atomic(variant_registry, file_variants$stage6_variant_registry)

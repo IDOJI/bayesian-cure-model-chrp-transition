@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Stage 4 — Timing-difference separation</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#f6f7fb; --surface:#ffffff; --surface-2:#fbfbfd; --border:#e5e7eb;
+    --text:#111827; --text-soft:#6b7280; --accent:#2563eb; --accent-soft:#eff6ff; --accent-strong:#1d4ed8;
+    --green:#16a34a; --green-bg:#f0fdf4; --amber:#d97706; --amber-bg:#fffbeb; --purple:#7c3aed; --purple-bg:#f5f3ff;
+    --dark-1:#0b1220; --dark-2:#111827; --dark-3:#1f2937; --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08); --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px; --radius-lg:20px; --radius-md:14px; --radius-sm:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;background:radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%), radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%), var(--bg);color:var(--text);line-height:1.75;font-size:15px}
+  .container{max-width:1040px;margin:0 auto;padding:36px 24px 84px}
+  .hero{position:relative;overflow:hidden;padding:34px 32px 30px;border-radius:var(--radius-xl);background:radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%), linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));color:#f9fafb;box-shadow:0 24px 60px rgba(15,23,42,.18);margin-bottom:18px}
+  .hero::after{content:'';position:absolute;right:-48px;top:-42px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);pointer-events:none}
+  .hero .label{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono', monospace;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#bfdbfe;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line-dark);margin-bottom:14px}
+  .hero h1{font-size:clamp(30px, 4vw, 42px);line-height:1.12;letter-spacing:-.03em;margin-bottom:12px;max-width:900px}
+  .hero .sub{max-width:860px;font-size:15px;color:#d1d5db}
+  .tab-shell{position:sticky;top:16px;z-index:12;margin-bottom:18px}
+  .tabs{display:flex;gap:10px;flex-wrap:wrap;padding:14px;border-radius:22px;background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(229,231,235,.9);box-shadow:0 18px 40px rgba(15,23,42,.08)}
+  .tabs button{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text-soft);padding:10px 16px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:700;transition:.18s ease;box-shadow:0 1px 0 rgba(15,23,42,.02)}
+  .tabs button:hover{transform:translateY(-1px);color:var(--text);border-color:#cbd5e1}
+  .tabs button.active{background:linear-gradient(180deg,#eff6ff,#dbeafe);color:var(--accent-strong);border-color:#bfdbfe;box-shadow:0 8px 18px rgba(37,99,235,.14)}
+  .panel{display:none}
+  .panel.active{display:block;animation:fadeIn .18s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow);padding:28px;margin-bottom:18px}
+  .panel-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+  .panel-kicker{font-family:'JetBrains Mono', monospace;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:6px}
+  .panel-title{font-size:26px;line-height:1.2;letter-spacing:-.02em}
+  .panel-sub{color:var(--text-soft);max-width:820px;margin-top:8px}
+  .summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
+  .summary-item{border:1px solid var(--border);background:var(--surface-2);border-radius:16px;padding:16px}
+  .summary-item .label{font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+  .summary-item .value{font-size:15px;color:var(--text);font-weight:700}
+  .stack{display:flex;flex-direction:column;gap:16px}
+  .report-card{background:linear-gradient(180deg, var(--surface), var(--surface-2));border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--card-shadow);padding:22px 20px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.03em;margin-bottom:12px;background:var(--accent-soft);color:var(--accent-strong)}
+  .report-card h3{font-size:20px;line-height:1.3;margin-bottom:10px;letter-spacing:-.01em}
+  .report-card p{color:var(--text-soft)}
+  .report-card strong{color:var(--text)}
+  .mt12{margin-top:12px}
+  .clean-list{margin-left:18px;color:var(--text-soft)}
+  .clean-list li + li{margin-top:8px}
+  .callout{padding:18px 20px;border-radius:18px;border:1px solid var(--border);background:#fafcff;color:var(--text);margin-top:14px}
+  .callout strong{color:var(--accent-strong)}
+  .callout.soft{background:linear-gradient(180deg,#f8fbff,#ffffff)}
+  .bar-panel,.compare-stack,.hr-panel{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+  .bar-row{display:flex;flex-direction:column;gap:8px}
+  .bar-meta{display:flex;justify-content:space-between;gap:12px;align-items:center}
+  .bar-label{font-weight:700;color:var(--text)}
+  .bar-value{font-size:14px;color:var(--text-soft);font-weight:700}
+  .bar-track{position:relative;width:100%;height:14px;border-radius:999px;background:#eef2f7;overflow:hidden}
+  .bar-fill{height:100%;border-radius:999px}
+  .bar-fill.blue{background:linear-gradient(90deg,#60a5fa,#2563eb)}
+  .bar-fill.purple{background:linear-gradient(90deg,#c4b5fd,#7c3aed)}
+  .bar-fill.green{background:linear-gradient(90deg,#86efac,#16a34a)}
+  .mini-note{margin-top:8px;font-size:13px;color:#64748b}
+  .compare-box{border:1px solid var(--border);border-radius:18px;padding:16px;background:var(--surface-2)}
+  .compare-title{font-size:15px;font-weight:800;color:var(--text);margin-bottom:12px}
+  .hr-row{border:1px solid var(--border);border-radius:18px;padding:14px 16px;background:var(--surface-2)}
+  .hr-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:10px}
+  .hr-label{font-weight:800;color:var(--text)}
+  .hr-sub{font-size:13px;color:var(--text-soft)}
+  .hr-value{font-weight:800;color:var(--text);text-align:right}
+  .hr-value span{display:block;font-size:13px;color:var(--text-soft);font-weight:600}
+  .hr-track{position:relative;height:12px;border-radius:999px;background:#eef2f7}
+  .hr-reference{position:absolute;top:-3px;bottom:-3px;width:2px;background:#94a3b8;border-radius:999px}
+  .hr-marker{position:absolute;top:-2px;transform:translateX(-50%);width:16px;height:16px;background:#2563eb;border:3px solid #dbeafe;border-radius:50%;box-shadow:0 4px 10px rgba(37,99,235,.2)}
+  .table-guide{margin-bottom:12px}
+  .col-guide{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;background:#f8fafc;border:1px solid var(--border);font-size:14px;color:var(--text-soft);margin:12px 0 14px}
+  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:18px;background:white}
+  table.data-table{width:100%;border-collapse:collapse;min-width:720px}
+  .data-table thead th{background:#f8fafc;color:var(--text);font-size:13px;text-align:left;padding:12px 12px;border-bottom:1px solid var(--border);position:sticky;top:0}
+  .data-table tbody td{padding:11px 12px;border-bottom:1px solid #eef2f7;color:var(--text-soft);vertical-align:top}
+  .data-table tbody tr:last-child td{border-bottom:none}
+  .data-table tbody td:first-child,.data-table tbody td:nth-child(2){color:var(--text);font-weight:600}
+  .table-after{margin-top:10px;font-size:13px;color:#64748b}
+  .formula-note{font-family:'JetBrains Mono', monospace;color:#334155;font-size:13px}
+  .ref-list{margin-left:22px}
+  .ref-list li + li{margin-top:12px}
+  .footer-note{margin-top:28px;text-align:center;color:#94a3b8;font-size:13px}
+  @media (max-width:900px){ .summary-strip{grid-template-columns:1fr} }
+  @media (max-width:640px){ .container{padding:22px 16px 64px} .hero{padding:26px 22px 24px} .panel-card{padding:20px} .tabs{padding:10px} .tabs button{width:100%;text-align:left} .hr-head{flex-direction:column} }
+</style>
+</head>
+<body>
+<div class="container">
+<header class="hero">
+<div class="label">Stage 4 report</div>
+<h1>Stage 4 — Timing-difference separation</h1>
+<p class="sub">이번 Stage에서는 PNU와 SNU의 차이가 후반 tail에서만 나타나는지, 아니면 초기 1–2년의 transition timing 차이로 이미 드러나는지를 분리해서 확인했습니다.</p>
+</header>
+<div class="tab-shell">
+<nav aria-label="Stage tabs" class="tabs">
+<button class="active" data-tab="overview">개요</button>
+<button data-tab="results-overview">결과 개요</button>
+<button data-tab="result-1">결과 1</button>
+<button data-tab="result-2">결과 2</button>
+<button data-tab="result-3">결과 3</button>
+<button data-tab="result-4">결과 4</button>
+<button data-tab="synthesis">종합 해석</button>
+<button data-tab="references">References</button>
+</nav>
+</div>
+<section class="panel active" data-panel="overview">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Overview</div>
+<h2 class="panel-title">이 Stage는 무엇을 보는가</h2>
+<p class="panel-sub">Stage 4는 cure 해석으로 곧바로 넘어가기 전에, 먼저 PNU와 SNU 사이의 timing difference를 분리해서 보는 단계입니다. 이번 보고서는 supplied source code와 stage4 결과 CSV만을 근거로 구성했습니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">Stage role</div>
+<div class="value">Timing difference를 cure 해석보다 먼저 분리합니다.</div>
+</div>
+<div class="summary-item">
+<div class="label">Main event scale</div>
+<div class="value">transition only: status_num=1, remission은 censoring으로 처리했습니다.</div>
+</div>
+<div class="summary-item">
+<div class="label">Main readable window</div>
+<div class="value">1–2년이 핵심입니다. 2–5년은 secondary, &gt;5년은 diagnostic tail입니다.</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Stage role</div><h3>이 Stage가 전체 분석에서 하는 일</h3><p>이번 Stage는 <strong>PNU와 SNU의 차이가 후반 tail에서만 보이는지</strong>, 아니면 <strong>초기 1–2년의 transition timing 차이</strong>로 이미 나타나는지를 분리해서 보는 단계입니다. 따라서 cure 여부를 직접 판정하는 단계가 아니라, 이후 cure-aware 해석에 들어가기 전에 <strong>timing difference 자체를 먼저 정리하는 단계</strong>로 읽으시면 됩니다.</p><p class="mt12">이번 Stage의 주된 event는 <strong>transition</strong>이며, remission은 competing event가 아니라 <strong>censoring</strong>으로 처리했습니다. 따라서 remission-sensitive 해석은 이 Stage alone으로 끝내면 안 되고, 여기서는 <strong>transition-only scale</strong> 안에서만 읽어야 합니다.</p><div class="callout soft"><strong>해석 경계</strong> merged site contrast는 치료효과라기보다 더 넓은 치료 맥락, care pathway, selection, follow-up structure를 반영하는 proxy로 해석하는 것이 맞습니다.</div></article>
+<article class="report-card"><div class="eyebrow">Methods</div><h3>어떤 통계적 전략을 사용했는가</h3><p>Stage 4는 네 개의 블록으로 구성됩니다. 첫째, cohort별 <strong>Kaplan–Meier 누적 risk</strong>를 1–10년에서 계산해 관찰 가능한 범위를 봅니다. 둘째, 1년과 2년에서는 <strong>common-window observed contrast</strong>로 PNU와 SNU의 누적 risk 차이를 직접 비교합니다. 셋째, merged cohort에서는 <strong>restricted-window Cox standardization</strong>을 사용해 같은 covariate 분포를 기준으로 site를 바꿨을 때의 counterfactual risk를 계산합니다. 넷째, follow-up을 0–1, 1–2, 2–5, &gt;5년으로 나눈 <strong>piecewise Cox model</strong>로 interval-specific site effect를 봅니다.</p><p class="mt12">불확실성은 1년·2년 observed / standardized contrast에 대해 <strong>bootstrap 1000회</strong>로 요약했고, interval-specific hazard ratio는 robust standard error와 Wald p-value가 export되었습니다. 2–5년과 &gt;5년 구간은 support가 부족하면 수치를 억지로 보고하지 않고 <strong>suppressed</strong> 처리했습니다.</p></article>
+<article class="report-card"><div class="eyebrow">Modeling table</div><h3>모델링 표</h3><p class="table-guide">이 표는 이번 Stage에서 어떤 분석 블록이 어떤 질문에 답하는지, 그리고 그것이 어떤 통계적 형태로 계산됐는지를 논문식 표기로 요약한 것입니다. 여기서 값이 클수록 위험이 높거나, HR이 1보다 작을수록 SNU의 같은 구간 transition 속도가 PNU보다 낮다는 뜻입니다.</p><div class="table-wrap"><table class="data-table"><thead><tr><th>분석 블록</th><th>무엇을 했는가</th><th>명시적 설정</th><th>주요 산출물</th></tr></thead><tbody><tr><td>Overall KM benchmark</td><td>각 cohort의 관찰 가능한 transition risk 패턴을 확인했습니다.</td><td>Ŝ_d(t), R̂_d(t)=1−Ŝ_d(t), d∈{PNU,SNU,merged}</td><td>1–10년 observed risk, CI, n at risk</td></tr><tr><td>Short-horizon observed contrast</td><td>같은 1년·2년 window에서 PNU와 SNU를 직접 비교했습니다.</td><td>Δ_obs(h)=R̂_PNU(h)−R̂_SNU(h), h∈{1,2}</td><td>absolute risk difference, bootstrap interval</td></tr><tr><td>Site-adjusted standardized contrast</td><td>merged cohort 공통 covariate 분포를 기준으로 site만 바꾼 counterfactual risk를 계산했습니다.</td><td>R̂(h|site=s), s∈{PNU,SNU}; Δ_adj(h)=R̂_PNU(h)−R̂_SNU(h)</td><td>site-standardized risk, adjusted difference</td></tr><tr><td>Piecewise interval-specific site effect</td><td>follow-up을 0–1, 1–2, 2–5, &gt;5년으로 나누어 각 구간의 상대 속도를 추정했습니다.</td><td>h_j(t|X)=h_0j(t)exp(β_site,j·site + β_age·age_s + β_sex·sex + β_int·age_s×sex)</td><td>interval-specific HR, robust SE, 95% CI, p-value</td></tr><tr><td>Interval support / hazard summary</td><td>각 구간에서 site별 subjects, events, person-time이 충분한지를 확인했습니다.</td><td>hazard_j = events_j / person-years_j × 100; conditional risk_j = 1−Ŝ(t_end)/Ŝ(t_start)</td><td>support diagnostics, crude hazard /100 PY</td></tr></tbody></table></div><div class="table-after">즉, 이번 Stage는 누적 risk와 interval-specific hazard를 함께 보되, 2–5년 이후는 support diagnostic이 먼저이고 site effect 해석은 그 다음이라는 순서로 읽으시면 됩니다.</div><div class="callout soft"><strong>보고 범위</strong> restricted-window Cox의 내부 coefficient는 이번 stage result files에 export되지 않았고, 실제로 보고 가능한 것은 standardized risk와 absolute risk difference입니다.</div></article>
+<article class="report-card"><div class="eyebrow">Hypotheses</div><h3>이번 Stage에서 실제로 쓸 수 있는 검정과 가설</h3><p class="table-guide">이 표는 이름이 있는 통계적 검정만 따로 정리한 것입니다. 1년·2년 absolute risk difference는 bootstrap percentile interval로 보고되며, 별도의 global log-rank test나 likelihood-ratio test는 이번 stage output에 포함되어 있지 않습니다.</p><div class="table-wrap"><table class="data-table"><thead><tr><th>검정 이름</th><th>무엇을 비교하는가</th><th>H₀</th><th>H₁</th></tr></thead><tbody><tr><td>Piecewise Cox interval-specific Wald test</td><td>각 interval에서 SNU와 PNU의 hazard ratio</td><td>HR_j = 1</td><td>HR_j ≠ 1</td></tr></tbody></table></div><div class="table-after">즉, p-value가 실제로 제공된 곳은 reportable한 piecewise hazard-ratio rows뿐이고, 나머지 핵심 비교는 interval estimate 중심으로 읽어야 합니다.</div></article>
+<article class="report-card"><div class="eyebrow">Related references</div><h3>관련 방법론과 참고 범위</h3><p>이번 Stage는 Kaplan–Meier 누적위험 요약, piecewise Cox interval comparison, cure-model 배경, follow-up maturity 및 extrapolation uncertainty에 관한 기존 문헌을 배경으로 두고 있습니다. 다만, 아래 결과 해석은 어디까지나 이번 Stage의 CSV exports와 source code에서 직접 확인되는 범위 안에서만 적었습니다.</p><p class="mt12">자세한 서지사항은 <strong>References</strong> 탭에 정리했습니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="results-overview">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Results overview</div>
+<h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+<p class="panel-sub">이 Stage의 결과는 먼저 cohort의 관찰 가능 범위를 확인하고, 다음으로 초기 1–2년 difference를 본 뒤, 마지막에 late interval support가 왜 site comparison을 막는지를 설명하는 순서로 읽는 것이 가장 자연스럽습니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">Directly readable window</div>
+<div class="value">1–2년</div>
+</div>
+<div class="summary-item">
+<div class="label">Strongest pattern</div>
+<div class="value">초기 PNU risk와 transition speed가 더 높습니다.</div>
+</div>
+<div class="summary-item">
+<div class="label">Main limitation</div>
+<div class="value">PNU late follow-up가 2년 이후 급격히 줄어듭니다.</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Reading map</div><h3>이번 Stage 결과를 읽는 순서</h3><p>먼저 <strong>결과 1</strong>에서 cohort별 follow-up 범위와 관찰 가능 창을 확인하시면 됩니다. 이 단계가 중요한 이유는, late interval 수치가 없을 때 그것이 ‘차이가 없다’는 뜻인지, 아니면 ‘관찰 지원이 없다’는 뜻인지를 구분해야 하기 때문입니다.</p><p class="mt12">그 다음 <strong>결과 2</strong>에서 1년과 2년의 cumulative risk 차이를 보시면 됩니다. 여기서는 같은 기간 안에서 직접 관찰한 차이와, merged cohort를 이용해 site를 표준화한 차이를 나란히 보여 드립니다. 이후 <strong>결과 3</strong>에서는 같은 이야기가 interval-specific hazard ratio에서도 반복되는지 확인하고, 마지막 <strong>결과 4</strong>에서 2–5년 이후 비교가 왜 멈추는지 support 표로 정리했습니다.</p></article>
+<article class="report-card"><div class="eyebrow">Section planning</div><h3>결과 묶음별 질문</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>탭</th><th>이 탭이 답하는 질문</th><th>주요 source</th><th>해석 강도</th><th>한 줄 메시지</th></tr></thead><tbody><tr><td>결과 1</td><td>cohort 구조와 관찰 가능 범위</td><td>stage4_dataset_summary + risk_trajectory</td><td>직접 관찰 + follow-up 범위</td><td>PNU는 2년 이후 late support가 거의 없습니다.</td></tr><tr><td>결과 2</td><td>1–2년 cumulative risk 차이</td><td>stage4_supported_short_horizon_contrast</td><td>1년은 직접 관찰, 2년은 일부 모델 의존</td><td>초기 1–2년에서 PNU risk가 더 높습니다.</td></tr><tr><td>결과 3</td><td>구간별 hazard ratio</td><td>stage4_piecewise_site_effect</td><td>0–1, 1–2년은 reportable</td><td>초기 구간에서 SNU hazard가 PNU보다 낮습니다.</td></tr><tr><td>결과 4</td><td>2–5년 이후 support와 suppression</td><td>stage4_piecewise_interval_support + hazard_pattern_summary</td><td>late interval 직접 비교 불가</td><td>추정 실패의 핵심은 late PNU support 부족입니다.</td></tr></tbody></table></div><div class="table-after">즉, 이 Stage는 먼저 관찰 범위를 확인하고, 다음으로 초기 1–2년 차이를 본 뒤, 마지막에 late support 부족 때문에 mid/late 비교가 왜 멈추는지 설명하는 흐름으로 읽으시면 됩니다.</div></article>
+</div>
+</section>
+<section class="panel" data-panel="result-1">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 1</div>
+<h2 class="panel-title">관찰 범위와 cohort 구조</h2>
+<p class="panel-sub">이번 결과 묶음은 cohort별 follow-up 범위가 어디까지 직접 관찰을 지지하는지를 보여줍니다. 이후 모든 숫자의 해석 강도는 여기서 정해집니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">PNU max follow-up</div>
+<div class="value">2.67년</div>
+</div>
+<div class="summary-item">
+<div class="label">SNU max follow-up</div>
+<div class="value">10.11년</div>
+</div>
+<div class="summary-item">
+<div class="label">Merged median follow-up</div>
+<div class="value">2.07년</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Question</div><h3>이 결과가 답하는 질문</h3><p>이번 결과는 <strong>어디까지가 직접 관찰에 기대어 읽을 수 있는 구간인지</strong>를 묻습니다. Stage 4는 1–10년까지 risk trajectory를 export하지만, 모든 horizon이 같은 강도로 지지되는 것은 아닙니다. 따라서 먼저 cohort 구조와 follow-up 길이를 보아야 이후 숫자의 해석 강도를 정할 수 있습니다.</p></article>
+<article class="report-card"><div class="eyebrow">Key numbers</div><h3>핵심 수치 3개</h3><ul class="clean-list"><li>PNU의 최대 follow-up은 <strong>2.67년</strong>으로 짧고, SNU는 <strong>10.11년</strong>까지 이어집니다.</li><li>PNU의 median follow-up은 <strong>1.11년</strong>, SNU는 <strong>3.80년</strong>, merged는 <strong>2.07년</strong>입니다.</li><li>primary-supported horizon 수는 PNU가 <strong>1개</strong>, SNU와 merged가 각각 <strong>2개</strong>입니다.</li></ul></article>
+<article class="report-card"><div class="eyebrow">HTML-native visual</div><h3>대표 비교</h3><p>아래 막대는 cohort별 최대 follow-up 길이를 같은 눈금에서 비교한 것입니다. 막대가 길수록 그 cohort가 더 늦은 시점까지 실제 관찰로 tail을 제공한다는 뜻입니다.</p><div class="bar-panel">
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">PNU</div>
+<div class="bar-value">2.67 years</div>
+</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:26.4%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">SNU</div>
+<div class="bar-value">10.11 years</div>
+</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:100.0%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">merged</div>
+<div class="bar-value">10.11 years</div>
+</div>
+<div class="bar-track"><div class="bar-fill green" style="width:100.0%"></div></div>
+</div></div><div class="mini-note">PNU는 2년대 초반까지만 직접 관찰이 남아 있고, merged의 late tail은 사실상 SNU가 제공합니다.</div></article>
+<article class="report-card"><div class="eyebrow">Table guide</div><h3>이 표를 어떻게 읽는지</h3><p>아래 표는 각 cohort의 표본 수, event와 censoring 구성, 그리고 follow-up 길이를 보여줍니다. <strong>Max FU</strong>는 그 cohort가 직접 관찰로 도달한 가장 먼 시점이고, <strong>Primary-supported horizons</strong>는 이 Stage에서 비교적 자신 있게 읽을 수 있도록 지정된 horizon 수입니다. 값이 클수록 late follow-up 지원이 더 좋다는 뜻입니다.</p><div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>N</th><th>Transitions</th><th>Remissions</th><th>Right-censored</th><th>Median FU (y)</th><th>Max FU (y)</th><th>Primary-supported horizons</th></tr></thead><tbody><tr><td>PNU</td><td>54</td><td>12</td><td>13</td><td>29</td><td>1.11</td><td>2.67</td><td>1</td></tr><tr><td>SNU</td><td>208</td><td>38</td><td>0</td><td>170</td><td>3.80</td><td>10.11</td><td>2</td></tr><tr><td>merged</td><td>262</td><td>50</td><td>13</td><td>199</td><td>2.07</td><td>10.11</td><td>2</td></tr></tbody></table></div><div class="table-after">즉, 이 표에서 먼저 봐야 할 포인트는 PNU의 최대 follow-up이 2.67년으로 짧고, SNU와 merged의 late tail이 훨씬 길다는 점입니다.</div></article>
+<article class="report-card"><div class="eyebrow">Interpretation</div><h3>해석</h3><p>이 표와 막대에서 먼저 보이는 점은, <strong>PNU는 초기 패턴을 보여주는 cohort</strong>이고, <strong>SNU는 late tail을 보여주는 cohort</strong>라는 점입니다. 따라서 merged에서 5년 이후 risk가 계산되더라도, 그것을 PNU와 SNU의 late difference로 곧바로 읽으면 안 됩니다.</p><p class="mt12">쉬운 말로 바꾸면, 이번 Stage는 처음부터 <strong>‘1–2년은 직접 비교, 2년 이후는 점점 조심’</strong>이라는 구조를 갖고 있습니다. 그래서 late interval 수치가 비어 있거나 suppressed인 것은 분석 실패라기보다, 애초에 데이터가 late PNU comparison을 충분히 지지하지 못한다는 사실을 정직하게 보여주는 결과에 가깝습니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="result-2">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 2</div>
+<h2 class="panel-title">1–2년 cumulative risk 차이</h2>
+<p class="panel-sub">이 결과 묶음은 같은 1년·2년 창에서 PNU와 SNU의 누적 transition risk가 얼마나 다른지 보여줍니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">1y observed difference</div>
+<div class="value">9.7%p</div>
+</div>
+<div class="summary-item">
+<div class="label">2y adjusted difference</div>
+<div class="value">14.4%p to 15.5%p</div>
+</div>
+<div class="summary-item">
+<div class="label">PNU 2y instability</div>
+<div class="value">bootstrap success 63.6%</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Question</div><h3>이 결과가 답하는 질문</h3><p>이번 결과는 <strong>late tail을 보기 전에, 초기 1–2년의 cumulative transition risk 차이가 이미 존재하는가</strong>를 묻습니다. 값이 클수록 같은 시점까지 누적된 transition risk가 더 높다는 뜻이고, <strong>PNU−SNU difference</strong>가 양수이면 PNU에서 같은 시점까지 transition이 더 많이 누적됐다는 뜻입니다.</p></article>
+<article class="report-card"><div class="eyebrow">Key numbers</div><h3>핵심 수치 4개</h3><ul class="clean-list"><li>1년 observed risk는 PNU <strong>17.0%</strong>, SNU <strong>7.3%</strong>였습니다.</li><li>1년 observed absolute risk difference는 <strong>9.7%p</strong>였습니다.</li><li>2년 observed absolute risk difference는 <strong>17.7%p</strong>였지만, 이 row는 <strong>bootstrap instability flag</strong>가 붙었습니다.</li><li>2년 adjusted standardized difference는 <strong>14.4%p</strong>와 <strong>15.5%p</strong>로 같은 방향을 유지했고, 이는 merged cohort의 공통 covariate 분포를 기준으로 계산한 <strong>model-based standardized estimate</strong>였습니다.</li></ul></article>
+<article class="report-card"><div class="eyebrow">HTML-native visual</div><h3>가장 중요한 비교</h3><p>아래 막대는 1년과 2년 시점의 직접 관찰 KM risk를 보여줍니다. 같은 시점에서 막대가 길수록 누적 transition risk가 더 높습니다. 이 시각화는 <strong>직접 관찰된 risk 자체</strong>만 보여주며, 조정된 standardized 값과 그 신뢰구간은 아래 표에서 따로 확인하시면 됩니다.</p><div class="compare-stack">
+<div class="compare-box">
+<div class="compare-title">1년 observed risk</div>
+<div class="bar-row">
+<div class="bar-meta"><div class="bar-label">PNU observed risk</div><div class="bar-value">17.0%</div></div>
+<div class="bar-track"><div class="bar-fill blue" style="width:48.5%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta"><div class="bar-label">SNU observed risk</div><div class="bar-value">7.3%</div></div>
+<div class="bar-track"><div class="bar-fill purple" style="width:20.8%"></div></div>
+</div>
+</div>
+<div class="compare-box">
+<div class="compare-title">2년 observed risk</div>
+<div class="bar-row">
+<div class="bar-meta"><div class="bar-label">PNU observed risk</div><div class="bar-value">29.9%</div></div>
+<div class="bar-track"><div class="bar-fill blue" style="width:85.4%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta"><div class="bar-label">SNU observed risk</div><div class="bar-value">12.2%</div></div>
+<div class="bar-track"><div class="bar-fill purple" style="width:34.7%"></div></div>
+</div>
+</div></div><div class="callout soft"><strong>자연빈도로 읽으면</strong> 1년 직접 관찰 비교에서 PNU 100명을 1년 동안 추적했을 때 SNU 100명보다 transition을 겪는 사람이 약 <strong>10명 더 많았다</strong>는 뜻입니다(17.0명 대 7.3명). 반면 2년 adjusted 비교의 <strong>14–16명/100명</strong>은 실제로 100명을 직접 센 값이 아니라, merged cohort의 공통 covariate 분포를 기준으로 site만 PNU 또는 SNU라고 가정했을 때 2년 내 transition이 그 정도 더 많을 것으로 추정된 <strong>model-based absolute risk difference</strong>를 자연빈도로 풀어 쓴 표현입니다.</div></article>
+<article class="report-card"><div class="eyebrow">Table guide</div><h3>이 표를 어떻게 읽는지</h3><p>아래 표는 같은 1년·2년 horizon에서 PNU와 SNU를 비교한 핵심 숫자만 모은 것입니다. <strong>직접 관찰 KM</strong>은 각 site cohort에서 실제 관찰된 cumulative risk를 그대로 비교한 것이고, <strong>조정 표준화</strong>는 merged cohort의 공통 covariate 분포를 기준으로 site만 바꿨을 때의 counterfactual risk를 계산한 것입니다. 따라서 direct observed row는 더 직접적이고, adjusted standardized row는 더 모델 의존적입니다. 마지막 열은 각 risk 자체의 구간이 아니라, <strong>PNU−SNU absolute risk difference</strong>에 대한 95% bootstrap CI입니다.</p><div class="callout soft mt12"><strong>예를 들어 1년 직접 관찰 비교의 -0.8%p to 22.2%p</strong>는 PNU−SNU difference의 95% 신뢰구간이 -0.8%p에서 22.2%p라는 뜻입니다. 즉, 자료와 bootstrap 재표집 불확실성을 반영하면 SNU가 아주 조금 더 높을 가능성부터 PNU가 22.2%p 더 높을 가능성까지 포함합니다. <strong>0을 포함</strong>하므로 1년 직접 관찰 차이의 정밀도는 제한적이라고 읽습니다.</div><div class="col-guide"><span><strong>PNU risk / SNU risk</strong>: 같은 시점까지의 누적 transition probability</span><span><strong>PNU−SNU difference</strong>: 양수이면 PNU가 더 높고, 단위는 %p(percentage points)입니다</span><span><strong>PNU−SNU difference의 95% CI</strong>: 마지막 열의 absolute risk difference에 대한 95% bootstrap 신뢰구간입니다</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Horizon</th><th>비교 방식</th><th>PNU risk</th><th>SNU risk</th><th>PNU−SNU difference</th><th>PNU−SNU difference의 95% CI</th><th>비고</th></tr></thead><tbody><tr><td>1년</td><td>직접 관찰 KM</td><td>17.0%</td><td>7.3%</td><td>9.7%p</td><td>-0.8%p to 22.2%p</td><td>직접 관찰 비교</td></tr><tr><td>1년</td><td>조정 표준화 (site_added)</td><td>17.8%</td><td>7.1%</td><td>10.7%p</td><td>-0.3%p to 24.4%p</td><td>merged 기준 표준화</td></tr><tr><td>1년</td><td>조정 표준화 (site_interaction)</td><td>18.2%</td><td>7.1%</td><td>11.1%p</td><td>-0.4%p to 26.1%p</td><td>merged 기준 표준화</td></tr><tr><td>2년</td><td>직접 관찰 KM</td><td>29.9%</td><td>12.2%</td><td>17.7%p</td><td>2.2%p to 33.2%p</td><td>PNU row bootstrap instability</td></tr><tr><td>2년</td><td>조정 표준화 (site_added)</td><td>27.3%</td><td>12.8%</td><td>14.4%p</td><td>0.3%p to 29.8%p</td><td>merged 기준 표준화</td></tr><tr><td>2년</td><td>조정 표준화 (site_interaction)</td><td>28.1%</td><td>12.6%</td><td>15.5%p</td><td>1.6%p to 32.1%p</td><td>merged 기준 표준화</td></tr></tbody></table></div><div class="mini-note">즉, 이 표에서는 먼저 1년과 2년 모두 PNU risk가 더 높다는 점을 보고, 다음으로 마지막 열의 95% CI가 0을 포함하는지 여부로 그 차이의 정밀도를 확인하시면 됩니다. 특히 2년 직접 관찰 row는 PNU support가 매우 얇아 불안정 플래그를 함께 봐야 합니다.</div></article>
+<article class="report-card"><div class="eyebrow">Interpretation</div><h3>해석</h3><p>직접 관찰 KM과 조정된 standardized risk가 모두 같은 방향을 가리킨다는 점이 이번 Stage에서 가장 중요합니다. 즉, PNU와 SNU의 차이는 나중 tail에서만 생긴 것이 아니라, <strong>초기 1–2년 cumulative risk에서 이미 보입니다.</strong></p><p class="mt12">다만 2년 direct observed row는 그대로 강하게 단정하면 안 됩니다. PNU 2년 row는 at-risk가 사실상 1명 수준까지 줄어 bootstrap 성공률도 <strong>63.6%</strong>에 그쳤기 때문입니다. 그래서 2년은 <strong>observed row보다 adjusted standardized row의 방향성 확인</strong>에 더 큰 비중을 두고 읽는 것이 안전합니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="result-3">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 3</div>
+<h2 class="panel-title">구간별 hazard ratio로 본 timing separation</h2>
+<p class="panel-sub">이 결과 묶음은 초기 차이가 누적 risk뿐 아니라 interval-specific transition speed 차이로도 보이는지 정리합니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">0–1y HR range</div>
+<div class="value">0.39 to 0.44</div>
+</div>
+<div class="summary-item">
+<div class="label">1–2y HR range</div>
+<div class="value">0.27 to 0.29</div>
+</div>
+<div class="summary-item">
+<div class="label">Interpretation key</div>
+<div class="value">HR &lt; 1이면 SNU hazard가 더 낮습니다.</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Question</div><h3>이 결과가 답하는 질문</h3><p>이번 결과는 <strong>초기 차이가 누적 risk에서만 보이는지, 아니면 각 interval 안의 transition speed 자체가 다른지</strong>를 묻습니다. 여기서 <strong>hazard ratio</strong>는 같은 구간 안에서의 상대적인 event 속도 비율입니다. 이번 표의 HR은 모두 <strong>SNU vs PNU</strong>이므로, HR이 1보다 작으면 SNU의 같은 구간 transition 속도가 PNU보다 낮다는 뜻입니다.</p></article>
+<article class="report-card"><div class="eyebrow">Key numbers</div><h3>핵심 수치 3개</h3><ul class="clean-list"><li>0–1년 unadjusted HR은 <strong>0.39</strong>였습니다.</li><li>1–2년 unadjusted HR은 <strong>0.27</strong>였습니다.</li><li>조정 후에도 1–2년 HR은 <strong>0.29</strong>와 <strong>0.28</strong>로 여전히 1보다 작았습니다.</li></ul></article>
+<article class="report-card"><div class="eyebrow">HTML-native visual</div><h3>대표 비교</h3><p>아래 가로 HR 축은 각 모델의 <strong>hazard ratio point estimate 자체</strong>를 요약해서 보여줍니다. <strong>회색 세로선</strong>은 차이 없음(no difference)을 뜻하는 HR=1 기준선이고, <strong>파란 점</strong>은 우리 데이터에 적합된 piecewise Cox model에서 나온 HR point estimate입니다. 이 그림은 bootstrap 분포나 유의확률 0.05 cutoff를 그린 것이 아닙니다.</p><div class="hr-panel">
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">0–1년 · unadjusted</div>
+<div class="hr-sub">interval-specific site effect</div>
+</div>
+<div class="hr-value">0.39 <span>0.16 to 0.93</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:32.51%"></div>
+</div>
+</div>
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">0–1년 · site + age + sex</div>
+<div class="hr-sub">covariate adjusted</div>
+</div>
+<div class="hr-value">0.44 <span>0.18 to 1.08</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:36.51%"></div>
+</div>
+</div>
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">0–1년 · site + age + sex + age×sex</div>
+<div class="hr-sub">interaction adjusted</div>
+</div>
+<div class="hr-value">0.42 <span>0.17 to 1.02</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:34.64%"></div>
+</div>
+</div>
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">1–2년 · unadjusted</div>
+<div class="hr-sub">interval-specific site effect</div>
+</div>
+<div class="hr-value">0.27 <span>0.08 to 0.87</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:22.49%"></div>
+</div>
+</div>
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">1–2년 · site + age + sex</div>
+<div class="hr-sub">covariate adjusted</div>
+</div>
+<div class="hr-value">0.29 <span>0.09 to 0.93</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:23.88%"></div>
+</div>
+</div>
+<div class="hr-row">
+<div class="hr-head">
+<div>
+<div class="hr-label">1–2년 · site + age + sex + age×sex</div>
+<div class="hr-sub">interaction adjusted</div>
+</div>
+<div class="hr-value">0.28 <span>0.09 to 0.90</span></div>
+</div>
+<div class="hr-track">
+<div class="hr-reference" style="left:83.33%"></div>
+<div class="hr-marker" style="left:23.24%"></div>
+</div>
+</div></div><div class="callout soft mt12"><strong>시각화 해석 핵심</strong> 회색선은 <strong>HR=1 기준선</strong>, 파란 점은 <strong>각 row의 HR point estimate</strong>입니다. 점 옆에 적힌 0.16 to 0.93 같은 값은 그 row의 95% CI이고, bootstrap 결과를 직접 그린 것이 아닙니다.</div><div class="mini-note">기준선은 HR=1입니다. 이 값보다 작으면 같은 구간의 transition speed가 SNU에서 더 낮다는 뜻입니다.</div></article>
+<article class="report-card"><div class="eyebrow">Table guide</div><h3>이 표를 어떻게 읽는지</h3><p>아래 표는 reportable한 0–1년, 1–2년 구간의 HR만 정리한 것입니다. 이 숫자들은 bootstrap 분포에서 직접 읽은 값이 아니라, <strong>piecewise Cox model의 계수에서 계산된 HR, 95% CI, Wald p-value</strong>입니다. 따라서 이 표는 각 interval 안에서 SNU와 PNU의 상대적인 transition speed가 어떻게 다른지를 보여주는 <strong>model-based effect-size table</strong>로 읽으시면 됩니다.</p><div class="callout soft mt12"><strong>열 해석</strong> Interval은 follow-up을 나눈 시간 구간이고, Model은 어떤 조정변수를 넣었는지, HR(SNU vs PNU)는 그 구간 안에서 SNU의 transition hazard가 PNU의 몇 배인지를 뜻합니다. <strong>HR=1</strong>이면 차이 없음, <strong>HR&lt;1</strong>이면 SNU가 더 느림, <strong>HR&gt;1</strong>이면 SNU가 더 빠릅니다. 95% CI가 1을 포함하면 그 row는 차이 없음과도 양립 가능하다는 뜻이고, p-value는 그 row에서 <strong>H0: HR=1</strong>을 검사한 결과입니다.</div><div class="col-guide"><span><strong>HR (SNU vs PNU)</strong>: 1보다 작을수록 SNU의 같은 구간 transition speed가 더 낮습니다</span><span><strong>95% CI</strong>: 그 HR 추정치의 불확실성 범위이며, 1을 포함하면 차이 없음과도 양립 가능합니다</span><span><strong>p-value</strong>: 각 row에서 H0: HR=1을 검정한 Wald test 결과입니다</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Interval</th><th>모델</th><th>HR (SNU vs PNU)</th><th>95% CI</th><th>p-value</th></tr></thead><tbody><tr><td>0–1년</td><td>unadjusted</td><td>0.39</td><td>0.16 to 0.93</td><td>0.033</td></tr><tr><td>0–1년</td><td>site + age + sex</td><td>0.44</td><td>0.18 to 1.08</td><td>0.073</td></tr><tr><td>0–1년</td><td>site + age + sex + age×sex</td><td>0.42</td><td>0.17 to 1.02</td><td>0.056</td></tr><tr><td>1–2년</td><td>unadjusted</td><td>0.27</td><td>0.08 to 0.87</td><td>0.029</td></tr><tr><td>1–2년</td><td>site + age + sex</td><td>0.29</td><td>0.09 to 0.93</td><td>0.038</td></tr><tr><td>1–2년</td><td>site + age + sex + age×sex</td><td>0.28</td><td>0.09 to 0.90</td><td>0.032</td></tr></tbody></table></div><div class="mini-note">즉, 이 표에서는 먼저 HR이 1보다 작은지로 방향을 보고, 다음으로 95% CI가 1을 포함하는지로 정밀도를 확인하시면 됩니다. 이 표의 p-value는 보조 정보이고, Stage 전체 해석은 direction·support·suppression 여부를 함께 봐야 합니다.</div></article>
+<article class="report-card"><div class="eyebrow">Interpretation</div><h3>해석</h3><p>이 결과는 cumulative risk 차이가 단순 누적의 결과가 아니라, <strong>초기 구간의 transition speed 차이</strong>로도 설명된다는 점을 보여줍니다. 0–1년과 1–2년 모두에서 HR이 일관되게 1보다 작았기 때문에, SNU에서는 같은 초기 구간의 transition이 PNU보다 더 천천히 진행되는 패턴으로 읽을 수 있습니다.</p><p class="mt12">다만 0–1년 조정 모델의 CI는 1을 살짝 걸치거나 근처까지 옵니다. 따라서 ‘방향성은 일관되지만 정밀도는 제한적’이라고 읽는 것이 좋습니다. 즉, 이 Stage는 <strong>초기 timing separation의 방향</strong>은 분명히 보여주지만, 그 크기를 소수점 둘째 자리까지 과신하게 하지는 않습니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="result-4">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Result 4</div>
+<h2 class="panel-title">2–5년 이후의 support와 suppression</h2>
+<p class="panel-sub">이 결과 묶음은 mid/late interval에서 왜 site effect가 보고되지 않았는지를 support 관점에서 설명합니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">2–5y PNU subjects</div>
+<div class="value">1</div>
+</div>
+<div class="summary-item">
+<div class="label">2–5y PNU person-years</div>
+<div class="value">0.67</div>
+</div>
+<div class="summary-item">
+<div class="label">&gt;5y PNU person-years</div>
+<div class="value">0.00</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Question</div><h3>이 결과가 답하는 질문</h3><p>이번 결과는 <strong>왜 2–5년과 &gt;5년 interval에서는 site effect가 보고되지 않았는가</strong>를 설명합니다. 여기서 핵심은 값이 없다는 사실 자체보다, <strong>왜 값이 없게 되었는가</strong>입니다. 만약 late interval support가 부족하다면, 그 구간의 HR를 보고하지 않는 것이 오히려 올바른 보고입니다.</p></article>
+<article class="report-card"><div class="eyebrow">Key numbers</div><h3>핵심 수치 4개</h3><ul class="clean-list"><li>2–5년 구간의 PNU subject 수는 <strong>1</strong>명, PNU event 수는 <strong>0</strong>건이었습니다.</li><li>2–5년 구간의 PNU person-time은 <strong>0.67</strong> person-years였습니다.</li><li>&gt;5년 구간의 PNU subject 수와 event 수는 모두 <strong>0</strong>입니다.</li><li>따라서 2–5년과 &gt;5년에서 각 3개 모델의 site-effect row가 모두 <strong>suppressed</strong> 되었습니다.</li></ul></article>
+<article class="report-card"><div class="eyebrow">HTML-native visual</div><h3>대표 비교</h3><p>아래 비교는 late interval에서 PNU와 SNU의 support가 얼마나 다른지를 subjects 기준으로 보여줍니다. 이 단계에서는 ‘late effect가 없다’보다 ‘late effect를 계산할 support가 PNU에 거의 없다’가 더 중요한 메시지입니다.</p><div class="bar-panel">
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">2–5년 PNU subjects</div>
+<div class="bar-value">1 subjects</div>
+</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:0.7%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">2–5년 SNU subjects</div>
+<div class="bar-value">134 subjects</div>
+</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:100.0%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">&gt;5년 PNU subjects</div>
+<div class="bar-value">0 subjects</div>
+</div>
+<div class="bar-track"><div class="bar-fill blue" style="width:0.0%"></div></div>
+</div>
+<div class="bar-row">
+<div class="bar-meta">
+<div class="bar-label">&gt;5년 SNU subjects</div>
+<div class="bar-value">64 subjects</div>
+</div>
+<div class="bar-track"><div class="bar-fill purple" style="width:100.0%"></div></div>
+</div></div><div class="callout soft"><strong>핵심 메시지</strong> late tail은 SNU와 merged에는 남아 있지만, PNU에서는 사실상 사라집니다. 그래서 late site comparison은 ‘부재’가 아니라 ‘지지 부족’으로 읽어야 합니다.</div></article>
+<article class="report-card"><div class="eyebrow">Table guide</div><h3>이 표를 어떻게 읽는지</h3><p>첫 번째 표는 interval별로 PNU와 SNU에서 실제로 몇 명이 남아 있었고, 몇 건의 event와 얼마나 많은 person-time이 있었는지를 보여줍니다. <strong>Estimable?</strong>가 No이면, 그 interval에서는 site effect를 수치로 보고하지 않는 것이 규칙입니다. 두 번째 표의 <strong>crude hazard /100 PY</strong>는 100 person-years당 event 수를 뜻하고, <strong>conditional interval risk</strong>는 그 구간 안에서의 조건부 누적 위험입니다.</p><div class="col-guide"><span><strong>subjects</strong>: 그 interval에 남아 있는 비교 가능 인원</span><span><strong>person-years</strong>: 그 interval에서 실제 관찰된 시간</span><span><strong>Estimable?</strong>: site effect를 보고할 만큼 support가 충분했는지 여부</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Interval</th><th>PNU subjects</th><th>SNU subjects</th><th>PNU events</th><th>SNU events</th><th>PNU person-years</th><th>SNU person-years</th><th>Estimable?</th><th>왜 그런가</th></tr></thead><tbody><tr><td>0–1년</td><td>54</td><td>208</td><td>8</td><td>14</td><td>37.13</td><td>179.12</td><td>Yes</td><td>—</td></tr><tr><td>1–2년</td><td>28</td><td>163</td><td>4</td><td>8</td><td>16.92</td><td>145.28</td><td>Yes</td><td>—</td></tr><tr><td>2–5년</td><td>1</td><td>134</td><td>0</td><td>12</td><td>0.67</td><td>318.19</td><td>No</td><td>zero/sparse PNU late support</td></tr><tr><td>&gt;5년</td><td>0</td><td>64</td><td>0</td><td>4</td><td>0.00</td><td>93.20</td><td>No</td><td>no PNU person-time</td></tr></tbody></table></div><div class="table-after">즉, 2–5년부터 PNU late support가 사실상 사라져 interval-specific site comparison을 안정적으로 계산할 수 없게 됩니다.</div><div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>Band</th><th>Crude hazard /100 PY</th><th>Conditional interval risk</th></tr></thead><tbody><tr><td>PNU</td><td>0-1</td><td>21.5</td><td>17.0%</td></tr><tr><td>PNU</td><td>1-2</td><td>23.6</td><td>15.5%</td></tr><tr><td>PNU</td><td>2-5</td><td>0.0</td><td>—</td></tr><tr><td>PNU</td><td>5-10</td><td>—</td><td>—</td></tr><tr><td>SNU</td><td>0-1</td><td>7.8</td><td>7.3%</td></tr><tr><td>SNU</td><td>1-2</td><td>5.5</td><td>5.3%</td></tr><tr><td>SNU</td><td>2-5</td><td>3.8</td><td>10.2%</td></tr><tr><td>SNU</td><td>5-10</td><td>4.3</td><td>14.7%</td></tr><tr><td>merged</td><td>0-1</td><td>10.2</td><td>9.2%</td></tr><tr><td>merged</td><td>1-2</td><td>7.4</td><td>6.8%</td></tr><tr><td>merged</td><td>2-5</td><td>3.8</td><td>10.1%</td></tr><tr><td>merged</td><td>5-10</td><td>4.3</td><td>14.7%</td></tr></tbody></table></div><div class="table-after">즉, hazard summary는 SNU와 merged에서는 late band가 남아 있지만, PNU는 2년 이후 직접 관찰 기반의 late hazard 패턴을 거의 제공하지 못한다는 점을 보여줍니다.</div></article>
+<article class="report-card"><div class="eyebrow">Interpretation</div><h3>해석</h3><p>이번 결과가 말하는 바는 분명합니다. 2–5년과 &gt;5년 구간에서 수치가 suppressed된 이유는, <strong>PNU late support가 사실상 붕괴했기 때문</strong>입니다. 따라서 이것을 late site difference가 없었다는 근거로 읽으면 안 됩니다.</p><p class="mt12">쉬운 말로 바꾸면, late interval은 SNU의 tail은 보이지만 PNU의 tail은 거의 보이지 않습니다. 그래서 이 Stage에서 책임 있게 말할 수 있는 범위는 <strong>초기 1–2년 timing difference</strong>까지이고, 그 이후는 직접 비교의 강도를 한 단계 낮춰 읽어야 합니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="synthesis">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">Synthesis</div>
+<h2 class="panel-title">앞 결과를 묶어서 이 Stage의 결론을 정리하면</h2>
+<p class="panel-sub">이번 Stage는 PNU–SNU 차이를 ‘초기 timing separation’과 ‘late support 부족’으로 나누어 읽게 해 주는 단계입니다.</p>
+</div>
+</div>
+</div>
+<div class="summary-strip">
+<div class="summary-item">
+<div class="label">Robust finding</div>
+<div class="value">초기 1–2년에서 PNU의 transition timing이 더 이릅니다.</div>
+</div>
+<div class="summary-item">
+<div class="label">Read with caution</div>
+<div class="value">2년 direct observed row와 그 이후 late interval 비교입니다.</div>
+</div>
+<div class="summary-item">
+<div class="label">Do not over-read</div>
+<div class="value">suppressed late rows를 ‘차이 없음’으로 해석하면 안 됩니다.</div>
+</div>
+</div>
+<div class="stack">
+<article class="report-card"><div class="eyebrow">Conclusion</div><h3>최종 결론</h3><p>이번 Stage만 놓고 보면, PNU와 SNU의 차이는 후반 tail에서 새로 생긴다기보다 <strong>초기 1–2년의 더 빠른 transition timing</strong>에서 이미 드러납니다. 이 점은 cumulative risk와 interval-specific hazard ratio가 같은 방향을 가리키기 때문에 더 설득력 있게 읽을 수 있습니다.</p></article>
+<article class="report-card"><div class="eyebrow">Directly readable range</div><h3>직접 읽을 수 있는 부분</h3><p>상대적으로 직접 읽기 좋은 부분은 1년과 2년, 그중에서도 특히 1년입니다. 1년에서는 PNU observed risk가 SNU보다 높고, piecewise HR도 같은 방향을 보였습니다. 2년은 observed row가 흔들리지만, adjusted standardized rows가 같은 방향을 유지해 초기 차이가 tail artifact만은 아니라는 점을 보강합니다.</p></article>
+<article class="report-card"><div class="eyebrow">Cautious interpretation</div><h3>조심해서 읽어야 하는 부분</h3><p>2–5년과 &gt;5년 interval에 대해서는 late site comparison을 직접적으로 말할 근거가 부족합니다. PNU late support가 거의 없기 때문입니다. 따라서 merged의 late risk trajectory나 SNU의 late hazard pattern은 기술적으로 보여줄 수 있어도, 이를 곧바로 PNU–SNU late difference의 증거로 쓰면 안 됩니다.</p><p class="mt12">또한 merged site-adjusted contrast는 깨끗한 treatment effect가 아니라 broader site context를 반영하는 proxy이므로, ‘어느 치료가 더 좋았다’는 식의 인과 해석으로 확장해서는 안 됩니다.</p></article>
+<article class="report-card"><div class="eyebrow">Short discussion</div><h3>한 문단으로 정리하면</h3><p>종합하면, Stage 4는 PNU와 SNU의 차이를 ‘후반 extrapolated tail’보다 ‘초기 1–2년 timing separation’으로 읽는 것이 더 타당하다는 쪽의 증거를 제공합니다. 다만 mid/late interval에서는 PNU의 직접 관찰 지원이 거의 사라지므로, 이후 cure-aware 해석에서도 이 late 구간을 주된 근거로 삼아서는 안 됩니다. 즉, 이번 Stage가 남기는 가장 실용적인 메시지는 <strong>초기 timing difference는 보이지만, late site difference는 현재 자료만으로 책임 있게 단정할 수 없다</strong>는 것입니다.</p></article>
+</div>
+</section>
+<section class="panel" data-panel="references">
+<div class="panel-card">
+<div class="panel-head">
+<div>
+<div class="panel-kicker">References</div>
+<h2 class="panel-title">사용한 참고문헌</h2>
+<p class="panel-sub">이번 Stage의 방법과 해석 범위를 이해하는 데 직접 연결되는 문헌만 골라 정리했습니다.</p>
+</div>
+</div>
+<ol class="ref-list"><li>Peng Y, Yu B. The parametric cure model. In: Cure Models—Methods, Applications, and Implementation. CRC Press. 2021–2022.</li><li>Parsa M, Van Keilegom I. Accelerated failure time vs Cox proportional hazards mixture cure models. Statistical Papers. 2023;64:835–855.</li><li>Cai C, Zou Y, Peng Y, Zhang J. smcure: An R-package for estimating semiparametric mixture cure models. Comput Methods Programs Biomed. 2012;108:1255–1260.</li><li>Gelman A. Scaling regression inputs by dividing by two standard deviations. Stat Med. 2008;27:2865–2873.</li><li>Betensky RA. Measures of follow-up in time-to-event studies: Why provide them and what should they be? Clin Trials. 2015;12:403–408.</li><li>Xie P, Escobar-Bach M, Van Keilegom I. Testing for sufficient follow-up in censored survival data by using extremes. Biometrical Journal. 2024.</li><li>Bullement A, Willis A, Amin A, et al. Evaluation of survival extrapolation in immuno-oncology using multiple pre-planned data cuts. BMC Med Res Methodol. 2020;20:103.</li><li>Kearns B, Stevens J, Ren S, Brennan A. How uncertain is the survival extrapolation? PharmacoEconomics. 2020;38:193–204.</li></ol>
+</div>
+</section>
+<div class="footer-note">Stage 4 independent HTML report • based on supplied Stage 4 source code and CSV exports</div>
+</div>
+<script>
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+</script>
+</body>
+</html>
