@@ -466,12 +466,14 @@ normalize_model_class <- function(x, default = NA_character_) {
   xl <- tolower(gsub('[^a-z0-9]+', '_', x0))
   
   out <- dplyr::case_when(
-    xl %in% c('', 'na') ~ default,
+    is.na(xl) | xl %in% c('', 'na') ~ default,
     str_detect(xl, 'km|benchmark') ~ 'KM_benchmark',
     str_detect(xl, 'no_cure|non_cure|noncure') ~ 'no_cure',
     str_detect(xl, 'frequentist_cure|mle_cure|stage7') ~ 'frequentist_cure',
     str_detect(xl, 'bayesian_cure|stage8|bayesian') ~ 'bayesian_cure',
     str_detect(xl, 'remission_sensitive_frequentist|stage9|competing_risk_frequentist') ~ 'remission_sensitive_frequentist',
+    str_detect(xl, 'mixture_cure|latency_cure') & default %in% c('frequentist_cure', 'bayesian_cure') ~ default,
+    str_detect(xl, 'cause_specific|subdistribution|fine_gray') & default == 'remission_sensitive_frequentist' ~ 'remission_sensitive_frequentist',
     TRUE ~ x0
   )
   
