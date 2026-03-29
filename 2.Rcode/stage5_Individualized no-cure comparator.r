@@ -391,6 +391,10 @@ validate_existing_stage5_core <- function(
     return(FALSE)
   }
   
+  if (!"metric_domain" %in% names(model_performance_long)) {
+    return(FALSE)
+  }
+  
   if (!all(c("model_id", "horizon_year", "bin_index") %in% names(calibration_bins_long))) {
     return(FALSE)
   }
@@ -477,6 +481,31 @@ validate_existing_stage5_core <- function(
     )
     
     if (legacy_error_n > 0L) {
+      return(FALSE)
+    }
+  }
+  
+  observed_reference_check <- model_performance_long %>%
+    filter(
+      metric_domain == "horizon_reference",
+      metric_name %in% c("observed_ipcw_risk", "case_count_ipcw", "nonevent_count_ipcw")
+    ) %>%
+    select(model_id, horizon_year, metric_name, metric_value) %>%
+    tidyr::pivot_wider(names_from = metric_name, values_from = metric_value)
+  
+  if (nrow(observed_reference_check) > 0L) {
+    unsupported_observed_ipcw_nonmissing_count <- sum(
+      (
+        !is.finite(observed_reference_check$case_count_ipcw) |
+          observed_reference_check$case_count_ipcw <= 0 |
+          !is.finite(observed_reference_check$nonevent_count_ipcw) |
+          observed_reference_check$nonevent_count_ipcw <= 0
+      ) &
+        !is.na(observed_reference_check$observed_ipcw_risk),
+      na.rm = TRUE
+    )
+    
+    if (unsupported_observed_ipcw_nonmissing_count > 0L) {
       return(FALSE)
     }
   }
