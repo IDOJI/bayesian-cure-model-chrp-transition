@@ -1700,7 +1700,7 @@ At minimum for each admissible Bayesian fit:
 - explicit branch labels (`Stage8A` or `Stage8B`)
 - a mandatory anchor-informed versus neutral delta table
 - a mandatory prior-to-posterior incidence-shape source table
-- a mandatory Stage 8A-versus-Stage 8B delta table for remission-aware change quantification
+- a mandatory Stage 8B-exported Stage 8A-versus-Stage 8B delta table for remission-aware change quantification
 
 The default hazard-plausibility export for Stage 8 is the full annual `1, 2, ..., 10 years` grid from cohort entry, not a reduced anchor-year subset only.
 
@@ -1795,7 +1795,7 @@ Instead:
 - prior-tail governance table
 - anchor-informed versus neutral delta table
 - prior-to-posterior incidence-shape source table
-- Stage 8A-versus-Stage 8B delta table
+- Stage 8A-versus-Stage 8B delta table, exported by Stage 8B
 - cure-model-only supporting decomposition table with `susceptible_fraction`, uncured-only annual summaries, and optional `MSTu`
 - explicit `prior_branch`, `site_prior_family`, branch labels, and `risk_scale` labels
 
@@ -2056,6 +2056,7 @@ The following display objects are mandatory:
   - must overlay `prior_tail_sensitive` where applicable
 
 - `8A_vs_8B_delta_panel`
+  - must be computed and exported by Stage 8B using Stage 8A as the reference branch
   - must show the remission-aware delta quantities by dataset and horizon
   - its purpose is to prevent readers from treating the competing-risk extension as invisible
 
@@ -2100,7 +2101,7 @@ The following display objects are mandatory:
 - one heterogeneity-triangulation table
 - direct comparability across all model classes **within each risk scale**
 - explicit supplementary treatment of remission-sensitive competing-risk outputs
-- figure-ready source tables for the `horizon_support_panel`, `8A_vs_8B_delta_panel`, `anchor_vs_neutral_delta_panel`, `incidence_anchor_update_panel`, and `heterogeneity_triangulation_panel`
+- figure-ready source tables for the `horizon_support_panel`, `8A_vs_8B_delta_panel` (exported by Stage 8B), `anchor_vs_neutral_delta_panel`, `incidence_anchor_update_panel`, and `heterogeneity_triangulation_panel`
 
 ## 7. Operational workflow and parallelization rule
 

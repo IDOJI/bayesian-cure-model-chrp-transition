@@ -9,7 +9,7 @@ project_root <- switch(
   stop("Unsupported OS: ", sys_name)
 )
 
-merged_data_path   <- file.path(project_root, "MERGED_dataset3_pnu_snu.csv")
+merged_data_path   <- file.path(project_root, "data", "MERGED_dataset3_pnu_snu.csv")
 export_path        <- file.path(project_root, "stage8A_Bayesian transition-only cure")
 stage5_export_path <- file.path(project_root, "stage5_Individualized no-cure comparator")
 stage6_export_path <- file.path(project_root, "stage6_Cure-appropriateness screening")
@@ -270,6 +270,13 @@ stage8a_model_rds_path <- function(model_id, export_dir = export_path) {
   file.path(export_dir, paste0(model_id, "__bayes_stage8a_fit.rds"))
 }
 
+bundle_get <- function(bundle, name) {
+  if (is.null(bundle) || !is.list(bundle)) {
+    return(NULL)
+  }
+  bundle[[name]] %||% NULL
+}
+
 bundle_table_or_empty <- function(bundle, element, model_id = NULL) {
   obj <- bundle[[element]]
   if (is.null(obj) || !inherits(obj, "data.frame") || nrow(obj) == 0L) {
@@ -282,9 +289,9 @@ bundle_table_or_empty <- function(bundle, element, model_id = NULL) {
   out
 }
 
-load_existing_stage8a_bundle <- function(path, model_id) {
-  missing_bundle <- function(reason = "missing_rds") {
-    list(found = FALSE, reason = reason, bundle = NULL, registry = NULL, admissible = FALSE)
+load_existing_stage8a_bundle <- function(path, model_row = NULL, dataset_df = NULL) {
+  missing_bundle <- function(found = FALSE, reason = "missing_rds", bundle = NULL, registry = NULL, admissible = FALSE, reusable = FALSE) {
+    list(found = found, reason = reason, bundle = bundle, registry = registry, admissible = admissible, reusable = reusable)
   }
 
   if (is.null(path) || !nzchar(path) || !file.exists(path)) {
@@ -293,44 +300,98 @@ load_existing_stage8a_bundle <- function(path, model_id) {
 
   bundle <- tryCatch(readRDS(path), error = identity)
   if (inherits(bundle, "error")) {
-    stop(
-      "Existing Stage 8A RDS could not be read: ",
-      path,
-      " (",
-      conditionMessage(bundle),
-      ")",
-      call. = FALSE
+    return(
+      missing_bundle(
+        found = TRUE,
+        reason = paste0("rds_read_error: ", conditionMessage(bundle))
+      )
     )
   }
   if (!is.list(bundle)) {
-    stop("Existing Stage 8A RDS is not a list bundle: ", path, call. = FALSE)
+    return(missing_bundle(found = TRUE, reason = "invalid_bundle_object"))
   }
 
-  registry <- bundle[["model_registry_row"]] %||% bundle[["model_registry"]]
+  registry <- bundle_get(bundle, "model_registry_row") %||% bundle_get(bundle, "model_registry")
   if (is.null(registry) || !inherits(registry, "data.frame") || nrow(registry) == 0L) {
-    stop("Existing Stage 8A RDS is missing `model_registry_row`: ", path, call. = FALSE)
+    return(missing_bundle(found = TRUE, reason = "missing_model_registry_row", bundle = bundle))
   }
   registry <- tibble::as_tibble(registry[1L, , drop = FALSE])
 
+  admissible_flag <- isTRUE(as.logical(registry$admissible_flag[[1L]] %||% FALSE))
   registry_model_id <- as.character(registry$model_id[[1L]] %||% NA_character_)
-  if (!is.na(registry_model_id) && !identical(registry_model_id, model_id)) {
-    stop(
-      sprintf(
-        "Existing Stage 8A RDS model_id mismatch for `%s`: found `%s` in %s",
-        model_id,
-        registry_model_id,
-        path
-      ),
-      call. = FALSE
-    )
-  }
+  registry_dataset_key <- as.character(registry$dataset_key[[1L]] %||% NA_character_)
+  registry_fit_status <- as.character(registry$fit_status[[1L]] %||% NA_character_)
+  registry_n <- suppressWarnings(as.integer(registry$n[[1L]] %||% NA_integer_))
 
-  list(
+  required_names <- c(
+    "coefficient_summary",
+    "diagnostics_parameter_level",
+    "ppc_summary",
+    "prior_predictive_summary",
+    "prediction_long",
+    "cohort_yearly",
+    "classification",
+    "uncured_decomposition",
+    "hazard_plausibility"
+  )
+  has_required_outputs <- all(vapply(required_names, function(nm) {
+    !is.null(bundle_get(bundle, nm))
+  }, logical(1)))
+
+  inc_draws <- bundle_get(bundle, "posterior_incidence_draws")
+  has_required_draws <- !isTRUE(admissible_flag) || (
+    is.list(inc_draws) &&
+      all(c("alpha_inc", "beta_inc") %in% names(inc_draws))
+  )
+
+  expected_model_id <- if (!is.null(model_row) && "model_id" %in% names(model_row)) {
+    as.character(model_row$model_id[[1L]])
+  } else {
+    NA_character_
+  }
+  expected_dataset_key <- if (!is.null(model_row) && "dataset_key" %in% names(model_row)) {
+    as.character(model_row$dataset_key[[1L]])
+  } else {
+    NA_character_
+  }
+  expected_n <- if (!is.null(dataset_df)) nrow(dataset_df) else NA_integer_
+
+  reusable_reason <- dplyr::case_when(
+    !is.na(expected_model_id) && is.na(registry_model_id) ~ "missing_model_id",
+    !is.na(expected_model_id) && !is.na(registry_model_id) && !identical(registry_model_id, expected_model_id) ~ "model_id_mismatch",
+    !is.na(expected_dataset_key) && is.na(registry_dataset_key) ~ "missing_dataset_key",
+    !is.na(expected_dataset_key) && !is.na(registry_dataset_key) && !identical(registry_dataset_key, expected_dataset_key) ~ "dataset_key_mismatch",
+    !is.na(expected_n) && !is.na(registry_n) && !identical(registry_n, expected_n) ~ "dataset_size_mismatch",
+    !identical(registry_fit_status, "ok") ~ "fit_status_not_ok",
+    !has_required_outputs ~ "missing_required_outputs",
+    !has_required_draws ~ "missing_posterior_incidence_draws",
+    TRUE ~ "existing_rds"
+  )
+
+  reusable_flag <- identical(reusable_reason, "existing_rds")
+
+  missing_bundle(
     found = TRUE,
-    reason = "existing_rds",
+    reason = reusable_reason,
     bundle = bundle,
     registry = registry,
-    admissible = isTRUE(as.logical(registry$admissible_flag[[1L]] %||% FALSE))
+    admissible = admissible_flag,
+    reusable = reusable_flag
+  )
+}
+
+is_stage8a_bundle_reusable <- function(bundle_check) {
+  isTRUE(bundle_check$reusable)
+}
+
+default_stage8a_bundle_check <- function(reason = "reuse_not_evaluated") {
+  list(
+    found = FALSE,
+    reason = reason,
+    bundle = NULL,
+    registry = NULL,
+    admissible = FALSE,
+    reusable = FALSE
   )
 }
 
@@ -1863,7 +1924,16 @@ safe_generate_diagnostic_pdf <- function(trace_records, cohort_df, class_df, ppc
   }
 
   if (nrow(cohort_df) > 0L) {
-    g_risk <- cohort_df %>%
+    risk_plot_df <- cohort_df %>%
+      filter(
+        is.finite(horizon),
+        is.finite(risk_mean),
+        is.finite(risk_q025),
+        is.finite(risk_q975)
+      )
+
+    if (nrow(risk_plot_df) > 0L) {
+      g_risk <- risk_plot_df %>%
       ggplot(aes(x = horizon, y = risk_mean, color = model_id, fill = model_id)) +
       geom_ribbon(aes(ymin = risk_q025, ymax = risk_q975), alpha = 0.15, linewidth = 0) +
       geom_line(linewidth = 0.7) +
@@ -1873,11 +1943,21 @@ safe_generate_diagnostic_pdf <- function(trace_records, cohort_df, class_df, ppc
         x = "Horizon (years)",
         y = "Posterior mean risk"
       ) +
-      theme_bw() +
-      theme(legend.position = "none")
-    print(g_risk)
+        theme_bw() +
+        theme(legend.position = "none")
+      print(g_risk)
+    }
 
-    g_haz <- cohort_df %>%
+    hazard_plot_df <- cohort_df %>%
+      filter(
+        is.finite(horizon),
+        is.finite(hazard_mean),
+        is.finite(hazard_q025),
+        is.finite(hazard_q975)
+      )
+
+    if (nrow(hazard_plot_df) > 0L) {
+      g_haz <- hazard_plot_df %>%
       ggplot(aes(x = horizon, y = hazard_mean, color = model_id, fill = model_id)) +
       geom_ribbon(aes(ymin = hazard_q025, ymax = hazard_q975), alpha = 0.15, linewidth = 0) +
       geom_line(linewidth = 0.7) +
@@ -1887,14 +1967,24 @@ safe_generate_diagnostic_pdf <- function(trace_records, cohort_df, class_df, ppc
         x = "Horizon (years)",
         y = "Posterior mean hazard"
       ) +
-      theme_bw() +
-      theme(legend.position = "none")
-    print(g_haz)
+        theme_bw() +
+        theme(legend.position = "none")
+      print(g_haz)
+    }
   }
 
   if (nrow(class_df) > 0L) {
-    g_nb <- class_df %>%
+    nb_plot_df <- class_df %>%
       filter(horizon %in% c(1L, 2L, 5L)) %>%
+      filter(
+        is.finite(threshold),
+        is.finite(NB_mean),
+        is.finite(NB_q025),
+        is.finite(NB_q975)
+      )
+
+    if (nrow(nb_plot_df) > 0L) {
+      g_nb <- nb_plot_df %>%
       ggplot(aes(x = threshold, y = NB_mean, color = model_id, fill = model_id)) +
       geom_ribbon(aes(ymin = NB_q025, ymax = NB_q975), alpha = 0.15, linewidth = 0) +
       geom_line(linewidth = 0.7) +
@@ -1904,27 +1994,46 @@ safe_generate_diagnostic_pdf <- function(trace_records, cohort_df, class_df, ppc
         x = "Risk threshold",
         y = "Net benefit"
       ) +
-      theme_bw() +
-      theme(legend.position = "none")
-    print(g_nb)
+        theme_bw() +
+        theme(legend.position = "none")
+      print(g_nb)
+    }
   }
 
   if (nrow(ppc_df) > 0L) {
-    g_ppc <- ppc_df %>%
+    ppc_plot_df <- ppc_df %>%
+      filter(
+        is.finite(horizon),
+        is.finite(posterior_mean_risk),
+        is.finite(posterior_q025_risk),
+        is.finite(posterior_q975_risk)
+      )
+
+    if (nrow(ppc_plot_df) > 0L) {
+      g_ppc <- ppc_plot_df %>%
       ggplot(aes(x = horizon, y = posterior_mean_risk, color = model_id)) +
       geom_errorbar(aes(ymin = posterior_q025_risk, ymax = posterior_q975_risk), width = 0.12, alpha = 0.6) +
       geom_line(linewidth = 0.6) +
-      geom_point(linewidth = 0.6) +
-      geom_point(aes(y = observed_km_risk), shape = 4, size = 2, stroke = 0.9, color = "black") +
+      geom_point(size = 1.2) +
+      geom_point(
+        data = ppc_plot_df %>% filter(is.finite(observed_km_risk)),
+        aes(x = horizon, y = observed_km_risk),
+        shape = 4,
+        size = 2,
+        stroke = 0.9,
+        color = "black",
+        inherit.aes = FALSE
+      ) +
       facet_wrap(~ dataset_key, scales = "free_y") +
       labs(
         title = "Stage 8A posterior predictive checks against observed KM risk",
         x = "Horizon (years)",
         y = "Risk"
       ) +
-      theme_bw() +
-      theme(legend.position = "none")
-    print(g_ppc)
+        theme_bw() +
+        theme(legend.position = "none")
+      print(g_ppc)
+    }
   }
 
   if (length(trace_records) == 0L && nrow(cohort_df) == 0L && nrow(class_df) == 0L && nrow(ppc_df) == 0L) {
@@ -1984,22 +2093,6 @@ compute_prior_tail_flags <- function(anchor_vs_neutral_delta_panel) {
       )
     ) %>%
     select(dataset_key, structural_model_id, family_code, site_prior_family, horizon, prior_tail_sensitive)
-}
-
-empty_stage8a_vs_stage8b_delta_panel <- function() {
-  tibble(
-    dataset_key = character(),
-    horizon = integer(),
-    threshold = double(),
-    delta_risk_8B_minus_8A = double(),
-    delta_cure_fraction_8B_minus_8A = double(),
-    delta_false_positive_burden_8B_minus_8A = double(),
-    delta_FP100_8B_minus_8A = double(),
-    delta_NB_8B_minus_8A = double(),
-    delta_PPV_8B_minus_8A = double(),
-    delta_TPR_8B_minus_8A = double(),
-    note = character()
-  )
 }
 
 empty_anchor_vs_neutral_delta_panel <- function() {
@@ -2256,15 +2349,26 @@ build_delta_vs_nocure <- function(performance_long, nocure_cohort_long, nocure_c
 
   cohort_rows <- performance_long %>%
     filter(is.na(threshold)) %>%
-    select(dataset_key, model_id, formula_anchor, horizon, risk_mean)
+    select(dataset_key, model_id, formula_anchor, horizon, risk_mean) %>%
+    distinct()
+
+  nocure_cohort_ref <- nocure_cohort_long %>%
+    filter(metric == "risk_mean") %>%
+    select(dataset_key, formula_anchor, no_cure_model_id, horizon, metric, value) %>%
+    distinct()
+
+  nocure_class_ref <- nocure_class_long %>%
+    select(dataset_key, formula_anchor, no_cure_model_id, horizon, threshold, metric, value) %>%
+    distinct()
 
   out_rows <- list()
 
-  if (nrow(nocure_cohort_long) > 0L) {
+  if (nrow(nocure_cohort_ref) > 0L) {
     cohort_join <- cohort_rows %>%
       inner_join(
-        nocure_cohort_long %>% filter(metric == "risk_mean"),
-        by = c("dataset_key", "formula_anchor", "horizon")
+        nocure_cohort_ref,
+        by = c("dataset_key", "formula_anchor", "horizon"),
+        relationship = "many-to-many"
       ) %>%
       transmute(
         dataset_key = dataset_key,
@@ -2279,7 +2383,7 @@ build_delta_vs_nocure <- function(performance_long, nocure_cohort_long, nocure_c
     out_rows[[length(out_rows) + 1L]] <- cohort_join
   }
 
-  if (nrow(nocure_class_long) > 0L) {
+  if (nrow(nocure_class_ref) > 0L) {
     metric_map <- tribble(
       ~metric,                        ~stage8_col,
       "false_positive_burden_mean",   "false_positive_burden_mean",
@@ -2302,15 +2406,18 @@ build_delta_vs_nocure <- function(performance_long, nocure_cohort_long, nocure_c
           horizon = horizon,
           threshold = threshold,
           stage8_value = .data[[stage_col]]
-        )
+        ) %>%
+        distinct()
 
-      nocure_sub <- nocure_class_long %>%
-        filter(metric == one$metric[[1L]])
+      nocure_sub <- nocure_class_ref %>%
+        filter(metric == one$metric[[1L]]) %>%
+        distinct()
 
       join_df <- stage8_sub %>%
         inner_join(
           nocure_sub,
-          by = c("dataset_key", "formula_anchor", "horizon", "threshold")
+          by = c("dataset_key", "formula_anchor", "horizon", "threshold"),
+          relationship = "many-to-many"
         ) %>%
         transmute(
           dataset_key = dataset_key,
@@ -2382,11 +2489,11 @@ build_metadata_registry <- function() {
     "documents", "governing_code_rules", "Rules Before Generating R Code_🇬🇧ENG.md",
     "notes", "site_effect_interpretation", "Merged site terms are structural context proxies, not causal treatment effects.",
     "notes", "retention_rule", "Retain all admissible Stage 8A fits; do not force a single Bayesian winner.",
-    "notes", "stage8b_delta_policy", "This Stage 8A script writes a schema-preserving empty 8A-vs-8B delta table unless Stage 8B outputs are supplied elsewhere."
+    "notes", "stage8b_delta_policy", "Stage 8A does not compute 8A-vs-8B deltas; Stage 8B owns that comparison."
   )
 }
 
-build_output_audit <- function(model_grid, model_registry, prediction_long, performance_long, reporting_metadata, anchor_delta, anchor_update, uncured_decomp, hazard_plausibility, stage8a_vs_stage8b_delta, diagnostic_pdf_path) {
+build_output_audit <- function(model_grid, model_registry, prediction_long, performance_long, reporting_metadata, anchor_delta, anchor_update, uncured_decomp, hazard_plausibility, diagnostic_pdf_path) {
   expected_models <- nrow(model_grid)
   actual_models <- nrow(model_registry)
   admissible_n <- sum(model_registry$admissible_flag %in% TRUE, na.rm = TRUE)
@@ -2449,13 +2556,6 @@ build_output_audit <- function(model_grid, model_registry, prediction_long, perf
       detail = "The aggregate Stage 8A diagnostic PDF should exist."
     ),
     tibble(
-      check_name = "stage8a_vs_stage8b_delta_panel_exists",
-      status = ifelse(is.data.frame(stage8a_vs_stage8b_delta), "pass", "fail"),
-      observed_value = ifelse(is.data.frame(stage8a_vs_stage8b_delta), "TRUE", "FALSE"),
-      expected_value = "TRUE",
-      detail = "A schema-preserving Stage 8A-vs-Stage 8B delta table must still be written."
-    ),
-    tibble(
       check_name = "anchor_delta_panel_present",
       status = ifelse(admissible_n == 0L || nrow(anchor_delta) > 0L, "pass", "fail"),
       observed_value = as.character(nrow(anchor_delta)),
@@ -2512,7 +2612,30 @@ if (!is.null(run_model_ids)) {
 }
 
 screening_lookup <- build_screening_model_lookup(screening_flags, model_grid)
-stan_model_compiled <- compile_stage8a_stan_model()
+model_grid$stage8a_rds_path <- if (isTRUE(save_model_rds)) {
+  stage8a_model_rds_path(model_grid$model_id, export_path)
+} else {
+  NA_character_
+}
+model_grid$reuse_existing_fit <- FALSE
+stage8a_reuse_checks <- vector("list", nrow(model_grid))
+
+if (isTRUE(reuse_existing_rds) && isTRUE(save_model_rds)) {
+  for (ii in seq_len(nrow(model_grid))) {
+    stage8a_reuse_checks[[ii]] <- load_existing_stage8a_bundle(
+      path = model_grid$stage8a_rds_path[[ii]],
+      model_row = model_grid[ii, , drop = FALSE],
+      dataset_df = analysis_datasets[[model_grid$dataset_key[[ii]]]]
+    )
+    model_grid$reuse_existing_fit[[ii]] <- is_stage8a_bundle_reusable(stage8a_reuse_checks[[ii]])
+  }
+}
+
+n_models_reused <- sum(model_grid$reuse_existing_fit %in% TRUE)
+n_models_to_fit <- sum(!(model_grid$reuse_existing_fit %in% TRUE))
+message("Stage8A reuse plan: ", n_models_reused, " model(s) reused; ", n_models_to_fit, " model(s) require fitting.")
+
+stan_model_compiled <- if (n_models_to_fit > 0L) compile_stage8a_stan_model() else NULL
 
 trace_records <- list()
 fit_draw_map <- list()
@@ -2554,17 +2677,11 @@ for (ii in seq_len(total_models)) {
   screening_row <- screening_lookup %>%
     filter(model_id == model_id_now)
 
-  existing_rds_path <- if (isTRUE(save_model_rds)) stage8a_model_rds_path(model_id_now, export_path) else NA_character_
-  existing_bundle_check <- if (isTRUE(reuse_existing_rds) && isTRUE(save_model_rds)) {
-    load_existing_stage8a_bundle(
-      path = existing_rds_path,
-      model_id = model_id_now
-    )
-  } else {
-    list(found = FALSE, reason = if (isTRUE(save_model_rds)) "reuse_disabled" else "rds_saving_disabled", bundle = NULL, registry = NULL, admissible = FALSE)
-  }
+  existing_rds_path <- model_row$stage8a_rds_path[[1L]] %||% NA_character_
+  existing_bundle_check <- stage8a_reuse_checks[[ii]] %||%
+    default_stage8a_bundle_check(if (isTRUE(save_model_rds)) "reuse_not_precomputed" else "rds_saving_disabled")
 
-  if (isTRUE(existing_bundle_check$found)) {
+  if (is_stage8a_bundle_reusable(existing_bundle_check)) {
     reused_registry <- tibble::as_tibble(existing_bundle_check$registry) %>%
       mutate(
         dataset_key = dataset_name,
@@ -2608,6 +2725,19 @@ for (ii in seq_len(total_models)) {
 
     emit_stage8_progress(ii, total_models, model_id_now, paste0("existing RDS detected; skipped refit: ", basename(existing_rds_path)))
     next
+  }
+
+  if (isTRUE(existing_bundle_check$found)) {
+    emit_stage8_progress(
+      ii - 1L,
+      total_models,
+      model_id_now,
+      paste0("existing RDS found but refit required (reason=", existing_bundle_check$reason, ")")
+    )
+  }
+
+  if (is.null(stan_model_compiled)) {
+    stop("Internal error: Stage 8A Stan model was not compiled for a model that requires refitting.", call. = FALSE)
   }
 
   design_bundle <- make_design_bundle(
@@ -2729,7 +2859,7 @@ for (ii in seq_len(total_models)) {
       prior_tail_warning_flag = NA,
       prior_tail_warning_detail = NA_character_,
       prior_tail_sensitive_any = NA,
-      rds_path = if (save_model_rds) file.path(export_path, paste0(model_id_now, "__bayes_stage8a_fit.rds")) else NA_character_
+      rds_path = if (save_model_rds) existing_rds_path else NA_character_
     )
 
     emit_stage8_progress(ii, total_models, model_id_now, paste0("sampling error: ", fit_error_message))
@@ -3196,7 +3326,7 @@ for (ii in seq_len(total_models)) {
     prior_tail_warning_flag = NA,
     prior_tail_warning_detail = NA_character_,
     prior_tail_sensitive_any = NA,
-    rds_path = if (save_model_rds) file.path(export_path, paste0(model_id_now, "__bayes_stage8a_fit.rds")) else NA_character_
+    rds_path = if (save_model_rds) existing_rds_path else NA_character_
   )
 
   ppc_rows[[length(ppc_rows) + 1L]] <- ppc_model_tbl
@@ -3230,7 +3360,7 @@ for (ii in seq_len(total_models)) {
       uncured_decomposition = if (isTRUE(admissible_flag)) uncured_model_tbl else tibble(),
       hazard_plausibility = if (isTRUE(admissible_flag)) hazard_rows[[length(hazard_rows)]] else tibble()
     )
-    saveRDS(bundle, file.path(export_path, paste0(model_id_now, "__bayes_stage8a_fit.rds")))
+    saveRDS(bundle, existing_rds_path)
   }
 
   rm(fit, draws_compact, draws_pred, linear_terms, param_array, param_draws_mat)
@@ -3388,10 +3518,17 @@ if (nrow(prior_tail_by_model) > 0L) {
       prior_tail_by_model,
       by = c("dataset_key", "structural_model_id", "family_code", "site_prior_family")
     ) %>%
-    mutate(prior_tail_sensitive_any = dplyr::coalesce(prior_tail_sensitive_any, FALSE))
+    mutate(
+      prior_tail_sensitive_any = dplyr::coalesce(
+        prior_tail_sensitive_any.y,
+        prior_tail_sensitive_any.x,
+        FALSE
+      )
+    ) %>%
+    select(-any_of(c("prior_tail_sensitive_any.x", "prior_tail_sensitive_any.y")))
 } else {
   model_registry <- model_registry %>%
-    mutate(prior_tail_sensitive_any = FALSE)
+    mutate(prior_tail_sensitive_any = dplyr::coalesce(prior_tail_sensitive_any, FALSE))
 }
 
 if (nrow(anchor_vs_neutral_delta_panel) > 0L) {
@@ -3423,21 +3560,26 @@ if (nrow(incidence_anchor_update_panel) == 0L) {
   incidence_anchor_update_panel <- empty_incidence_anchor_update_panel()
 }
 
-stage8a_vs_stage8b_delta_panel <- empty_stage8a_vs_stage8b_delta_panel()
-
 horizon_support_panel <- if (nrow(cohort_yearly) > 0L) {
   horizon_metadata %>%
     left_join(
       cohort_yearly %>%
         group_by(dataset_key, horizon) %>%
-        summarise(prior_tail_sensitive_any_fit = any(prior_tail_sensitive %in% TRUE), .groups = "drop"),
+        summarise(prior_tail_sensitive = any(prior_tail_sensitive %in% TRUE), .groups = "drop"),
       by = c("dataset_key", "horizon")
     ) %>%
-    mutate(prior_tail_sensitive_any_fit = dplyr::coalesce(prior_tail_sensitive_any_fit, FALSE)) %>%
+    mutate(
+      # Horizon support is dataset-level, so retain a single flag when any retained fit is prior-tail-sensitive.
+      prior_tail_sensitive = dplyr::coalesce(prior_tail_sensitive, FALSE),
+      prior_tail_sensitive_any_fit = prior_tail_sensitive
+    ) %>%
     arrange(dataset_key, horizon)
 } else {
   horizon_metadata %>%
-    mutate(prior_tail_sensitive_any_fit = FALSE) %>%
+    mutate(
+      prior_tail_sensitive = FALSE,
+      prior_tail_sensitive_any_fit = prior_tail_sensitive
+    ) %>%
     arrange(dataset_key, horizon)
 }
 
@@ -3568,7 +3710,6 @@ output_audit <- build_output_audit(
   anchor_update = incidence_anchor_update_panel,
   uncured_decomp = uncured_only_decomposition_panel,
   hazard_plausibility = hazard_plausibility,
-  stage8a_vs_stage8b_delta = stage8a_vs_stage8b_delta_panel,
   diagnostic_pdf_path = diagnostic_pdf_path
 )
 
@@ -3589,7 +3730,6 @@ write_csv_preserve_schema(simplify_scalar_list_cols(incidence_anchor_update_pane
 write_csv_preserve_schema(simplify_scalar_list_cols(uncured_only_decomposition_panel), file.path(export_path, "bayes_stage8a_uncured_only_decomposition_panel.csv"))
 write_csv_preserve_schema(simplify_scalar_list_cols(hazard_plausibility), file.path(export_path, "bayes_stage8a_hazard_plausibility.csv"))
 write_csv_preserve_schema(simplify_scalar_list_cols(posterior_delta_vs_nocure), file.path(export_path, "bayes_stage8a_posterior_delta_vs_nocure.csv"))
-write_csv_preserve_schema(simplify_scalar_list_cols(stage8a_vs_stage8b_delta_panel), file.path(export_path, "bayes_stage8a_8A_vs_8B_delta_panel.csv"))
 write_csv_preserve_schema(simplify_scalar_list_cols(horizon_support_panel), file.path(export_path, "bayes_stage8a_horizon_support_panel.csv"))
 write_csv_preserve_schema(simplify_scalar_list_cols(output_audit), file.path(export_path, "bayes_stage8a_output_audit.csv"))
 

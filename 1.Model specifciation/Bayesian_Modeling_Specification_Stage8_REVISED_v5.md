@@ -830,10 +830,10 @@ At minimum, Stage 8 must export:
 - one anchor-informed versus neutral / no-external-information delta table
 - one prior-to-posterior incidence-shape update table
 - one hazard-shape plausibility table
-- one Stage 8A-versus-Stage 8B delta table
+- one Stage 8A-versus-Stage 8B delta table, computed and exported by Stage 8B
 - one uncured-only / non-cure-fraction supporting decomposition table
 - one diagnostics / admissibility table
-- figure-ready source tables for the `horizon_support_panel`, the `8A_vs_8B_delta_panel`, the `anchor_vs_neutral_delta_panel`, the `incidence_anchor_update_panel`, and the `uncured_only_decomposition_panel`
+- figure-ready source tables for the `horizon_support_panel`, the `8A_vs_8B_delta_panel` (exported by Stage 8B), the `anchor_vs_neutral_delta_panel`, the `incidence_anchor_update_panel`, and the `uncured_only_decomposition_panel`
 
 Every horizon-level row must preserve at minimum:
 
@@ -1006,9 +1006,11 @@ These are supporting decomposition estimands, not part of the main shared cross-
 
 If a full `MSTu` would require aggressive tail extrapolation or is not supportable after follow-up screening, Stage 8 should avoid forcing a single-number uncured-only mean and instead keep the uncured-only outputs on the annual horizon grid only.
 
-### 7.6 Mandatory Stage 8A versus Stage 8B delta exports
+### 7.6 Mandatory Stage 8B exports for Stage 8A versus Stage 8B deltas
 
 The project’s scientific question for the competing-risk extension is not “which branch is better?” but “how much does remission-aware modeling rewrite the apparent cure-like signal and downstream classification burden?”
+
+Because the remission-aware quantities live on the Stage 8B competing-risk branch, the cross-branch `8A_vs_8B` delta artifact must be computed and exported by Stage 8B, using Stage 8A as the reference branch. Stage 8A should not emit a standalone `8A_vs_8B_delta_panel`.
 
 Therefore, Stage 8 must export horizon-specific deltas for at least:
 
@@ -1082,6 +1084,7 @@ Stage 8 must export figure-ready source tables for:
   - risk-set support where available
 
 - `8A_vs_8B_delta_panel`
+  - exported by Stage 8B
   - horizon
   - dataset
   - `delta_risk_8B_minus_8A`
@@ -1301,4 +1304,3 @@ Methodological references used to justify the modeling choices:
 - `2024_A two-sample comparison of mean survival_Dobler and Musta.pdf`
 
 The last five references are not required to define the core Stage 8 architecture, but they are useful as extended background when discussing flexible parametric AFT structures, frailty and latent heterogeneity background, and uncured-only supporting summaries.
-

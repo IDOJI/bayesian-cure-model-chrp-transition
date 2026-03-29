@@ -68,9 +68,8 @@ stage1_export_manifest_file <- file.path(stage1_export_path, "stage1_export_mani
 
 stage6_screening_flag_csv <- file.path(stage6_export_path, "stage6_carry_forward_flag_table.csv")
 
-stage8a_model_registry_csv <- file.path(stage8a_export_path, "bayes_stage8_model_registry.csv")
-stage8a_cohort_yearly_csv <- file.path(stage8a_export_path, "bayes_stage8_posterior_cohort_yearly.csv")
-stage8a_classification_csv <- file.path(stage8a_export_path, "bayes_stage8_posterior_classification.csv")
+stage8a_model_registry_csv <- file.path(stage8a_export_path, "bayes_stage8a_model_registry.csv")
+stage8a_performance_csv <- file.path(stage8a_export_path, "bayes_stage8a_performance_classification_long.csv")
 
 stage8b_diagnostic_pdf_file <- file.path(export_path, "bayes_stage8b_diagnostic_plots.pdf")
 stage8b_plot_transition_png_file <- file.path(export_path, "bayes_stage8b_plot_transition_cif.png")
@@ -520,75 +519,78 @@ build_stage6_model_lookup <- function(screening_lookup, model_grid) {
 }
 
 # 🔴 Define: Stage 8A loaders and shared horizon governance ===============================
-load_stage8a_outputs <- function(model_registry_csv, cohort_yearly_csv, classification_csv) {
+load_stage8a_outputs <- function(model_registry_csv, performance_csv) {
   out <- list(
     model_registry = tibble(),
-    posterior_cohort_yearly = tibble(),
-    posterior_classification = tibble()
+    performance_classification_long = tibble()
   )
   if (file.exists(model_registry_csv)) out$model_registry <- tibble::as_tibble(read_delimited_or_rds(model_registry_csv))
-  if (file.exists(cohort_yearly_csv)) out$posterior_cohort_yearly <- tibble::as_tibble(read_delimited_or_rds(cohort_yearly_csv))
-  if (file.exists(classification_csv)) out$posterior_classification <- tibble::as_tibble(read_delimited_or_rds(classification_csv))
+  if (file.exists(performance_csv)) out$performance_classification_long <- tibble::as_tibble(read_delimited_or_rds(performance_csv))
   out
 }
 
-augment_stage8a_with_model_keys <- function(stage8a_outputs) {
-  reg <- tibble::as_tibble(stage8a_outputs$model_registry)
-  cohort <- tibble::as_tibble(stage8a_outputs$posterior_cohort_yearly)
-  class_tbl <- tibble::as_tibble(stage8a_outputs$posterior_classification)
+build_stage8a_delta_keys <- function(stage8a_outputs) {
+  perf <- tibble::as_tibble(stage8a_outputs$performance_classification_long)
+  out <- list(
+    cohort_key = tibble(),
+    class_key = tibble()
+  )
 
-  if (nrow_or_zero(reg) == 0L) {
-    return(list(
-      posterior_cohort_yearly = tibble(),
-      posterior_classification = tibble()
-    ))
+  if (nrow_or_zero(perf) == 0L) {
+    return(out)
   }
 
-  reg_dataset_col <- first_existing_name(reg, c("dataset", "dataset_key"))
-  if (is.null(reg_dataset_col)) {
-    return(list(
-      posterior_cohort_yearly = tibble(),
-      posterior_classification = tibble()
-    ))
+  perf_dataset_col <- first_existing_name(perf, c("dataset", "dataset_key"))
+  perf_horizon_col <- first_existing_name(perf, c("horizon_year", "horizon"))
+  perf_threshold_col <- first_existing_name(perf, c("threshold", "risk_threshold"))
+  perf_transition_col <- first_existing_name(perf, c("risk_mean", "meanRisk_Bayes_mean", "transition_risk_mean", "transition_only_risk_mean", "transition_cif_mean"))
+  perf_cure_col <- first_existing_name(perf, c("cure_fraction_mean", "cohort_mean_cure_fraction_mean"))
+
+  has_model_keys <- all(c("structural_model_id", "formula_anchor", "family_code") %in% names(perf))
+  if (!has_model_keys || is.null(perf_dataset_col) || is.null(perf_horizon_col)) {
+    return(out)
   }
 
-  key_tbl <- reg %>%
-    mutate(dataset = as.character(.data[[reg_dataset_col]])) %>%
-    transmute(
-      dataset = dataset,
-      model_id = as.character(model_id),
-      structural_model_id = as.character(structural_model_id),
-      family_code = as.character(family_code),
-      formula_anchor = as.character(formula_anchor)
+  perf_base <- perf %>%
+    mutate(
+      dataset_key = as.character(.data[[perf_dataset_col]]),
+      horizon = as.integer(safe_numeric(.data[[perf_horizon_col]]))
     )
 
-  cohort_dataset_col <- first_existing_name(cohort, c("dataset", "dataset_key"))
-  class_dataset_col <- first_existing_name(class_tbl, c("dataset", "dataset_key"))
-  cohort_horizon_col <- first_existing_name(cohort, c("horizon_year", "horizon"))
-  class_horizon_col <- first_existing_name(class_tbl, c("horizon_year", "horizon"))
-  class_threshold_col <- first_existing_name(class_tbl, c("threshold", "risk_threshold"))
+  if (!is.null(perf_transition_col) || !is.null(perf_cure_col)) {
+    out$cohort_key <- perf_base %>%
+      transmute(
+        dataset_key = dataset_key,
+        structural_model_id = as.character(structural_model_id),
+        formula_anchor = as.character(formula_anchor),
+        family_code = as.character(family_code),
+        horizon = horizon,
+        stage8a_transition_risk = if (!is.null(perf_transition_col)) safe_numeric(.data[[perf_transition_col]]) else NA_real_,
+        stage8a_cure_fraction = if (!is.null(perf_cure_col)) safe_numeric(.data[[perf_cure_col]]) else NA_real_
+      ) %>%
+      distinct()
+  }
 
-  cohort_out <- if (nrow_or_zero(cohort) > 0L && !is.null(cohort_dataset_col)) {
-    out <- cohort %>%
-      mutate(dataset = as.character(.data[[cohort_dataset_col]])) %>%
-      left_join(key_tbl, by = c("dataset", "model_id", "formula_anchor"))
-    if (!is.null(cohort_horizon_col)) out$horizon_year <- as.integer(safe_numeric(out[[cohort_horizon_col]]))
-    out
-  } else tibble()
+  class_metric_cols <- c("false_positive_burden_mean", "FP100_mean", "NB_mean", "PPV_mean", "TPR_mean")
+  if (!is.null(perf_threshold_col) && all(class_metric_cols %in% names(perf_base))) {
+    out$class_key <- perf_base %>%
+      transmute(
+        dataset_key = dataset_key,
+        structural_model_id = as.character(structural_model_id),
+        formula_anchor = as.character(formula_anchor),
+        family_code = as.character(family_code),
+        horizon = horizon,
+        threshold = as.numeric(safe_numeric(.data[[perf_threshold_col]])),
+        stage8a_false_positive_burden = safe_numeric(false_positive_burden_mean),
+        stage8a_FP100 = safe_numeric(FP100_mean),
+        stage8a_NB = safe_numeric(NB_mean),
+        stage8a_PPV = safe_numeric(PPV_mean),
+        stage8a_TPR = safe_numeric(TPR_mean)
+      ) %>%
+      distinct()
+  }
 
-  class_out <- if (nrow_or_zero(class_tbl) > 0L && !is.null(class_dataset_col)) {
-    out <- class_tbl %>%
-      mutate(dataset = as.character(.data[[class_dataset_col]])) %>%
-      left_join(key_tbl, by = c("dataset", "model_id", "formula_anchor"))
-    if (!is.null(class_horizon_col)) out$horizon_year <- as.integer(safe_numeric(out[[class_horizon_col]]))
-    if (!is.null(class_threshold_col)) out$threshold <- as.numeric(safe_numeric(out[[class_threshold_col]]))
-    out
-  } else tibble()
-
-  list(
-    posterior_cohort_yearly = cohort_out,
-    posterior_classification = class_out
-  )
+  out
 }
 
 stage8b_support_tier_from_grid <- function(dataset, horizon_year) {
@@ -2145,10 +2147,9 @@ screening_lookup_stage6 <- read_stage6_screening_lookup(stage6_screening_flag_cs
 
 stage8a_outputs_raw <- load_stage8a_outputs(
   model_registry_csv = stage8a_model_registry_csv,
-  cohort_yearly_csv = stage8a_cohort_yearly_csv,
-  classification_csv = stage8a_classification_csv
+  performance_csv = stage8a_performance_csv
 )
-stage8a_outputs_aug <- augment_stage8a_with_model_keys(stage8a_outputs_raw)
+stage8a_delta_keys <- build_stage8a_delta_keys(stage8a_outputs_raw)
 
 # 🔴 Prepare: reference tables, model grid, and Stan runtime ===============================
 dataset_registry_stage8b <- bind_rows(lapply(names(analysis_datasets), function(ds) {

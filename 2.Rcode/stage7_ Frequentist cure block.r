@@ -1273,6 +1273,7 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
       matched_noncure_model_id = as.character(matched_nocure_model_id),
       dataset_key = dplyr::coalesce(as.character(dataset_key), make_stage6_join_key(dataset, site_branch))
     ) %>%
+    filter(!is.na(matched_noncure_model_id), matched_noncure_model_id != "") %>%
     select(
       dataset_key,
       dataset,
@@ -2385,6 +2386,88 @@ stage7_predict_parametric_cure <- function(fit_result, horizons, n_subject) {
   )
 }
 
+stage7_smcure_grouped_survival_tbl <- function(index_vec, surv_vec) {
+  tibble(index_value = as.numeric(index_vec), surv = as.numeric(surv_vec)) %>%
+    filter(is.finite(index_value), is.finite(surv)) %>%
+    group_by(index_value) %>%
+    summarise(surv = min(surv), .groups = "drop") %>%
+    arrange(index_value)
+}
+
+stage7_smcure_event_mass <- function(index_vec, status_vec, grouped_survival_tbl) {
+  status_vec <- as.integer(status_vec)
+  out <- rep(NA_real_, length(index_vec))
+  event_idx <- which(status_vec == 1L)
+  if (length(event_idx) == 0L || nrow(grouped_survival_tbl) == 0L) {
+    return(out)
+  }
+
+  event_tbl <- tibble(index_value = sort(unique(as.numeric(index_vec[event_idx])))) %>%
+    left_join(grouped_survival_tbl, by = "index_value") %>%
+    mutate(surv_before = dplyr::lag(surv, default = 1))
+
+  hit <- match(as.numeric(index_vec[event_idx]), event_tbl$index_value)
+  prev_surv_vec <- event_tbl$surv_before[hit]
+  curr_surv_event_vec <- event_tbl$surv[hit]
+
+  out[event_idx] <- pmax(prev_surv_vec - curr_surv_event_vec, 1e-300)
+  out
+}
+
+stage7_compute_smcure_loglik <- function(df, fit, incidence_rhs, latency_rhs, model_type) {
+  time_vec <- pmax(as.numeric(df$time_year), 1e-10)
+  status_vec <- as.integer(df$event_main)
+  if (length(time_vec) == 0L || all(status_vec == 0L)) {
+    return(NA_real_)
+  }
+
+  inc_coef_names <- fit$bnm %||% names(fit$b)
+  mm_inc_raw <- stage7_model_matrix(df, incidence_rhs, drop_intercept = FALSE)
+  Z <- stage7_align_mm_to_coef(mm_inc_raw, inc_coef_names)
+  uncured_prob <- stage7_clamp_prob(plogis(drop(Z %*% as.numeric(fit$b))))
+
+  if (model_type == "ph") {
+    lat_coef_names <- fit$betanm %||% names(fit$beta)
+    mm_lat_raw <- stage7_model_matrix(df, latency_rhs, drop_intercept = TRUE)
+    X <- stage7_align_mm_to_coef(mm_lat_raw, lat_coef_names)
+    lp_vec <- drop(X %*% as.numeric(fit$beta))
+
+    base_tbl <- stage7_smcure_grouped_survival_tbl(fit$Time, fit$s)
+    if (nrow(base_tbl) == 0L) {
+      return(NA_real_)
+    }
+
+    base_surv_curr <- stage7_step_eval(base_tbl$index_value, base_tbl$surv, time_vec, yleft = 1, yright = tail(base_tbl$surv, 1))
+    uncured_surv_curr <- pmin(pmax(base_surv_curr, 0), 1) ^ exp(lp_vec)
+    base_event_mass <- stage7_smcure_event_mass(time_vec, status_vec, base_tbl)
+    uncured_event_mass <- pmax(base_event_mass, 1e-300)
+    event_like <- uncured_prob * uncured_event_mass
+  } else {
+    lat_coef_names <- fit$betanm %||% names(fit$beta)
+    mm_lat_raw <- stage7_model_matrix(df, latency_rhs, drop_intercept = FALSE)
+    X <- stage7_align_mm_to_coef(mm_lat_raw, lat_coef_names)
+    error_vec <- if (!is.null(fit$error) && length(fit$error) == nrow(df)) {
+      as.numeric(fit$error)
+    } else {
+      drop(log(time_vec) - X %*% as.numeric(fit$beta))
+    }
+
+    base_tbl <- stage7_smcure_grouped_survival_tbl(error_vec, fit$s)
+    if (nrow(base_tbl) == 0L) {
+      return(NA_real_)
+    }
+
+    uncured_surv_curr <- stage7_step_eval(base_tbl$index_value, base_tbl$surv, error_vec, yleft = 1, yright = tail(base_tbl$surv, 1))
+    uncured_surv_curr <- pmin(pmax(uncured_surv_curr, 0), 1)
+    uncured_event_mass <- stage7_smcure_event_mass(error_vec, status_vec, base_tbl)
+    event_like <- uncured_prob * pmax(uncured_event_mass, 1e-300)
+  }
+
+  censor_like <- (1 - uncured_prob) + uncured_prob * pmin(pmax(uncured_surv_curr, 0), 1)
+  ll_vec <- ifelse(status_vec == 1L, log(pmax(event_like, 1e-300)), log(pmax(censor_like, 1e-300)))
+  sum(ll_vec[is.finite(ll_vec)])
+}
+
 stage7_fit_smcure_model <- function(df, incidence_rhs, latency_rhs, model_type) {
   if (!requireNamespace("smcure", quietly = TRUE)) {
     return(list(success = FALSE, error_message = "Package `smcure` is required for semiparametric cure models but is not installed.", warnings = character()))
@@ -2414,13 +2497,18 @@ stage7_fit_smcure_model <- function(df, incidence_rhs, latency_rhs, model_type) 
     tibble(component = "incidence_uncured_logit", term = stage7_standardize_term_name(b_names), estimate = as.numeric(fit$b)),
     tibble(component = "latency", term = stage7_standardize_term_name(beta_names), estimate = as.numeric(fit$beta))
   )
+  loglik_capture <- stage7_capture_with_warnings(
+    stage7_compute_smcure_loglik(df, fit, incidence_rhs, latency_rhs, model_type)
+  )
+  loglik_value <- if (!is.null(loglik_capture$value)) suppressWarnings(as.numeric(loglik_capture$value)) else NA_real_
+  all_warnings <- unique(c(fit_capture$warnings, loglik_capture$warnings))
   list(
     success = TRUE,
     fit_object = fit,
-    warnings = fit_capture$warnings,
+    warnings = all_warnings,
     coefficients = coef_tbl,
     predictions = list(model_type = model_type),
-    loglik = NA_real_,
+    loglik = loglik_value,
     n_parameters = length(fit$b) + length(fit$beta),
     convergence_code = 0,
     has_converged_solution = TRUE,
@@ -3585,6 +3673,7 @@ stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5
   cure_df <- fit_registry_tbl %>%
     filter(.is_cure_model) %>%
     mutate(matched_noncure_model_id = stage7_v9_trim_na_char(matched_nocure_model_id)) %>%
+    filter(!is.na(matched_noncure_model_id), matched_noncure_model_id != '') %>%
     select(dataset_key, dataset, formula_variant, site_branch, risk_scale, model_id, matched_noncure_model_id, family_pair, std_logLik, std_AIC, std_BIC, std_convergence_status)
 
   noncure_df <- fit_registry_tbl %>%

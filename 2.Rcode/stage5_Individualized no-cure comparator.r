@@ -5,6 +5,7 @@
 # 4) QC now fails when calibration support exists but all calibration regressions fail,
 #    or when supported rows contain explicit fitting errors
 # 5) observed_ipcw_risk is now suppressed when IPCW case/control support is unavailable
+# 6) Stage 5 long exports now carry specification-required horizon metadata fields
 
 # 🔴 Configure: paths and controls ===============================
 data_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage1_Backbone lock'
@@ -24,6 +25,8 @@ calibration_min_supported_bins_for_regression <- 2L
 prediction_horizons_for_plots <- c(1, 2, 5, 10)
 probability_clip_epsilon <- 1e-06
 time_origin_epsilon_year <- 1e-08
+stage5_risk_scale <- "transition_only_main"
+stage5_core_version <- "2026-03-29-calibration-slope-v2"
 
 reuse_existing_stage5_core <- TRUE
 force_recompute_stage5_core <- FALSE
@@ -315,7 +318,11 @@ validate_existing_subject_horizon_risk_long <- function(existing_risk_long, mode
     "unique_person_id",
     "horizon_year",
     "risk_pred",
-    "survival_pred"
+    "survival_pred",
+    "support_tier",
+    "horizon_evidence_class",
+    "claim_restriction_flag",
+    "risk_scale"
   )
   
   if (!all(required_cols %in% names(existing_risk_long))) {
@@ -387,7 +394,18 @@ validate_existing_stage5_core <- function(
     return(FALSE)
   }
   
-  if (!all(c("model_id", "metric_name", "metric_value", "horizon_year") %in% names(model_performance_long))) {
+  if (!all(c("stage5_core_version", "risk_scale") %in% names(model_registry))) {
+    return(FALSE)
+  }
+  
+  if (!all(as.character(model_registry$stage5_core_version) == stage5_core_version)) {
+    return(FALSE)
+  }
+  
+  if (!all(c(
+    "model_id", "metric_name", "metric_value", "horizon_year",
+    "support_tier", "horizon_evidence_class", "claim_restriction_flag", "risk_scale"
+  ) %in% names(model_performance_long))) {
     return(FALSE)
   }
   
@@ -395,7 +413,10 @@ validate_existing_stage5_core <- function(
     return(FALSE)
   }
   
-  if (!all(c("model_id", "horizon_year", "bin_index") %in% names(calibration_bins_long))) {
+  if (!all(c(
+    "model_id", "horizon_year", "bin_index",
+    "support_tier", "horizon_evidence_class", "claim_restriction_flag", "risk_scale"
+  ) %in% names(calibration_bins_long))) {
     return(FALSE)
   }
   
@@ -403,7 +424,11 @@ validate_existing_stage5_core <- function(
     "model_id",
     "horizon_year",
     "calibration_support_flag",
-    "calibration_fit_success_flag"
+    "calibration_fit_success_flag",
+    "support_tier",
+    "horizon_evidence_class",
+    "claim_restriction_flag",
+    "risk_scale"
   ) %in% names(calibration_diagnostics_long))) {
     return(FALSE)
   }
@@ -508,6 +533,18 @@ validate_existing_stage5_core <- function(
     if (unsupported_observed_ipcw_nonmissing_count > 0L) {
       return(FALSE)
     }
+  }
+  
+  if (any(model_performance_long$risk_scale != stage5_risk_scale, na.rm = TRUE)) {
+    return(FALSE)
+  }
+  
+  if (any(calibration_bins_long$risk_scale != stage5_risk_scale, na.rm = TRUE)) {
+    return(FALSE)
+  }
+  
+  if (any(calibration_diagnostics_long$risk_scale != stage5_risk_scale, na.rm = TRUE)) {
+    return(FALSE)
   }
   
   TRUE
@@ -1176,10 +1213,12 @@ fit_calibration_slope_model <- function(y, lp, w) {
   intercept <- coef_vec[1]
   slope <- coef_vec[2]
   
+  # The free calibration intercept depends on the location of lp and can be large
+  # even when fitted probabilities remain well-behaved, so only the slope is
+  # magnitude-screened here.
   boundary_flag <- detect_glm_boundary(fit_obj$fit) ||
     any(!is.finite(c(intercept, slope))) ||
-    abs(slope) > 10 ||
-    abs(intercept) > 10
+    abs(slope) > 10
   
   message_text <- fit_obj$warning_text
   if (!nzchar(trimws(message_text))) {
@@ -1509,7 +1548,15 @@ horizon_label_lookup <- function(dataset_name, horizon_year, horizon_registry) {
   horizon_registry %>%
     filter(dataset == dataset_name, horizon_year == !!horizon_year) %>%
     slice(1) %>%
-    select(horizon_id, interpretation_tier, primary_supported_flag, interpretation_note) %>%
+    select(
+      horizon_id,
+      support_tier,
+      interpretation_tier,
+      primary_supported_flag,
+      horizon_evidence_class,
+      claim_restriction_flag,
+      interpretation_note
+    ) %>%
     mutate(
       horizon_year = as.integer(horizon_year),
       horizon_label = paste0("Year ", horizon_year)
@@ -1535,14 +1582,76 @@ make_metric_rows <- function(meta_row, horizon_info, threshold_value, metric_dom
     horizon_id = horizon_info$horizon_id %||% NA_character_,
     horizon_year = horizon_info$horizon_year %||% NA_integer_,
     horizon_label = horizon_info$horizon_label %||% NA_character_,
+    support_tier = horizon_info$support_tier %||% NA_character_,
     interpretation_tier = horizon_info$interpretation_tier %||% NA_character_,
     primary_supported_flag = horizon_info$primary_supported_flag %||% NA,
+    horizon_evidence_class = horizon_info$horizon_evidence_class %||% NA_character_,
+    claim_restriction_flag = horizon_info$claim_restriction_flag %||% NA_character_,
     interpretation_note = horizon_info$interpretation_note %||% NA_character_,
+    risk_scale = stage5_risk_scale,
     threshold = threshold_value,
     metric_domain = metric_domain,
     metric_name = names(metrics_named),
     metric_value = as.numeric(unname(metrics_named))
   )
+}
+
+validate_stage5_export_metadata <- function(
+    subject_horizon_risk_long,
+    model_performance_long,
+    calibration_bins_long,
+    calibration_diagnostics_long
+) {
+  required_cols <- c("support_tier", "horizon_evidence_class", "claim_restriction_flag", "risk_scale")
+  long_exports <- list(
+    subject_horizon_risk_long = tibble::as_tibble(subject_horizon_risk_long),
+    model_performance_long = tibble::as_tibble(model_performance_long),
+    calibration_bins_long = tibble::as_tibble(calibration_bins_long),
+    calibration_diagnostics_long = tibble::as_tibble(calibration_diagnostics_long)
+  )
+  
+  for (export_name in names(long_exports)) {
+    export_df <- long_exports[[export_name]]
+    
+    if (!all(required_cols %in% names(export_df))) {
+      missing_cols <- setdiff(required_cols, names(export_df))
+      stop(
+        sprintf(
+          "Stage 5 export `%s` is missing required horizon metadata columns: %s",
+          export_name,
+          paste(missing_cols, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+    
+    if (nrow(export_df) == 0L) {
+      next
+    }
+    
+    for (col_name in c("support_tier", "horizon_evidence_class", "claim_restriction_flag")) {
+      col_value <- as.character(export_df[[col_name]])
+      if (any(is.na(col_value) | trimws(col_value) == "")) {
+        stop(
+          sprintf("Stage 5 export `%s` contains missing `%s` values.", export_name, col_name),
+          call. = FALSE
+        )
+      }
+    }
+    
+    if (any(is.na(export_df$risk_scale) | export_df$risk_scale != stage5_risk_scale)) {
+      stop(
+        sprintf(
+          "Stage 5 export `%s` contains a risk_scale outside `%s`.",
+          export_name,
+          stage5_risk_scale
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  
+  invisible(TRUE)
 }
 
 ## 🟠 Create: model utilities ===============================
@@ -2419,6 +2528,8 @@ if (!core_reused_flag) {
     registry_row <- plan_row %>%
       mutate(
         stage = "Stage 5",
+        stage5_core_version = stage5_core_version,
+        risk_scale = stage5_risk_scale,
         analysis_time_variable = "days_followup",
         reporting_time_variable = "time_year",
         event_definition = "status_num == 1",
@@ -2484,11 +2595,15 @@ if (!core_reused_flag) {
       risk_pred = as.vector(t(pred_result$risk)),
       median_survival_pred = rep(pred_result$median_survival, each = length(common_horizons_year)),
       anchor_horizon_year = anchor_horizon_year,
-      c_index_score = rep(pred_result$risk[, anchor_horizon_index], each = length(common_horizons_year))
+      c_index_score = rep(pred_result$risk[, anchor_horizon_index], each = length(common_horizons_year)),
+      risk_scale = stage5_risk_scale
     ) %>%
       left_join(
         horizon_registry %>%
-          select(dataset, horizon_year, horizon_id, interpretation_tier, primary_supported_flag, interpretation_note),
+          select(
+            dataset, horizon_year, horizon_id, support_tier, interpretation_tier,
+            primary_supported_flag, horizon_evidence_class, claim_restriction_flag, interpretation_note
+          ),
         by = c("dataset", "horizon_year")
       )
     
@@ -2648,9 +2763,13 @@ if (!core_reused_flag) {
         horizon_id = horizon_info$horizon_id,
         horizon_year = horizon_year,
         horizon_label = horizon_info$horizon_label,
+        support_tier = horizon_info$support_tier,
         interpretation_tier = horizon_info$interpretation_tier,
         primary_supported_flag = horizon_info$primary_supported_flag,
+        horizon_evidence_class = horizon_info$horizon_evidence_class,
+        claim_restriction_flag = horizon_info$claim_restriction_flag,
         interpretation_note = horizon_info$interpretation_note,
+        risk_scale = stage5_risk_scale,
         mean_predicted_risk = calibration_stats$mean_predicted_risk,
         mean_calibration_difference = calibration_stats$mean_calibration_difference,
         calibration_intercept_offset = calibration_stats$calibration_intercept_offset,
@@ -2698,16 +2817,21 @@ if (!core_reused_flag) {
           anchor_horizon_year = anchor_horizon_year,
           horizon_year = horizon_year,
           horizon_id = horizon_info$horizon_id,
+          support_tier = horizon_info$support_tier,
           interpretation_tier = horizon_info$interpretation_tier,
           primary_supported_flag = horizon_info$primary_supported_flag,
+          horizon_evidence_class = horizon_info$horizon_evidence_class,
+          claim_restriction_flag = horizon_info$claim_restriction_flag,
+          risk_scale = stage5_risk_scale,
           interpretation_note = horizon_info$interpretation_note
         ) %>%
         relocate(
           stage, dataset, dataset_key, model_class, model_family, model_id,
           formula_id, formula_name, formula_label, formula_scope,
           site_branch, interaction_branch, anchor_horizon_year,
-          horizon_id, horizon_year, interpretation_tier,
-          primary_supported_flag, interpretation_note
+          horizon_id, horizon_year, support_tier, interpretation_tier,
+          primary_supported_flag, horizon_evidence_class, claim_restriction_flag,
+          interpretation_note, risk_scale
         )
       
       calibration_bin_rows[[paste0(plan_row$model_id[[1]], "_calbin_", horizon_year)]] <- calibration_bins
@@ -2836,6 +2960,13 @@ subject_horizon_risk_long <- enrich_stage5_backbone(subject_horizon_risk_long, f
 model_performance_long <- enrich_stage5_backbone(model_performance_long, formula_lookup)
 calibration_bins_long <- enrich_stage5_backbone(calibration_bins_long, formula_lookup)
 calibration_diagnostics_long <- enrich_stage5_backbone(calibration_diagnostics_long, formula_lookup)
+
+validate_stage5_export_metadata(
+  subject_horizon_risk_long = subject_horizon_risk_long,
+  model_performance_long = model_performance_long,
+  calibration_bins_long = calibration_bins_long,
+  calibration_diagnostics_long = calibration_diagnostics_long
+)
 
 # 🔴 Build: plot sources and QC ===============================
 plot_sources <- build_stage5_plot_sources(

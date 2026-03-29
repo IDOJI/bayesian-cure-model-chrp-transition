@@ -1,55 +1,53 @@
-# 🔴 Configure: paths and pre-analysis data-inspection settings ===============================
+# 🔴 Configure: paths and pre-analysis export controls ===============================
 merged_file <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/data/MERGED_dataset3_pnu_snu.csv'
-export_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/data summary'
+export_path <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage0_Preanalysis data inspection"
 
 pnu_site_label <- "PNU"
 snu_site_label <- "SNU"
 
-main_risk_scale <- "transition_only_main"
-supplementary_risk_scale <- "transition_cif_competing"
-
 days_per_year <- 365.25
-output_stem <- "DESC__preanalysis_clinical_survival_data_inspection__PNU_SNU_merged"
+output_stem <- "DESC__stage0_preanalysis_data_inspection__PNU_SNU_merged"
+
+master_output_file <- paste0(output_stem, "__master.csv")
+compact_output_file <- paste0(output_stem, "__compact.csv")
+workbook_output_file <- paste0(output_stem, "__workbook.xlsx")
+
+sex_report_levels <- c("Female", "Male", "Missing", "Unexpected_code")
+status_report_levels <- c("right_censoring", "transition", "remission", "Missing", "Unexpected_code")
+dataset_order <- c("PNU", "SNU", "merged")
+section_order <- c(
+  "cohort_overview",
+  "core_missingness",
+  "data_flags",
+  "sex_distribution",
+  "status_distribution",
+  "age_summary",
+  "followup_summary",
+  "age_by_sex",
+  "followup_by_status"
+)
 
 # 🔴 Initialize: packages and runtime options ===============================
 suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
   library(readr)
-  library(lubridate)
   library(tibble)
-  library(purrr)
-  library(stringr)
-  library(survival)
+  library(lubridate)
 })
 
 options(stringsAsFactors = FALSE, scipen = 999)
-
 dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
 
-dataset_order <- c("PNU", "SNU", "merged")
-section_order <- c(
-  "cohort_overview",
-  "sex_distribution",
-  "baseline_age_summary",
-  "age_by_sex",
-  "event_distribution",
-  "event_rate_summary",
-  "followup_numeric_summary",
-  "followup_reverse_km_summary",
-  "status_by_sex",
-  "calendar_distribution"
-)
-
-# 🔴 Define: descriptive helper functions ===============================
-## 🟠 Define: input and coercion utilities ===============================
+# 🔴 Define: reusable readers and summary builders ===============================
+## 🟠 Define: input readers and coercion helpers ===============================
 read_input_dataset <- function(path) {
   if (!file.exists(path)) {
     stop(sprintf("Input file does not exist: %s", path), call. = FALSE)
   }
-  
+
   ext <- tolower(tools::file_ext(path))
-  
+
   if (ext %in% c("csv", "txt")) {
     return(
       readr::read_csv(
@@ -60,11 +58,11 @@ read_input_dataset <- function(path) {
       )
     )
   }
-  
+
   if (ext == "rds") {
     return(readRDS(path))
   }
-  
+
   stop(sprintf("Unsupported input extension for `%s`.", path), call. = FALSE)
 }
 
@@ -72,7 +70,7 @@ coerce_numeric_text <- function(x) {
   suppressWarnings(as.numeric(as.character(x)))
 }
 
-parse_date_ymd_safe <- function(x) {
+parse_date_safe <- function(x) {
   y <- suppressWarnings(lubridate::ymd(x, quiet = TRUE))
   if (all(is.na(y))) {
     y <- suppressWarnings(as.Date(x))
@@ -80,11 +78,72 @@ parse_date_ymd_safe <- function(x) {
   y
 }
 
+count_missing_like <- function(x) {
+  if (is.character(x)) {
+    return(sum(is.na(x) | trimws(x) == ""))
+  }
+  sum(is.na(x))
+}
+
+safe_mean <- function(x) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  mean(x, na.rm = TRUE)
+}
+
+safe_sd <- function(x) {
+  if (sum(!is.na(x)) <= 1L) return(NA_real_)
+  stats::sd(x, na.rm = TRUE)
+}
+
+safe_median <- function(x) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  stats::median(x, na.rm = TRUE)
+}
+
+safe_quantile <- function(x, prob) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  as.numeric(stats::quantile(x, probs = prob, na.rm = TRUE, names = FALSE, type = 7))
+}
+
+safe_min <- function(x) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  min(x, na.rm = TRUE)
+}
+
+safe_max <- function(x) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  max(x, na.rm = TRUE)
+}
+
+safe_sum <- function(x) {
+  if (sum(!is.na(x)) == 0L) return(NA_real_)
+  sum(x, na.rm = TRUE)
+}
+
+classify_sex <- function(x) {
+  dplyr::case_when(
+    is.na(x) ~ "Missing",
+    x == 0L ~ "Female",
+    x == 1L ~ "Male",
+    TRUE ~ "Unexpected_code"
+  )
+}
+
+classify_status <- function(x) {
+  dplyr::case_when(
+    is.na(x) ~ "Missing",
+    x == 0L ~ "right_censoring",
+    x == 1L ~ "transition",
+    x == 2L ~ "remission",
+    TRUE ~ "Unexpected_code"
+  )
+}
+
 standardize_known_site_labels <- function(df, pnu_label, snu_label) {
   if (!"site" %in% names(df)) {
     stop("Merged input must contain column `site`.", call. = FALSE)
   }
-  
+
   df %>%
     mutate(
       site = trimws(as.character(site)),
@@ -96,15 +155,18 @@ standardize_known_site_labels <- function(df, pnu_label, snu_label) {
     )
 }
 
-## 🟠 Define: backbone validation and derivation ===============================
-prepare_backbone_dataset <- function(df, pnu_label, snu_label) {
+## 🟠 Define: dataset preparation and row builders ===============================
+prepare_preanalysis_dataset <- function(df, pnu_label, snu_label, days_per_year_value) {
   required_cols <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
   missing_cols <- setdiff(required_cols, names(df))
-  
-  if (length(missing_cols) > 0) {
+
+  if (length(missing_cols) > 0L) {
     stop(sprintf("Missing required columns: %s", paste(missing_cols, collapse = ", ")), call. = FALSE)
   }
-  
+
+  has_age_exact_followup <- "age_exact_followup" %in% names(df)
+  has_date_entry <- "date_entry" %in% names(df)
+
   df <- standardize_known_site_labels(df, pnu_label = pnu_label, snu_label = snu_label) %>%
     mutate(
       id = trimws(as.character(id)),
@@ -113,77 +175,56 @@ prepare_backbone_dataset <- function(df, pnu_label, snu_label) {
       days_followup = coerce_numeric_text(days_followup),
       status_num = as.integer(coerce_numeric_text(status_num))
     )
-  
-  if (nrow(df) == 0) {
-    stop("Merged input has zero rows.", call. = FALSE)
+
+  if (has_age_exact_followup) {
+    df <- df %>% mutate(age_exact_followup = coerce_numeric_text(age_exact_followup))
+  } else {
+    df <- df %>% mutate(age_exact_followup = NA_real_)
   }
-  
-  if (anyNA(df[c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")])) {
-    stop("Missing values detected in required backbone columns.", call. = FALSE)
+
+  if (has_date_entry) {
+    df <- df %>% mutate(date_entry = parse_date_safe(date_entry))
   }
-  
-  if (any(df$id == "")) {
-    stop("Blank `id` values detected.", call. = FALSE)
-  }
-  
-  if (any(df$site == "")) {
-    stop("Blank `site` values detected.", call. = FALSE)
-  }
-  
-  if (any(!df$site %in% c(pnu_label, snu_label))) {
-    stop("Unexpected `site` labels detected after standardization.", call. = FALSE)
-  }
-  
-  if (any(!df$sex_num %in% c(0L, 1L))) {
-    stop("`sex_num` must be coded as 0/1 only.", call. = FALSE)
-  }
-  
-  if (any(!df$status_num %in% c(0L, 1L, 2L))) {
-    stop("`status_num` must be coded as 0/1/2 only.", call. = FALSE)
-  }
-  
-  if (any(df$days_followup < 0)) {
-    stop("Negative `days_followup` values detected.", call. = FALSE)
-  }
-  
-  if ("date_entry" %in% names(df)) {
-    df <- df %>% mutate(date_entry = parse_date_ymd_safe(date_entry))
-    if (anyNA(df$date_entry)) {
-      stop("`date_entry` could not be parsed completely as Date.", call. = FALSE)
-    }
-  }
-  
-  df <- df %>%
-    mutate(
-      site_id = paste(site, id, sep = "__"),
-      sex_label = case_when(
-        sex_num == 0L ~ "Female",
-        sex_num == 1L ~ "Male",
-        TRUE ~ NA_character_
+
+  unexpected_sites <- setdiff(
+    unique(df$site[!is.na(df$site) & df$site != ""]),
+    c(pnu_label, snu_label)
+  )
+
+  if (length(unexpected_sites) > 0L) {
+    stop(
+      sprintf(
+        "Unexpected site labels detected after standardization: %s",
+        paste(sort(unexpected_sites), collapse = ", ")
       ),
-      status_label = case_when(
-        status_num == 0L ~ "right_censoring",
-        status_num == 1L ~ "transition",
-        status_num == 2L ~ "remission",
-        TRUE ~ NA_character_
-      ),
-      years_followup = days_followup / days_per_year,
-      is_transition = status_num == 1L,
-      is_remission = status_num == 2L,
-      is_right_censoring = status_num == 0L,
-      is_main_transition_censor = status_num != 1L
+      call. = FALSE
     )
-
-  if ("date_entry" %in% names(df)) {
-    df <- df %>%
-      mutate(
-        date_followup = date_entry + lubridate::days(as.integer(round(days_followup))),
-        entry_year = lubridate::year(date_entry),
-        end_year = lubridate::year(date_followup)
-      )
   }
 
-  df
+  if (!any(df$site == pnu_label, na.rm = TRUE)) {
+    stop(sprintf("No rows found for site label `%s`.", pnu_label), call. = FALSE)
+  }
+
+  if (!any(df$site == snu_label, na.rm = TRUE)) {
+    stop(sprintf("No rows found for site label `%s`.", snu_label), call. = FALSE)
+  }
+
+  df %>%
+    mutate(
+      source_has_age_exact_followup = has_age_exact_followup,
+      source_has_date_entry = has_date_entry,
+      site_id = dplyr::if_else(
+        is.na(site) | site == "" | is.na(id) | id == "",
+        NA_character_,
+        paste(site, id, sep = "__")
+      ),
+      sex_label = classify_sex(sex_num),
+      status_label = classify_status(status_num),
+      age_exact_entry_clean = dplyr::if_else(!is.na(age_exact_entry) & age_exact_entry >= 0, age_exact_entry, NA_real_),
+      age_exact_followup_clean = dplyr::if_else(!is.na(age_exact_followup) & age_exact_followup >= 0, age_exact_followup, NA_real_),
+      days_followup_clean = dplyr::if_else(!is.na(days_followup) & days_followup >= 0, days_followup, NA_real_),
+      years_followup_clean = days_followup_clean / days_per_year_value
+    )
 }
 
 split_dataset_variants <- function(df, pnu_label, snu_label) {
@@ -192,28 +233,31 @@ split_dataset_variants <- function(df, pnu_label, snu_label) {
     SNU = df %>% filter(site == snu_label),
     merged = df
   )
-  
-  zero_names <- names(out)[vapply(out, nrow, integer(1)) == 0L]
-  if (length(zero_names) > 0) {
-    stop(sprintf("Zero-row dataset variants detected: %s", paste(zero_names, collapse = ", ")), call. = FALSE)
+
+  zero_row_names <- names(out)[vapply(out, nrow, integer(1)) == 0L]
+  if (length(zero_row_names) > 0L) {
+    stop(sprintf("Zero-row dataset variants detected: %s", paste(zero_row_names, collapse = ", ")), call. = FALSE)
   }
-  
+
   out
 }
 
-## 🟠 Define: row builders for source-of-truth export ===============================
-empty_numeric_fields <- function() {
+initialize_master_row <- function(section, dataset, variable, stratum_type, stratum_value, summary_type, unit, definition) {
   tibble(
+    section = section,
+    dataset = dataset,
+    variable = variable,
+    stratum_type = stratum_type,
+    stratum_value = stratum_value,
+    summary_type = summary_type,
+    unit = unit,
+    definition = definition,
     n_total = NA_integer_,
     n_nonmissing = NA_integer_,
+    n_missing = NA_integer_,
     count = NA_real_,
     denominator = NA_real_,
-    proportion = NA_real_,
     percent = NA_real_,
-    person_years = NA_real_,
-    rate_per100py = NA_real_,
-    rate_lcl95_per100py = NA_real_,
-    rate_ucl95_per100py = NA_real_,
     mean = NA_real_,
     sd = NA_real_,
     median = NA_real_,
@@ -222,578 +266,712 @@ empty_numeric_fields <- function() {
     iqr = NA_real_,
     min = NA_real_,
     max = NA_real_,
-    lcl95 = NA_real_,
-    ucl95 = NA_real_
+    sum_value = NA_real_
   )
 }
 
-make_base_row <- function(section, dataset, measure, definition, unit = "not_applicable", stratum_type = "overall", stratum_value = "overall", risk_scale = "not_applicable") {
-  tibble(
+build_single_value_row <- function(section, dataset, variable, value, unit, definition, value_field = c("count", "sum_value"), stratum_type = "overall", stratum_value = "overall") {
+  value_field <- match.arg(value_field)
+  out <- initialize_master_row(
     section = section,
-    dataset = factor(dataset, levels = dataset_order),
-    measure = measure,
-    definition = definition,
-    unit = unit,
+    dataset = dataset,
+    variable = variable,
     stratum_type = stratum_type,
     stratum_value = stratum_value,
-    risk_scale = risk_scale
-  ) %>% bind_cols(empty_numeric_fields())
-}
-
-build_single_value_row <- function(section, dataset, measure, value, definition, unit = "not_applicable", stratum_type = "overall", stratum_value = "overall", risk_scale = "not_applicable") {
-  out <- make_base_row(section, dataset, measure, definition, unit, stratum_type, stratum_value, risk_scale)
-  if (identical(unit, "person_years")) {
-    out$person_years <- as.numeric(value)
-  } else {
-    out$count <- as.numeric(value)
-  }
+    summary_type = "single_value",
+    unit = unit,
+    definition = definition
+  )
+  out[[value_field]] <- as.numeric(value)
   out
 }
 
-build_count_row <- function(section, dataset, measure, count, denominator, definition, stratum_type = "overall", stratum_value = "overall", risk_scale = "not_applicable") {
-  out <- make_base_row(section, dataset, measure, definition, unit = "count", stratum_type, stratum_value, risk_scale)
+build_count_percent_row <- function(section, dataset, variable, stratum_type, stratum_value, count, denominator, definition, summary_type = "count_summary", unit = "count") {
+  out <- initialize_master_row(
+    section = section,
+    dataset = dataset,
+    variable = variable,
+    stratum_type = stratum_type,
+    stratum_value = stratum_value,
+    summary_type = summary_type,
+    unit = unit,
+    definition = definition
+  )
   out$n_total <- as.integer(denominator)
   out$n_nonmissing <- as.integer(denominator)
   out$count <- as.numeric(count)
   out$denominator <- as.numeric(denominator)
-  out$proportion <- ifelse(is.na(denominator) || denominator <= 0, NA_real_, as.numeric(count) / as.numeric(denominator))
-  out$percent <- 100 * out$proportion
+  out$percent <- if (is.na(denominator) || denominator <= 0) NA_real_ else 100 * as.numeric(count) / as.numeric(denominator)
   out
 }
 
-build_numeric_summary_row <- function(section, dataset, measure, x, definition, unit, stratum_type = "overall", stratum_value = "overall", risk_scale = "not_applicable") {
-  x <- x[!is.na(x)]
-  out <- make_base_row(section, dataset, measure, definition, unit, stratum_type, stratum_value, risk_scale)
-  out$n_total <- length(x)
-  out$n_nonmissing <- length(x)
-  
-  if (length(x) == 0L) {
-    return(out)
+build_missingness_row <- function(dataset, variable, missing_count, denominator, definition) {
+  out <- initialize_master_row(
+    section = "core_missingness",
+    dataset = dataset,
+    variable = variable,
+    stratum_type = "overall",
+    stratum_value = "overall",
+    summary_type = "missingness",
+    unit = "count",
+    definition = definition
+  )
+  out$n_total <- as.integer(denominator)
+  out$n_nonmissing <- as.integer(denominator - missing_count)
+  out$n_missing <- as.integer(missing_count)
+  out$count <- as.numeric(missing_count)
+  out$denominator <- as.numeric(denominator)
+  out$percent <- if (denominator <= 0) NA_real_ else 100 * as.numeric(missing_count) / as.numeric(denominator)
+  out
+}
+
+build_numeric_summary_row <- function(section, dataset, variable, x, unit, definition, stratum_type = "overall", stratum_value = "overall") {
+  x <- as.numeric(x)
+  n_total_value <- length(x)
+  n_nonmissing_value <- sum(!is.na(x))
+  q1_value <- safe_quantile(x, prob = 0.25)
+  q3_value <- safe_quantile(x, prob = 0.75)
+
+  out <- initialize_master_row(
+    section = section,
+    dataset = dataset,
+    variable = variable,
+    stratum_type = stratum_type,
+    stratum_value = stratum_value,
+    summary_type = "numeric_summary",
+    unit = unit,
+    definition = definition
+  )
+
+  out$n_total <- as.integer(n_total_value)
+  out$n_nonmissing <- as.integer(n_nonmissing_value)
+  out$n_missing <- as.integer(n_total_value - n_nonmissing_value)
+  out$mean <- safe_mean(x)
+  out$sd <- safe_sd(x)
+  out$median <- safe_median(x)
+  out$q1 <- q1_value
+  out$q3 <- q3_value
+  out$iqr <- if (is.na(q1_value) || is.na(q3_value)) NA_real_ else q3_value - q1_value
+  out$min <- safe_min(x)
+  out$max <- safe_max(x)
+  out$sum_value <- safe_sum(x)
+  out
+}
+
+build_distribution_rows <- function(dataset, section, variable, values, report_levels, denominator, definition_prefix) {
+  bind_rows(lapply(report_levels, function(level_name) {
+    build_count_percent_row(
+      section = section,
+      dataset = dataset,
+      variable = variable,
+      stratum_type = variable,
+      stratum_value = level_name,
+      count = sum(values == level_name, na.rm = TRUE),
+      denominator = denominator,
+      definition = sprintf("%s: %s", definition_prefix, level_name)
+    )
+  }))
+}
+
+create_dataset_master_rows <- function(df, dataset_name) {
+  n_total <- nrow(df)
+  nonmissing_site_id <- df$site_id[!is.na(df$site_id)]
+  unique_site_id_n <- dplyr::n_distinct(nonmissing_site_id)
+  duplicated_site_id_extra_n <- sum(duplicated(nonmissing_site_id))
+
+  source_has_age_exact_followup <- isTRUE(df$source_has_age_exact_followup[1])
+  source_has_date_entry <- isTRUE(df$source_has_date_entry[1])
+
+  missingness_variables <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
+  if (source_has_age_exact_followup) {
+    missingness_variables <- c(missingness_variables, "age_exact_followup")
   }
-  
-  out$mean <- mean(x)
-  out$sd <- if (length(x) >= 2L) stats::sd(x) else 0
-  out$median <- stats::median(x)
-  out$q1 <- unname(stats::quantile(x, probs = 0.25, names = FALSE, type = 2))
-  out$q3 <- unname(stats::quantile(x, probs = 0.75, names = FALSE, type = 2))
-  out$iqr <- out$q3 - out$q1
-  out$min <- min(x)
-  out$max <- max(x)
-  out
-}
-
-scale_numeric_summary_row <- function(row_df, new_measure, new_unit, multiplier) {
-  scale_cols <- c("mean", "sd", "median", "q1", "q3", "iqr", "min", "max", "lcl95", "ucl95")
-  out <- row_df
-  out$measure <- new_measure
-  out$unit <- new_unit
-  for (col_name in intersect(scale_cols, names(out))) {
-    if (is.numeric(out[[col_name]])) {
-      out[[col_name]] <- out[[col_name]] * multiplier
-    }
+  if (source_has_date_entry) {
+    missingness_variables <- c(missingness_variables, "date_entry")
   }
-  out
-}
 
-build_poisson_rate_row <- function(section, dataset, measure, count, person_years, definition, stratum_type = "overall", stratum_value = "overall", risk_scale = "not_applicable") {
-  out <- make_base_row(section, dataset, measure, definition, unit = "per100_person_years", stratum_type, stratum_value, risk_scale)
-  out$count <- as.numeric(count)
-  out$person_years <- as.numeric(person_years)
-  
-  if (is.na(person_years) || person_years <= 0) {
-    return(out)
-  }
-  
-  pt <- stats::poisson.test(x = count, T = person_years)
-  out$rate_per100py <- unname(pt$estimate) * 100
-  out$rate_lcl95_per100py <- pt$conf.int[1] * 100
-  out$rate_ucl95_per100py <- pt$conf.int[2] * 100
-  out
-}
+  missingness_rows <- bind_rows(lapply(missingness_variables, function(variable_name) {
+    build_missingness_row(
+      dataset = dataset_name,
+      variable = variable_name,
+      missing_count = count_missing_like(df[[variable_name]]),
+      denominator = n_total,
+      definition = sprintf("Missing values for `%s` in the raw merged input.", variable_name)
+    )
+  }))
 
-build_reverse_km_row <- function(section, dataset, measure, time, censor_event, definition, unit, risk_scale) {
-  out <- make_base_row(section, dataset, measure, definition, unit, stratum_type = "overall", stratum_value = "overall", risk_scale = risk_scale)
-  
-  time <- as.numeric(time)
-  censor_event <- as.integer(censor_event)
-  keep <- !is.na(time) & !is.na(censor_event)
-  time <- time[keep]
-  censor_event <- censor_event[keep]
-  
-  out$n_total <- length(time)
-  out$n_nonmissing <- length(time)
-  out$count <- sum(censor_event == 1L)
-  out$denominator <- length(time)
-  out$proportion <- ifelse(length(time) == 0L, NA_real_, sum(censor_event == 1L) / length(time))
-  out$percent <- 100 * out$proportion
-  
-  if (length(time) == 0L || sum(censor_event == 1L) == 0L) {
-    return(out)
-  }
-  
-  fit <- survival::survfit(survival::Surv(time, censor_event) ~ 1)
-  tab <- fit$table
-  
-  out$median <- unname(tab["median"])
-  out$lcl95 <- unname(tab["0.95LCL"])
-  out$ucl95 <- unname(tab["0.95UCL"])
-  out$min <- min(time)
-  out$max <- max(time)
-  out
-}
-
-bind_section_rows <- function(...) {
-  dplyr::bind_rows(...) %>%
-    mutate(
-      dataset = factor(as.character(dataset), levels = dataset_order),
-      section = factor(section, levels = section_order)
-    ) %>%
-    arrange(section, dataset, stratum_type, stratum_value, measure)
-}
-
-## 🟠 Define: dataset-specific summary engines ===============================
-make_cohort_overview_rows <- function(df, dataset_name) {
-  dplyr::bind_rows(
+  cohort_rows <- bind_rows(
     build_single_value_row(
       section = "cohort_overview",
       dataset = dataset_name,
-      measure = "n_rows",
-      value = nrow(df),
-      definition = "Number of rows/subjects in the analysis dataset.",
-      unit = "subjects"
+      variable = "n_rows",
+      value = n_total,
+      unit = "rows",
+      definition = "Number of rows in the dataset variant.",
+      value_field = "count"
     ),
     build_single_value_row(
       section = "cohort_overview",
       dataset = dataset_name,
-      measure = "n_unique_site_id",
-      value = dplyr::n_distinct(df$site_id),
-      definition = "Number of unique site+id identifiers.",
-      unit = "subjects"
+      variable = "n_unique_site_id",
+      value = unique_site_id_n,
+      unit = "subjects",
+      definition = "Number of unique subjects using `site + id` as the subject key.",
+      value_field = "count"
     ),
     build_single_value_row(
       section = "cohort_overview",
       dataset = dataset_name,
-      measure = "n_duplicate_site_id_rows",
-      value = nrow(df) - dplyr::n_distinct(df$site_id),
-      definition = "Number of rows exceeding the unique site+id count; zero is expected for one-subject-per-row data.",
-      unit = "rows"
+      variable = "n_duplicated_site_id_extra_rows",
+      value = duplicated_site_id_extra_n,
+      unit = "rows",
+      definition = "Number of extra duplicated rows beyond the first row within duplicated `site + id`.",
+      value_field = "count"
     ),
     build_single_value_row(
       section = "cohort_overview",
       dataset = dataset_name,
-      measure = "total_person_years_observed",
-      value = sum(df$years_followup, na.rm = TRUE),
-      definition = "Total observed person-time computed as days_followup / 365.25 across all subjects.",
-      unit = "person_years"
+      variable = "total_observed_followup_days",
+      value = safe_sum(df$days_followup_clean),
+      unit = "days",
+      definition = "Total observed follow-up accumulated across all rows, using non-negative follow-up only.",
+      value_field = "sum_value"
+    ),
+    build_single_value_row(
+      section = "cohort_overview",
+      dataset = dataset_name,
+      variable = "total_observed_followup_years",
+      value = safe_sum(df$years_followup_clean),
+      unit = "person_years",
+      definition = "Total observed follow-up accumulated across all rows, expressed in person-years.",
+      value_field = "sum_value"
     )
   )
-}
 
-make_sex_distribution_rows <- function(df, dataset_name) {
-  total_n <- nrow(df)
-  sex_counts <- df %>% count(sex_label, name = "count")
-  
-  purrr::pmap_dfr(
-    list(sex_counts$sex_label, sex_counts$count),
-    function(sex_value, count_value) {
-      build_count_row(
-        section = "sex_distribution",
+  flag_rows <- bind_rows(
+    build_count_percent_row(
+      section = "data_flags",
+      dataset = dataset_name,
+      variable = "sex_num_invalid_code",
+      stratum_type = "flag",
+      stratum_value = "sex_num_invalid_code",
+      count = sum(!is.na(df$sex_num) & !df$sex_num %in% c(0L, 1L)),
+      denominator = n_total,
+      definition = "Rows with `sex_num` not coded as 0 or 1.",
+      summary_type = "flag_count"
+    ),
+    build_count_percent_row(
+      section = "data_flags",
+      dataset = dataset_name,
+      variable = "status_num_invalid_code",
+      stratum_type = "flag",
+      stratum_value = "status_num_invalid_code",
+      count = sum(!is.na(df$status_num) & !df$status_num %in% c(0L, 1L, 2L)),
+      denominator = n_total,
+      definition = "Rows with `status_num` not coded as 0, 1, or 2.",
+      summary_type = "flag_count"
+    ),
+    build_count_percent_row(
+      section = "data_flags",
+      dataset = dataset_name,
+      variable = "age_exact_entry_negative",
+      stratum_type = "flag",
+      stratum_value = "age_exact_entry_negative",
+      count = sum(!is.na(df$age_exact_entry) & df$age_exact_entry < 0),
+      denominator = n_total,
+      definition = "Rows with negative `age_exact_entry`.",
+      summary_type = "flag_count"
+    ),
+    build_count_percent_row(
+      section = "data_flags",
+      dataset = dataset_name,
+      variable = "days_followup_negative",
+      stratum_type = "flag",
+      stratum_value = "days_followup_negative",
+      count = sum(!is.na(df$days_followup) & df$days_followup < 0),
+      denominator = n_total,
+      definition = "Rows with negative `days_followup`.",
+      summary_type = "flag_count"
+    )
+  )
+
+  if (source_has_age_exact_followup) {
+    flag_rows <- bind_rows(
+      flag_rows,
+      build_count_percent_row(
+        section = "data_flags",
         dataset = dataset_name,
-        measure = paste0("sex_", str_to_lower(sex_value)),
-        count = count_value,
-        denominator = total_n,
-        definition = "Sex distribution based on sex_num coding (0 = Female, 1 = Male).",
-        stratum_type = "sex",
-        stratum_value = sex_value
+        variable = "age_exact_followup_negative",
+        stratum_type = "flag",
+        stratum_value = "age_exact_followup_negative",
+        count = sum(!is.na(df$age_exact_followup) & df$age_exact_followup < 0),
+        denominator = n_total,
+        definition = "Rows with negative `age_exact_followup`.",
+        summary_type = "flag_count"
       )
-    }
-  )
-}
+    )
+  }
 
-make_baseline_age_rows <- function(df, dataset_name) {
-  build_numeric_summary_row(
-    section = "baseline_age_summary",
+  sex_rows <- build_distribution_rows(
     dataset = dataset_name,
-    measure = "age_exact_entry",
-    x = df$age_exact_entry,
-    definition = "Exact age at cohort entry (years) using the merged analysis backbone field age_exact_entry.",
-    unit = "years"
+    section = "sex_distribution",
+    variable = "sex_label",
+    values = df$sex_label,
+    report_levels = sex_report_levels,
+    denominator = n_total,
+    definition_prefix = "Sex distribution"
   )
-}
 
-make_age_by_sex_rows <- function(df, dataset_name) {
-  df %>%
-    group_by(sex_label) %>%
-    group_modify(~ build_numeric_summary_row(
+  status_rows <- build_distribution_rows(
+    dataset = dataset_name,
+    section = "status_distribution",
+    variable = "status_label",
+    values = df$status_label,
+    report_levels = status_report_levels,
+    denominator = n_total,
+    definition_prefix = "Outcome status distribution"
+  )
+
+  age_rows <- bind_rows(
+    build_numeric_summary_row(
+      section = "age_summary",
+      dataset = dataset_name,
+      variable = "age_exact_entry_clean",
+      x = df$age_exact_entry_clean,
+      unit = "years",
+      definition = "Distribution of age at entry, using non-negative values only."
+    )
+  )
+
+  if (sum(!is.na(df$age_exact_followup_clean)) > 0L) {
+    age_rows <- bind_rows(
+      age_rows,
+      build_numeric_summary_row(
+        section = "age_summary",
+        dataset = dataset_name,
+        variable = "age_exact_followup_clean",
+        x = df$age_exact_followup_clean,
+        unit = "years",
+        definition = "Distribution of age at the end of follow-up, using non-negative values only."
+      )
+    )
+  }
+
+  followup_rows <- bind_rows(
+    build_numeric_summary_row(
+      section = "followup_summary",
+      dataset = dataset_name,
+      variable = "days_followup_clean",
+      x = df$days_followup_clean,
+      unit = "days",
+      definition = "Distribution of observed follow-up time in days, using non-negative values only."
+    ),
+    build_numeric_summary_row(
+      section = "followup_summary",
+      dataset = dataset_name,
+      variable = "years_followup_clean",
+      x = df$years_followup_clean,
+      unit = "years",
+      definition = "Distribution of observed follow-up time in years, using non-negative values only."
+    )
+  )
+
+  age_by_sex_rows <- bind_rows(lapply(c("Female", "Male"), function(sex_name) {
+    build_numeric_summary_row(
       section = "age_by_sex",
       dataset = dataset_name,
-      measure = "age_exact_entry_by_sex",
-      x = .x$age_exact_entry,
-      definition = "Exact age at cohort entry summarized within each sex stratum.",
+      variable = "age_exact_entry_clean",
+      x = df$age_exact_entry_clean[df$sex_label == sex_name],
       unit = "years",
-      stratum_type = "sex",
-      stratum_value = unique(.x$sex_label)
-    )) %>%
-    ungroup()
-}
+      definition = sprintf("Distribution of age at entry among %s participants.", sex_name),
+      stratum_type = "sex_label",
+      stratum_value = sex_name
+    )
+  }))
 
-make_event_distribution_rows <- function(df, dataset_name) {
-  total_n <- nrow(df)
-  status_counts <- df %>% count(status_label, name = "count")
-  
-  purrr::pmap_dfr(
-    list(status_counts$status_label, status_counts$count),
-    function(status_value, count_value) {
-      build_count_row(
-        section = "event_distribution",
+  followup_by_status_rows <- bind_rows(lapply(c("right_censoring", "transition", "remission"), function(status_name) {
+    bind_rows(
+      build_numeric_summary_row(
+        section = "followup_by_status",
         dataset = dataset_name,
-        measure = paste0("status_", status_value),
-        count = count_value,
-        denominator = total_n,
-        definition = "Observed outcome distribution using status_num coding: 0 = right_censoring, 1 = transition, 2 = remission.",
-        stratum_type = "status",
-        stratum_value = status_value
+        variable = "days_followup_clean",
+        x = df$days_followup_clean[df$status_label == status_name],
+        unit = "days",
+        definition = sprintf("Distribution of follow-up time in days among rows with status `%s`.", status_name),
+        stratum_type = "status_label",
+        stratum_value = status_name
+      ),
+      build_numeric_summary_row(
+        section = "followup_by_status",
+        dataset = dataset_name,
+        variable = "years_followup_clean",
+        x = df$years_followup_clean[df$status_label == status_name],
+        unit = "years",
+        definition = sprintf("Distribution of follow-up time in years among rows with status `%s`.", status_name),
+        stratum_type = "status_label",
+        stratum_value = status_name
       )
-    }
-  )
-}
-
-make_event_rate_rows <- function(df, dataset_name) {
-  total_py <- sum(df$years_followup, na.rm = TRUE)
-  dplyr::bind_rows(
-    build_poisson_rate_row(
-      section = "event_rate_summary",
-      dataset = dataset_name,
-      measure = "transition_incidence_rate",
-      count = sum(df$is_transition, na.rm = TRUE),
-      person_years = total_py,
-      definition = "Observed transition incidence rate per 100 person-years based on total observed person-time.",
-      stratum_type = "event_type",
-      stratum_value = "transition",
-      risk_scale = main_risk_scale
-    ),
-    build_poisson_rate_row(
-      section = "event_rate_summary",
-      dataset = dataset_name,
-      measure = "remission_incidence_rate",
-      count = sum(df$is_remission, na.rm = TRUE),
-      person_years = total_py,
-      definition = "Observed remission incidence rate per 100 person-years based on total observed person-time.",
-      stratum_type = "event_type",
-      stratum_value = "remission",
-      risk_scale = supplementary_risk_scale
     )
-  )
-}
+  }))
 
-make_followup_numeric_rows <- function(df, dataset_name) {
-  observed_days <- build_numeric_summary_row(
-    section = "followup_numeric_summary",
-    dataset = dataset_name,
-    measure = "followup_observed_all_days",
-    x = df$days_followup,
-    definition = "Observed analysis time T = days_followup for all subjects, regardless of event or censoring status.",
-    unit = "days"
-  )
-  
-  non_transition_days <- build_numeric_summary_row(
-    section = "followup_numeric_summary",
-    dataset = dataset_name,
-    measure = "followup_non_transition_subjects_days",
-    x = df$days_followup[df$status_num != 1L],
-    definition = "Observed follow-up among subjects without observed transition (status 0 or 2); useful on the main transition-only scale where these observations act as censoring for transition.",
-    unit = "days",
-    risk_scale = main_risk_scale
-  )
-  
-  right_censor_days <- build_numeric_summary_row(
-    section = "followup_numeric_summary",
-    dataset = dataset_name,
-    measure = "followup_right_censored_only_days",
-    x = df$days_followup[df$status_num == 0L],
-    definition = "Observed follow-up among right-censored subjects only (status 0).",
-    unit = "days"
-  )
-  
-  transition_days <- build_numeric_summary_row(
-    section = "followup_numeric_summary",
-    dataset = dataset_name,
-    measure = "time_to_transition_days",
-    x = df$days_followup[df$status_num == 1L],
-    definition = "Observed time to transition among transitioned subjects only.",
-    unit = "days",
-    risk_scale = main_risk_scale
-  )
-  
-  remission_days <- build_numeric_summary_row(
-    section = "followup_numeric_summary",
-    dataset = dataset_name,
-    measure = "time_to_remission_days",
-    x = df$days_followup[df$status_num == 2L],
-    definition = "Observed time to remission among remission subjects only.",
-    unit = "days",
-    risk_scale = supplementary_risk_scale
-  )
-  
-  rows_days <- bind_rows(
-    observed_days,
-    non_transition_days,
-    right_censor_days,
-    transition_days,
-    remission_days
-  )
-  
-  rows_years <- bind_rows(
-    scale_numeric_summary_row(observed_days, "followup_observed_all_years", "years", 1 / days_per_year),
-    scale_numeric_summary_row(non_transition_days, "followup_non_transition_subjects_years", "years", 1 / days_per_year),
-    scale_numeric_summary_row(right_censor_days, "followup_right_censored_only_years", "years", 1 / days_per_year),
-    scale_numeric_summary_row(transition_days, "time_to_transition_years", "years", 1 / days_per_year),
-    scale_numeric_summary_row(remission_days, "time_to_remission_years", "years", 1 / days_per_year)
-  )
-  
-  bind_rows(rows_days, rows_years)
-}
-
-make_followup_reverse_km_rows <- function(df, dataset_name) {
-  transition_scale_days <- build_reverse_km_row(
-    section = "followup_reverse_km_summary",
-    dataset = dataset_name,
-    measure = "reverse_km_followup_transition_scale_days",
-    time = df$days_followup,
-    censor_event = as.integer(df$status_num != 1L),
-    definition = "Reverse Kaplan-Meier follow-up for the main transition-only analysis, treating non-transition observations (status 0 or 2) as censoring events in the censoring-time distribution.",
-    unit = "days",
-    risk_scale = main_risk_scale
-  )
-  
-  competing_scale_days <- build_reverse_km_row(
-    section = "followup_reverse_km_summary",
-    dataset = dataset_name,
-    measure = "reverse_km_followup_competing_scale_days",
-    time = df$days_followup,
-    censor_event = as.integer(df$status_num == 0L),
-    definition = "Reverse Kaplan-Meier follow-up for the remission-sensitive competing-risk scale, treating only right-censoring (status 0) as censoring events in the censoring-time distribution.",
-    unit = "days",
-    risk_scale = supplementary_risk_scale
-  )
-  
   bind_rows(
-    transition_scale_days,
-    scale_numeric_summary_row(transition_scale_days, "reverse_km_followup_transition_scale_years", "years", 1 / days_per_year),
-    competing_scale_days,
-    scale_numeric_summary_row(competing_scale_days, "reverse_km_followup_competing_scale_years", "years", 1 / days_per_year)
+    cohort_rows,
+    missingness_rows,
+    flag_rows,
+    sex_rows,
+    status_rows,
+    age_rows,
+    followup_rows,
+    age_by_sex_rows,
+    followup_by_status_rows
   )
 }
 
-make_status_by_sex_rows <- function(df, dataset_name) {
-  df %>%
-    count(sex_label, status_label, name = "count") %>%
-    group_by(sex_label) %>%
-    mutate(denominator = sum(count)) %>%
-    ungroup() %>%
-    mutate(
-      proportion = count / denominator,
-      percent = 100 * proportion,
-      measure = paste0("status_within_", str_to_lower(sex_label), "_", status_label),
-      definition = "Status composition within each sex stratum; denominator is the sex-specific total.",
-      section = "status_by_sex",
-      dataset = dataset_name,
-      unit = "count",
-      stratum_type = "sex",
-      stratum_value = sex_label,
-      risk_scale = "not_applicable"
-    ) %>%
-    transmute(
-      section,
-      dataset = factor(dataset, levels = dataset_order),
-      measure,
-      definition,
-      unit,
-      stratum_type,
-      stratum_value,
-      risk_scale,
-      n_total = as.integer(denominator),
-      n_nonmissing = as.integer(denominator),
-      count = as.numeric(count),
-      denominator = as.numeric(denominator),
-      proportion,
-      percent,
-      person_years = NA_real_,
-      rate_per100py = NA_real_,
-      rate_lcl95_per100py = NA_real_,
-      rate_ucl95_per100py = NA_real_,
-      mean = NA_real_,
-      sd = NA_real_,
-      median = NA_real_,
-      q1 = NA_real_,
-      q3 = NA_real_,
-      iqr = NA_real_,
-      min = NA_real_,
-      max = NA_real_,
-      lcl95 = NA_real_,
-      ucl95 = NA_real_
-    )
+## 🟠 Define: compact-table formatters and extractors ===============================
+fmt_number <- function(x, digits = 2) {
+  if (length(x) == 0L || is.na(x)) return("NA")
+  formatC(x, format = "f", digits = digits, big.mark = ",")
 }
 
-make_calendar_rows <- function(df, dataset_name) {
-  if (!"entry_year" %in% names(df) || all(is.na(df$entry_year))) {
-    return(tibble())
+fmt_integer <- function(x) {
+  if (length(x) == 0L || is.na(x)) return("NA")
+  formatC(round(x), format = "f", digits = 0, big.mark = ",")
+}
+
+format_count_percent <- function(count, percent, digits_percent = 1) {
+  if (is.na(count)) return("NA")
+  paste0(fmt_integer(count), " (", fmt_number(percent, digits = digits_percent), "%)")
+}
+
+format_mean_sd <- function(mean_value, sd_value, digits = 2) {
+  if (is.na(mean_value) || is.na(sd_value)) return("NA")
+  paste0(fmt_number(mean_value, digits = digits), " ± ", fmt_number(sd_value, digits = digits))
+}
+
+format_median_iqr <- function(median_value, q1_value, q3_value, digits = 2) {
+  if (is.na(median_value) || is.na(q1_value) || is.na(q3_value)) return("NA")
+  paste0(fmt_number(median_value, digits = digits), " [", fmt_number(q1_value, digits = digits), ", ", fmt_number(q3_value, digits = digits), "]")
+}
+
+format_range <- function(min_value, max_value, digits = 2) {
+  if (is.na(min_value) || is.na(max_value)) return("NA")
+  paste0(fmt_number(min_value, digits = digits), " to ", fmt_number(max_value, digits = digits))
+}
+
+get_master_row <- function(master_table, dataset_name, section_name, variable_name, stratum_type_name = "overall", stratum_value_name = "overall") {
+  out <- master_table %>%
+    filter(
+      .data$dataset == dataset_name,
+      .data$section == section_name,
+      .data$variable == variable_name,
+      .data$stratum_type == stratum_type_name,
+      .data$stratum_value == stratum_value_name
+    )
+
+  if (nrow(out) == 0L) {
+    return(NULL)
   }
-  
-  entry_rows <- df %>%
-    count(entry_year, name = "count") %>%
-    mutate(
-      section = "calendar_distribution",
-      dataset = dataset_name,
-      measure = "entry_year_distribution",
-      definition = "Calendar distribution of cohort entry years.",
-      unit = "count",
-      stratum_type = "entry_year",
-      stratum_value = as.character(entry_year),
-      risk_scale = "not_applicable",
-      denominator = nrow(df),
-      proportion = count / denominator,
-      percent = 100 * proportion
-    )
-  
-  end_rows <- df %>%
-    count(end_year, name = "count") %>%
-    mutate(
-      section = "calendar_distribution",
-      dataset = dataset_name,
-      measure = "followup_end_year_distribution",
-      definition = "Calendar distribution of follow-up end years derived from date_entry + days_followup.",
-      unit = "count",
-      stratum_type = "end_year",
-      stratum_value = as.character(end_year),
-      risk_scale = "not_applicable",
-      denominator = nrow(df),
-      proportion = count / denominator,
-      percent = 100 * proportion
-    )
-  
-  bind_rows(entry_rows, end_rows) %>%
-    transmute(
-      section = factor(section, levels = section_order),
-      dataset = factor(dataset, levels = dataset_order),
-      measure,
-      definition,
-      unit,
-      stratum_type,
-      stratum_value,
-      risk_scale,
-      n_total = as.integer(denominator),
-      n_nonmissing = as.integer(denominator),
-      count = as.numeric(count),
-      denominator = as.numeric(denominator),
-      proportion,
-      percent,
-      person_years = NA_real_,
-      rate_per100py = NA_real_,
-      rate_lcl95_per100py = NA_real_,
-      rate_ucl95_per100py = NA_real_,
-      mean = NA_real_,
-      sd = NA_real_,
-      median = NA_real_,
-      q1 = NA_real_,
-      q3 = NA_real_,
-      iqr = NA_real_,
-      min = NA_real_,
-      max = NA_real_,
-      lcl95 = NA_real_,
-      ucl95 = NA_real_
-    )
+
+  out %>% slice(1)
 }
 
-make_dataset_summary_rows <- function(df, dataset_name) {
-  bind_section_rows(
-    make_cohort_overview_rows(df, dataset_name),
-    make_sex_distribution_rows(df, dataset_name),
-    make_baseline_age_rows(df, dataset_name),
-    make_age_by_sex_rows(df, dataset_name),
-    make_event_distribution_rows(df, dataset_name),
-    make_event_rate_rows(df, dataset_name),
-    make_followup_numeric_rows(df, dataset_name),
-    make_followup_reverse_km_rows(df, dataset_name),
-    make_status_by_sex_rows(df, dataset_name),
-    make_calendar_rows(df, dataset_name)
+get_distribution_total <- function(master_table, dataset_name, section_name, variable_name, stratum_values) {
+  out <- master_table %>%
+    filter(
+      .data$dataset == dataset_name,
+      .data$section == section_name,
+      .data$variable == variable_name,
+      .data$stratum_value %in% stratum_values
+    )
+
+  if (nrow(out) == 0L) {
+    return(tibble(count = NA_real_, percent = NA_real_, denominator = NA_real_))
+  }
+
+  denominator_value <- out$denominator[match(TRUE, !is.na(out$denominator))]
+  if (length(denominator_value) == 0L || is.na(denominator_value)) {
+    denominator_value <- NA_real_
+  }
+
+  count_value <- sum(out$count, na.rm = TRUE)
+  percent_value <- if (is.na(denominator_value) || denominator_value <= 0) NA_real_ else 100 * count_value / denominator_value
+
+  tibble(
+    count = count_value,
+    percent = percent_value,
+    denominator = denominator_value
   )
 }
 
-## 🟠 Define: workbook export helpers ===============================
-write_summary_workbook <- function(summary_rows, workbook_path) {
-  section_split <- summary_rows %>%
-    mutate(section = as.character(section), dataset = as.character(dataset)) %>%
-    group_split(section, .keep = TRUE)
-  
-  section_names <- summary_rows %>%
-    mutate(section = as.character(section)) %>%
-    distinct(section) %>%
-    pull(section)
-  
-  if (requireNamespace("openxlsx", quietly = TRUE)) {
-    wb <- openxlsx::createWorkbook()
-    openxlsx::addWorksheet(wb, "all_rows")
-    openxlsx::writeData(wb, sheet = "all_rows", x = summary_rows)
-    
-    for (i in seq_along(section_split)) {
-      sheet_name <- stringr::str_sub(section_names[i], 1, 31)
-      openxlsx::addWorksheet(wb, sheet_name)
-      openxlsx::writeData(wb, sheet = sheet_name, x = section_split[[i]])
-    }
-    
-    openxlsx::saveWorkbook(wb, workbook_path, overwrite = TRUE)
-    return(invisible(TRUE))
-  }
-  
-  if (requireNamespace("writexl", quietly = TRUE)) {
-    x_list <- c(list(all_rows = summary_rows), base::setNames(section_split, nm = stringr::str_sub(section_names, 1, 31)))
-    writexl::write_xlsx(x = x_list, path = workbook_path)
-    return(invisible(TRUE))
-  }
-  
-  warning("Neither `openxlsx` nor `writexl` is available; workbook export skipped.", call. = FALSE)
-  invisible(FALSE)
+make_compact_row <- function(panel, row_label, pnu_value, snu_value, merged_value) {
+  tibble(
+    panel = panel,
+    row_label = row_label,
+    PNU = pnu_value,
+    SNU = snu_value,
+    merged = merged_value
+  )
 }
 
-# 🔴 Load: merged descriptive input ===============================
-raw_merged <- read_input_dataset(merged_file)
+build_compact_table <- function(master_table) {
+  compact_rows <- list()
+  row_index <- 0L
 
-# 🔴 Validate: backbone fields and derived descriptors ===============================
-analysis_df <- prepare_backbone_dataset(raw_merged, pnu_label = pnu_site_label, snu_label = snu_site_label)
-datasets <- split_dataset_variants(analysis_df, pnu_label = pnu_site_label, snu_label = snu_site_label)
+  add_compact_row <- function(panel, row_label, value_builder) {
+    row_index <<- row_index + 1L
+    values <- lapply(dataset_order, value_builder)
+    compact_rows[[row_index]] <<- make_compact_row(
+      panel = panel,
+      row_label = row_label,
+      pnu_value = values[[1]],
+      snu_value = values[[2]],
+      merged_value = values[[3]]
+    )
+  }
 
-# 🔴 Summarize: pre-analysis inspection rows ===============================
-summary_rows <- purrr::imap_dfr(datasets, make_dataset_summary_rows) %>%
-  mutate(
-    dataset = factor(as.character(dataset), levels = dataset_order),
-    section = factor(as.character(section), levels = section_order)
-  ) %>%
-  arrange(section, dataset, stratum_type, stratum_value, measure)
+  has_age_followup_summary <- any(
+    master_table$section == "age_summary" &
+      master_table$variable == "age_exact_followup_clean" &
+      !is.na(master_table$n_nonmissing) &
+      master_table$n_nonmissing > 0L
+  )
 
-if (nrow(summary_rows) == 0) {
-  stop("No descriptive summary rows were generated.", call. = FALSE)
+  has_sex_missing_or_invalid <- any(
+    master_table$section == "sex_distribution" &
+      master_table$variable == "sex_label" &
+      master_table$stratum_value %in% c("Missing", "Unexpected_code") &
+      !is.na(master_table$count) &
+      master_table$count > 0
+  )
+
+  has_status_missing_or_invalid <- any(
+    master_table$section == "status_distribution" &
+      master_table$variable == "status_label" &
+      master_table$stratum_value %in% c("Missing", "Unexpected_code") &
+      !is.na(master_table$count) &
+      master_table$count > 0
+  )
+
+  has_duplicate_site_id_rows <- any(
+    master_table$section == "cohort_overview" &
+      master_table$variable == "n_duplicated_site_id_extra_rows" &
+      !is.na(master_table$count) &
+      master_table$count > 0
+  )
+
+  add_compact_row("Cohort", "N rows", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "cohort_overview", "n_rows")
+    if (is.null(out)) return("NA")
+    fmt_integer(out$count)
+  })
+
+  add_compact_row("Cohort", "Unique site+id", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "cohort_overview", "n_unique_site_id")
+    if (is.null(out)) return("NA")
+    fmt_integer(out$count)
+  })
+
+  if (has_duplicate_site_id_rows) {
+    add_compact_row("Cohort", "Extra duplicated site+id rows", function(dataset_name) {
+      out <- get_master_row(master_table, dataset_name, "cohort_overview", "n_duplicated_site_id_extra_rows")
+      if (is.null(out)) return("NA")
+      fmt_integer(out$count)
+    })
+  }
+
+  add_compact_row("Sex", "Female, n (%)", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "sex_distribution", "sex_label", "sex_label", "Female")
+    if (is.null(out)) return("NA")
+    format_count_percent(out$count, out$percent, digits_percent = 1)
+  })
+
+  add_compact_row("Sex", "Male, n (%)", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "sex_distribution", "sex_label", "sex_label", "Male")
+    if (is.null(out)) return("NA")
+    format_count_percent(out$count, out$percent, digits_percent = 1)
+  })
+
+  if (has_sex_missing_or_invalid) {
+    add_compact_row("Sex", "Missing/invalid sex, n (%)", function(dataset_name) {
+      out <- get_distribution_total(master_table, dataset_name, "sex_distribution", "sex_label", c("Missing", "Unexpected_code"))
+      format_count_percent(out$count, out$percent, digits_percent = 1)
+    })
+  }
+
+  add_compact_row("Age at entry (years)", "Mean ± SD", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_entry_clean")
+    if (is.null(out)) return("NA")
+    format_mean_sd(out$mean, out$sd, digits = 2)
+  })
+
+  add_compact_row("Age at entry (years)", "Median [Q1, Q3]", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_entry_clean")
+    if (is.null(out)) return("NA")
+    format_median_iqr(out$median, out$q1, out$q3, digits = 2)
+  })
+
+  add_compact_row("Age at entry (years)", "Min to max", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_entry_clean")
+    if (is.null(out)) return("NA")
+    format_range(out$min, out$max, digits = 2)
+  })
+
+  if (has_age_followup_summary) {
+    add_compact_row("Age at end of follow-up (years)", "Mean ± SD", function(dataset_name) {
+      out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_followup_clean")
+      if (is.null(out)) return("NA")
+      format_mean_sd(out$mean, out$sd, digits = 2)
+    })
+
+    add_compact_row("Age at end of follow-up (years)", "Median [Q1, Q3]", function(dataset_name) {
+      out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_followup_clean")
+      if (is.null(out)) return("NA")
+      format_median_iqr(out$median, out$q1, out$q3, digits = 2)
+    })
+
+    add_compact_row("Age at end of follow-up (years)", "Min to max", function(dataset_name) {
+      out <- get_master_row(master_table, dataset_name, "age_summary", "age_exact_followup_clean")
+      if (is.null(out)) return("NA")
+      format_range(out$min, out$max, digits = 2)
+    })
+  }
+
+  add_compact_row("Follow-up duration (days)", "Mean ± SD", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "days_followup_clean")
+    if (is.null(out)) return("NA")
+    format_mean_sd(out$mean, out$sd, digits = 1)
+  })
+
+  add_compact_row("Follow-up duration (days)", "Median [Q1, Q3]", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "days_followup_clean")
+    if (is.null(out)) return("NA")
+    format_median_iqr(out$median, out$q1, out$q3, digits = 1)
+  })
+
+  add_compact_row("Follow-up duration (days)", "Min to max", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "days_followup_clean")
+    if (is.null(out)) return("NA")
+    format_range(out$min, out$max, digits = 1)
+  })
+
+  add_compact_row("Follow-up duration (years)", "Mean ± SD", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "years_followup_clean")
+    if (is.null(out)) return("NA")
+    format_mean_sd(out$mean, out$sd, digits = 2)
+  })
+
+  add_compact_row("Follow-up duration (years)", "Median [Q1, Q3]", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "years_followup_clean")
+    if (is.null(out)) return("NA")
+    format_median_iqr(out$median, out$q1, out$q3, digits = 2)
+  })
+
+  add_compact_row("Follow-up duration (years)", "Min to max", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "followup_summary", "years_followup_clean")
+    if (is.null(out)) return("NA")
+    format_range(out$min, out$max, digits = 2)
+  })
+
+  add_compact_row("Outcome status", "Right censoring, n (%)", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "status_distribution", "status_label", "status_label", "right_censoring")
+    if (is.null(out)) return("NA")
+    format_count_percent(out$count, out$percent, digits_percent = 1)
+  })
+
+  add_compact_row("Outcome status", "Transition, n (%)", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "status_distribution", "status_label", "status_label", "transition")
+    if (is.null(out)) return("NA")
+    format_count_percent(out$count, out$percent, digits_percent = 1)
+  })
+
+  add_compact_row("Outcome status", "Remission, n (%)", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "status_distribution", "status_label", "status_label", "remission")
+    if (is.null(out)) return("NA")
+    format_count_percent(out$count, out$percent, digits_percent = 1)
+  })
+
+  if (has_status_missing_or_invalid) {
+    add_compact_row("Outcome status", "Missing/invalid status, n (%)", function(dataset_name) {
+      out <- get_distribution_total(master_table, dataset_name, "status_distribution", "status_label", c("Missing", "Unexpected_code"))
+      format_count_percent(out$count, out$percent, digits_percent = 1)
+    })
+  }
+
+  add_compact_row("Observed follow-up", "Total observed person-years", function(dataset_name) {
+    out <- get_master_row(master_table, dataset_name, "cohort_overview", "total_observed_followup_years")
+    if (is.null(out)) return("NA")
+    fmt_number(out$sum_value, digits = 2)
+  })
+
+  bind_rows(compact_rows)
 }
 
-# 🔴 Export: consolidated descriptive artifacts ===============================
-summary_csv_file <- file.path(export_path, paste0(output_stem, ".csv"))
-summary_xlsx_file <- file.path(export_path, paste0(output_stem, ".xlsx"))
+# 🔴 Read: merged pre-analysis input ===============================
+raw_merged_df <- read_input_dataset(merged_file)
 
-readr::write_csv(summary_rows, summary_csv_file, na = "")
-write_summary_workbook(summary_rows, summary_xlsx_file)
-
-export_registry <- tibble(
-  artifact = c("summary_csv", "summary_xlsx"),
-  file_path = c(summary_csv_file, summary_xlsx_file),
-  exists = c(file.exists(summary_csv_file), file.exists(summary_xlsx_file))
+# 🔴 Transform: cleaned dataset variants for descriptive inspection ===============================
+analysis_ready_df <- prepare_preanalysis_dataset(
+  df = raw_merged_df,
+  pnu_label = pnu_site_label,
+  snu_label = snu_site_label,
+  days_per_year_value = days_per_year
 )
 
-print(export_registry)
+dataset_variants <- split_dataset_variants(
+  df = analysis_ready_df,
+  pnu_label = pnu_site_label,
+  snu_label = snu_site_label
+)
 
-cat("\n[Completed] Pre-analysis clinical survival data-inspection export finished.\n")
-cat("- CSV source of truth: ", summary_csv_file, "\n", sep = "")
-if (file.exists(summary_xlsx_file)) {
-  cat("- Workbook convenience file: ", summary_xlsx_file, "\n", sep = "")
-} else {
-  cat("- Workbook convenience file: skipped because no xlsx writer package was available.\n", sep = "")
+# 🔴 Summarize: unified descriptive source table ===============================
+master_table <- bind_rows(lapply(names(dataset_variants), function(dataset_name) {
+  create_dataset_master_rows(
+    df = dataset_variants[[dataset_name]],
+    dataset_name = dataset_name
+  )
+})) %>%
+  mutate(
+    dataset = factor(dataset, levels = dataset_order),
+    section = factor(section, levels = section_order)
+  ) %>%
+  arrange(section, dataset, variable, stratum_type, stratum_value) %>%
+  mutate(
+    dataset = as.character(dataset),
+    section = as.character(section)
+  )
+
+# 🔴 Derive: manuscript-ready compact table from master source ===============================
+compact_table <- build_compact_table(master_table)
+
+# 🔴 Export: descriptive source files and optional workbook ===============================
+master_output_path <- file.path(export_path, master_output_file)
+compact_output_path <- file.path(export_path, compact_output_file)
+workbook_output_path <- file.path(export_path, workbook_output_file)
+
+readr::write_csv(master_table, master_output_path)
+readr::write_csv(compact_table, compact_output_path)
+
+if (requireNamespace("writexl", quietly = TRUE)) {
+  writexl::write_xlsx(
+    x = list(
+      master = master_table,
+      compact = compact_table
+    ),
+    path = workbook_output_path
+  )
+} else if (requireNamespace("openxlsx", quietly = TRUE)) {
+  workbook_object <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(workbook_object, "master")
+  openxlsx::writeData(workbook_object, "master", master_table)
+  openxlsx::addWorksheet(workbook_object, "compact")
+  openxlsx::writeData(workbook_object, "compact", compact_table)
+  openxlsx::saveWorkbook(workbook_object, workbook_output_path, overwrite = TRUE)
+}
+
+cat("\n[완료]\n")
+cat("- export_path: ", export_path, "\n", sep = "")
+cat("- master CSV: ", master_output_file, "\n", sep = "")
+cat("- compact CSV: ", compact_output_file, "\n", sep = "")
+if (file.exists(workbook_output_path)) {
+  cat("- workbook: ", workbook_output_file, "\n", sep = "")
 }
