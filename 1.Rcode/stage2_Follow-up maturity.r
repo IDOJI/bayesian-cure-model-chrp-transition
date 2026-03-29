@@ -6,6 +6,7 @@ export_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival A
 reuse_existing_core_results <- TRUE
 force_recompute_core_results <- FALSE
 rebuild_plots_from_source_tables <- TRUE
+mask_survival_curve_tails_after_last_nonzero_risk <- TRUE
 
 plot_time_step_year <- 0.25
 plot_max_year <- 10
@@ -20,11 +21,12 @@ site_dominance_warning_fraction <- 0.80
 site_dominance_warning_min_horizon_year <- 3L
 site_dominance_warning_exempt_primary_supported <- TRUE
 
-current_patch_level <- 'stage2_followup_maturity_reuse_cache_png_v8'
+current_patch_level <- 'stage2_followup_maturity_contract_fix_tail_mask_v9'
 scientific_compatibility_signature <- 'stage2_followup_maturity_science_v7'
 compatible_reuse_patch_levels <- c(
   'patched_user_specified_paths_preferred_site_adjusted_reporting_v7',
-  'stage2_followup_maturity_reuse_cache_png_v8'
+  'stage2_followup_maturity_reuse_cache_png_v8',
+  'stage2_followup_maturity_contract_fix_tail_mask_v9'
 )
 compatible_science_signatures <- c(
   'stage2_followup_maturity_science_v7'
@@ -2425,6 +2427,27 @@ theme_stage2 <- function() {
     )
 }
 
+
+mask_survival_curve_tail_for_plot <- function(curve_df) {
+  if (!isTRUE(mask_survival_curve_tails_after_last_nonzero_risk) || nrow(curve_df) == 0L) {
+    return(curve_df)
+  }
+
+  curve_df %>%
+    group_by(dataset, subgroup_kind, subgroup_value, group_id, panel_label, summary_view, curve_role) %>%
+    mutate(
+      last_supported_time = suppressWarnings(max(time_year[!is.na(n_risk) & n_risk > 0], na.rm = TRUE)),
+      last_supported_time = if_else(is.infinite(last_supported_time), NA_real_, as.numeric(last_supported_time)),
+      beyond_supported_tail = !is.na(last_supported_time) & time_year > (last_supported_time + 1e-10),
+      estimate = if_else(beyond_supported_tail, NA_real_, as.numeric(estimate)),
+      conf_low = if_else(beyond_supported_tail, NA_real_, as.numeric(conf_low)),
+      conf_high = if_else(beyond_supported_tail, NA_real_, as.numeric(conf_high)),
+      std_error = if_else(beyond_supported_tail, NA_real_, as.numeric(std_error))
+    ) %>%
+    ungroup() %>%
+    select(-last_supported_time, -beyond_supported_tail)
+}
+
 build_stage2_plot_objects <- function(
     curve_plot_data,
     numbers_at_risk_data,
@@ -2462,8 +2485,15 @@ build_stage2_plot_objects <- function(
     filter(!is.na(state), is.finite(time_year), is.finite(state_prop)) %>%
     arrange(summary_view, panel_label, state, time_year)
 
-  km_curve_plot <- curve_plot_subset %>%
+  km_curve_plot_data <- curve_plot_subset %>%
     filter(curve_role == 'km_curve') %>%
+    mask_survival_curve_tail_for_plot()
+
+  reverse_km_plot_data <- curve_plot_subset %>%
+    filter(curve_role == 'reverse_km_curve') %>%
+    mask_survival_curve_tail_for_plot()
+
+  km_curve_plot <- km_curve_plot_data %>%
     ggplot(aes(x = time_year, y = estimate, color = summary_view, fill = summary_view)) +
     geom_ribbon(aes(ymin = conf_low, ymax = conf_high), alpha = 0.15, color = NA, na.rm = TRUE) +
     geom_step(linewidth = 0.7, na.rm = TRUE) +
@@ -2477,12 +2507,12 @@ build_stage2_plot_objects <- function(
       x = 'Years from cohort entry',
       y = 'Survival probability',
       color = 'Summary view',
-      fill = 'Summary view'
+      fill = 'Summary view',
+      caption = if (isTRUE(mask_survival_curve_tails_after_last_nonzero_risk)) 'Times beyond the last nonzero risk count within each panel/view are masked.' else NULL
     ) +
     theme_stage2()
 
-  reverse_km_plot <- curve_plot_subset %>%
-    filter(curve_role == 'reverse_km_curve') %>%
+  reverse_km_plot <- reverse_km_plot_data %>%
     ggplot(aes(x = time_year, y = estimate, color = summary_view, fill = summary_view)) +
     geom_ribbon(aes(ymin = conf_low, ymax = conf_high), alpha = 0.15, color = NA, na.rm = TRUE) +
     geom_step(linewidth = 0.7, na.rm = TRUE) +
@@ -2496,7 +2526,8 @@ build_stage2_plot_objects <- function(
       x = 'Years from cohort entry',
       y = 'Reverse-KM survival probability',
       color = 'Summary view',
-      fill = 'Summary view'
+      fill = 'Summary view',
+      caption = if (isTRUE(mask_survival_curve_tails_after_last_nonzero_risk)) 'Times beyond the last nonzero risk count within each panel/view are masked.' else NULL
     ) +
     theme_stage2()
 
@@ -2704,6 +2735,9 @@ make_stage2_metadata <- function(
     'merged', 'site_dominance_rule', sprintf('Describe site composition for all merged overall/sex horizons, but escalate warnings only when one site fully remains eligible or when one site exceeds %.0f%% of eligible subjects at horizons >= %d years outside primary-supported support tiers.', 100 * site_dominance_warning_fraction, site_dominance_warning_min_horizon_year),
     'merged', 'site_dominance_primary_supported_exemption', if (isTRUE(site_dominance_warning_exempt_primary_supported)) 'TRUE' else 'FALSE',
     'plots', 'numbers_at_risk_plot_note', 'Numbers-at-risk page uses table-like tiles; fill encodes simplified horizon-support groups and avoids the prior floating-text layout.',
+    'plots', 'numbers_at_risk_source_of_truth', 'stage2_numbers_at_risk.csv is the canonical source-of-truth for the numbers-at-risk tile plot.',
+    'plots', 'curve_data_contract_note', 'stage2_followup_curve_data.csv is the source-of-truth for KM, reverse-KM, and composition curve layers; the numbers-at-risk plot is sourced from stage2_numbers_at_risk.csv.',
+    'plots', 'survival_tail_mask_note', if (isTRUE(mask_survival_curve_tails_after_last_nonzero_risk)) 'KM and reverse-KM plotting masks time points beyond the last nonzero risk count within each panel/view to avoid unsupported flat tails.' else 'KM and reverse-KM plotting keeps the full extended tail through the plotting horizon.',
     'plots', 'completeness_plot_masking_rule', sprintf('Mask completeness plot points when eligible_n <= 0 or risk_set_n <= 0; keep sparse points visible with caution thresholds risk_set_n < %d and risk_set_fraction < %.2f.', completeness_sparse_risk_n, completeness_low_fraction_cutoff),
     'plots', 'completeness_plot_reporting_note', 'For merged overall/sex panels, site_adjusted is the preferred reporting view and site_free is retained as sensitivity.',
     'plots', 'support_display_group_note', 'support_display_group collapses secondary and sensitivity horizons for display only; merged site panels inherit support tiers from the matched single-site cohort when available.',
@@ -3273,6 +3307,7 @@ stage2_followup_bundle <- list(
     site_dominance_warning_fraction = site_dominance_warning_fraction,
     site_dominance_warning_min_horizon_year = site_dominance_warning_min_horizon_year,
     site_dominance_warning_exempt_primary_supported = site_dominance_warning_exempt_primary_supported,
+    mask_survival_curve_tails_after_last_nonzero_risk = mask_survival_curve_tails_after_last_nonzero_risk,
     patch_level = current_patch_level,
     scientific_compatibility_signature = scientific_compatibility_signature,
     stage1_source_signature = current_stage1_source_signature,
@@ -3395,13 +3430,13 @@ export_manifest <- tibble(
   description = c(
     'Site-specific administrative end dates used for merged completeness recalculation',
     'Group-level reverse Kaplan-Meier follow-up summaries with max observed and potential follow-up windows',
-    'Numbers-at-risk table at 0, 1, ..., 10 years with standardized support-display fields',
+    'Source-of-truth table for the numbers-at-risk tile plot at 0, 1, ..., 10 years, with standardized support-display fields',
     'Event/censoring/remission composition over time',
     'Merged overall/sex horizon-level site contribution table showing eligible counts by site and descriptive dominance status',
     'Horizon-specific follow-up maturity table with support-tier, evidence, claim-restriction, site-dominance, plot-masking, and preferred-reporting fields',
     'Long-format horizon-level follow-up maturity table',
     'Transition-only and remission-sensitive horizon summaries saved side by side',
-    'Curve-level source-of-truth data for KM, reverse KM, numbers-at-risk, and event/censoring/remission composition plots',
+    'Curve-level source-of-truth data for KM, reverse-KM, and event/censoring/remission composition plots; the numbers-at-risk tile plot is sourced from stage2_numbers_at_risk.csv',
     'Explicit source-of-truth data frame for the completeness plot, derived from the horizon summary',
     'Stage 2 metadata registry',
     'Pass/fail summary of Stage 2 validation checks',
@@ -3479,6 +3514,7 @@ run_log_lines <- c(
   sprintf('[Stage 2] Scientific compat : %s', scientific_compatibility_signature),
   sprintf('[Stage 2] Reused core       : %s', if (isTRUE(reused_existing_core_results)) 'TRUE' else 'FALSE'),
   sprintf('[Stage 2] Reuse mode        : %s', core_reuse_mode),
+  sprintf('[Stage 2] Tail masking      : %s', if (isTRUE(mask_survival_curve_tails_after_last_nonzero_risk)) 'TRUE' else 'FALSE'),
   sprintf('[Stage 2] Raw merged file   : %s', raw_merged_file_used),
   sprintf('[Stage 2] Exported counted files: %d', sum(export_manifest$counts_against_limit, na.rm = TRUE)),
   sprintf('[Stage 2] Main PNG files    : %d', length(main_png_paths)),

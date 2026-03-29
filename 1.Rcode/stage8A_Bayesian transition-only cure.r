@@ -156,7 +156,7 @@ read_delimited_or_rds <- function(path) {
   }
   ext <- tolower(tools::file_ext(path))
   path_low <- tolower(path)
-
+  
   if (grepl("\\.(csv|txt)(\\.gz)?$", path_low)) {
     return(readr::read_csv(path, show_col_types = FALSE, progress = FALSE))
   }
@@ -181,7 +181,7 @@ make_temp_output_path <- function(path, tag = "tmp") {
     "_",
     sprintf("%08d", sample.int(99999999, 1L))
   )
-
+  
   if (grepl("\\.csv\\.gz$", base, ignore.case = TRUE)) {
     base <- sub("\\.csv\\.gz$", paste0("_", tag, "_", stamp, ".csv.gz"), base, ignore.case = TRUE)
   } else if (grepl("\\.csv$", base, ignore.case = TRUE)) {
@@ -195,7 +195,7 @@ make_temp_output_path <- function(path, tag = "tmp") {
   } else {
     base <- paste0(base, "_", tag, "_", stamp)
   }
-
+  
   file.path(dir, base)
 }
 
@@ -247,7 +247,7 @@ flatten_scalar_list_col <- function(x) {
   if (!is.list(x)) {
     return(x)
   }
-
+  
   values <- lapply(x, function(one) {
     if (is.null(one) || length(one) == 0L) {
       return(NA)
@@ -260,20 +260,20 @@ flatten_scalar_list_col <- function(x) {
     }
     paste(as.character(unlist(one, recursive = TRUE, use.names = FALSE)), collapse = "|")
   })
-
+  
   non_missing <- values[!vapply(values, function(one) length(one) == 1L && is.na(one), logical(1))]
   if (length(non_missing) == 0L) {
     return(rep(NA_character_, length(values)))
   }
-
+  
   if (all(vapply(non_missing, is.logical, logical(1)))) {
     return(vapply(values, function(one) if (is.na(one)) NA else as.logical(one), logical(1)))
   }
-
+  
   if (all(vapply(non_missing, function(one) is.numeric(one) || is.integer(one), logical(1)))) {
     return(vapply(values, function(one) if (is.na(one)) NA_real_ else as.numeric(one), numeric(1)))
   }
-
+  
   vapply(values, function(one) if (is.na(one)) NA_character_ else as.character(one), character(1))
 }
 
@@ -391,6 +391,7 @@ elapsed_stage8_seconds <- function(start_time) {
 is_localhost_connection_warning <- function(w) {
   grepl("closing unused connection .*<-localhost:", conditionMessage(w))
 }
+
 # 🔴 Define: Stage-1 backbone alignment and fallback dataset preparation ===============================
 ## 🟠 Define: horizon support governance and Stage-1 coercion helpers ===============================
 derive_support_tier <- function(dataset_name, horizon_year) {
@@ -456,14 +457,14 @@ augment_horizon_registry_fields <- function(horizon_registry) {
   if (is.null(horizon_registry) || !inherits(horizon_registry, "data.frame") || nrow(horizon_registry) == 0L) {
     return(tibble())
   }
-
+  
   out <- horizon_registry %>%
     mutate(
       dataset = normalize_dataset_label(.data$dataset),
       horizon_year = as.integer(safe_numeric(.data$horizon_year))
     ) %>%
     filter(dataset %in% c("PNU", "SNU", "merged"), !is.na(horizon_year))
-
+  
   if (!"support_tier" %in% names(out)) {
     out$support_tier <- NA_character_
   }
@@ -488,7 +489,7 @@ augment_horizon_registry_fields <- function(horizon_registry) {
   if (!"horizon_days" %in% names(out)) {
     out$horizon_days <- out$horizon_year * 365.25
   }
-
+  
   out <- out %>%
     rowwise() %>%
     mutate(
@@ -546,7 +547,7 @@ augment_horizon_registry_fields <- function(horizon_registry) {
     ungroup() %>%
     distinct(dataset, horizon_year, .keep_all = TRUE) %>%
     arrange(factor(dataset, levels = c("PNU", "SNU", "merged")), horizon_year)
-
+  
   out
 }
 
@@ -641,14 +642,14 @@ coerce_stage1_formula_registry <- function(df) {
   } else {
     tibble::as_tibble(df)
   }
-
+  
   if (!"dataset" %in% names(out)) {
     stop("Stage 1 formula registry must contain `dataset`.", call. = FALSE)
   }
   if (!"formula_name" %in% names(out)) {
     stop("Stage 1 formula registry must contain `formula_name`.", call. = FALSE)
   }
-
+  
   out <- out %>%
     mutate(
       dataset = normalize_dataset_label(dataset),
@@ -667,7 +668,7 @@ coerce_stage1_formula_registry <- function(df) {
     ) %>%
     distinct(dataset, formula_name, .keep_all = TRUE) %>%
     arrange(factor(dataset, levels = c("PNU", "SNU", "merged")), formula_name)
-
+  
   out
 }
 
@@ -677,7 +678,7 @@ coerce_stage1_threshold_registry <- function(df, thresholds_fallback) {
   } else {
     tibble::as_tibble(df)
   }
-
+  
   threshold_col <- first_existing_name(out, c("threshold", "risk_threshold"))
   if (is.null(threshold_col)) {
     out <- build_fallback_threshold_registry(thresholds_fallback)
@@ -697,7 +698,7 @@ coerce_stage1_horizon_registry <- function(df, horizons_fallback) {
   } else {
     tibble::as_tibble(df)
   }
-
+  
   dataset_col <- first_existing_name(out, c("dataset", "dataset_key"))
   horizon_col <- first_existing_name(out, c("horizon_year", "horizon", "year"))
   if (is.null(dataset_col) || is.null(horizon_col)) {
@@ -731,7 +732,7 @@ prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
   if (length(missing_cols) > 0L) {
     stop(sprintf("[%s] Missing required columns: %s", dataset_name, paste(missing_cols, collapse = ", ")), call. = FALSE)
   }
-
+  
   out <- df %>%
     mutate(
       id = trimws(as.character(id)),
@@ -746,7 +747,7 @@ prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
       days_followup = safe_numeric(days_followup),
       status_num = as.integer(safe_numeric(status_num))
     )
-
+  
   if (nrow(out) == 0L) {
     stop(sprintf("[%s] Dataset has zero rows.", dataset_name), call. = FALSE)
   }
@@ -765,17 +766,17 @@ prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
   if (any(out$days_followup < 0)) {
     stop(sprintf("[%s] Negative `days_followup` values detected.", dataset_name), call. = FALSE)
   }
-
+  
   if (dataset_name != "merged") {
     out <- out %>% mutate(site = dataset_name)
   }
-
+  
   age_sd <- stats::sd(out$age_exact_entry)
   if (is.na(age_sd) || age_sd <= 0) {
     stop(sprintf("[%s] `age_exact_entry` must have positive SD.", dataset_name), call. = FALSE)
   }
   age_mean <- mean(out$age_exact_entry)
-
+  
   out <- out %>%
     mutate(
       unique_person_id = paste(site, id, sep = "_"),
@@ -795,14 +796,14 @@ prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
       ),
       age_s = (age_exact_entry - age_mean) / (2 * age_sd)
     )
-
+  
   if (nrow(out) != dplyr::n_distinct(out$unique_person_id)) {
     stop(sprintf("[%s] `site + id` is not unique.", dataset_name), call. = FALSE)
   }
   if (dataset_name == "merged" && dplyr::n_distinct(out$site) < 2L) {
     stop("[merged] Merged dataset must contain at least two site levels.", call. = FALSE)
   }
-
+  
   scaling_row <- tibble(
     dataset = dataset_name,
     dataset_key = dataset_name,
@@ -813,7 +814,7 @@ prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
     scale_two_sd = 2 * age_sd,
     scaling_rule = "(age_exact_entry - mean(age_exact_entry)) / (2 * sd(age_exact_entry))"
   )
-
+  
   list(data = out, scaling = scaling_row)
 }
 
@@ -843,26 +844,26 @@ load_stage8_datasets_from_merged <- function(merged_path, pnu_label, snu_label) 
 load_stage1_backbone_or_fallback <- function() {
   stage1_bundle <- NULL
   stage1_loaded_flag <- FALSE
-
+  
   if (file.exists(stage1_bundle_file) || file.exists(stage1_datasets_file)) {
     if (file.exists(stage1_bundle_file)) {
       stage1_bundle <- tryCatch(readRDS(stage1_bundle_file), error = function(e) NULL)
     }
-
+    
     analysis_datasets <- if (file.exists(stage1_datasets_file)) {
       tryCatch(readRDS(stage1_datasets_file), error = function(e) NULL)
     } else {
       NULL
     }
-
+    
     if (is.null(analysis_datasets) && !is.null(stage1_bundle) && is.list(stage1_bundle$datasets)) {
       analysis_datasets <- stage1_bundle$datasets
     }
-
+    
     if (!is.null(analysis_datasets) && all(c("PNU", "SNU", "merged") %in% names(analysis_datasets))) {
       analysis_datasets <- lapply(analysis_datasets[c("PNU", "SNU", "merged")], tibble::as_tibble)
       stage1_loaded_flag <- TRUE
-
+      
       formula_registry <- read_existing_table_if_present(stage1_formula_registry_file)
       if (is.null(formula_registry) && !is.null(stage1_bundle)) {
         formula_registry <- stage1_bundle$registries$formula_registry %||% NULL
@@ -898,14 +899,14 @@ load_stage1_backbone_or_fallback <- function() {
           )
         }))
       }
-
+      
       formula_registry <- coerce_stage1_formula_registry(formula_registry)
       threshold_registry <- coerce_stage1_threshold_registry(threshold_registry, risk_thresholds_fallback)
       horizon_registry <- coerce_stage1_horizon_registry(horizon_registry, common_horizons_year_fallback)
       metadata_registry <- if (is.null(metadata_registry) || !inherits(metadata_registry, "data.frame") || nrow(metadata_registry) == 0L) build_fallback_metadata_registry() else tibble::as_tibble(metadata_registry)
       modeling_registry <- if (is.null(modeling_registry) || !inherits(modeling_registry, "data.frame")) tibble() else tibble::as_tibble(modeling_registry)
       dataset_registry <- build_dataset_registry(analysis_datasets)
-
+      
       return(list(
         stage1_loaded_flag = TRUE,
         stage1_bundle = stage1_bundle,
@@ -920,7 +921,7 @@ load_stage1_backbone_or_fallback <- function() {
       ))
     }
   }
-
+  
   fallback_loaded <- load_stage8_datasets_from_merged(merged_data_path, pnu_site_label, snu_site_label)
   analysis_datasets <- fallback_loaded$datasets
   scaling_registry <- fallback_loaded$scaling_registry
@@ -929,7 +930,7 @@ load_stage1_backbone_or_fallback <- function() {
   horizon_registry <- build_fallback_horizon_registry(common_horizons_year_fallback)
   metadata_registry <- build_fallback_metadata_registry()
   dataset_registry <- build_dataset_registry(analysis_datasets)
-
+  
   list(
     stage1_loaded_flag = FALSE,
     stage1_bundle = NULL,
@@ -993,7 +994,7 @@ map_stage6_variant_to_formula_anchor <- function(dataset_key = NA_character_, so
   source_dataset <- normalize_dataset_label(source_dataset %||% NA_character_)
   analysis_variant <- as.character(analysis_variant %||% NA_character_)
   hsu_formula_branch <- as.character(hsu_formula_branch %||% NA_character_)
-
+  
   if (!is.na(dataset_key) && nzchar(dataset_key)) {
     if (identical(dataset_key, "merged__site_free")) {
       return(c("base", "interaction"))
@@ -1005,7 +1006,7 @@ map_stage6_variant_to_formula_anchor <- function(dataset_key = NA_character_, so
       return("ALL")
     }
   }
-
+  
   if (identical(source_dataset, "merged")) {
     branch_text <- paste(analysis_variant, hsu_formula_branch)
     if (grepl("site_adjusted", branch_text, fixed = TRUE)) {
@@ -1032,24 +1033,24 @@ read_screening_flags <- function(path) {
     followup_not_contradicted_flag = character(),
     screening_note = character()
   )
-
+  
   if (is.null(path) || !nzchar(path) || !file.exists(path)) {
     return(empty_out)
   }
-
+  
   raw_obj <- read_delimited_or_rds(path)
   df <- extract_stage6_screening_table(raw_obj)
   if (is.null(df) || !inherits(df, "data.frame")) {
     return(empty_out)
   }
   df <- tibble::as_tibble(df)
-
+  
   if (("dataset_key" %in% names(df)) && ("cure_model_eligibility_flag" %in% names(df) || "final_decision_flag" %in% names(df))) {
     dataset_source_col <- first_existing_name(df, c("source_dataset", "dataset", "cohort"))
     dataset_key_col <- first_existing_name(df, c("dataset_key"))
     analysis_variant_col <- first_existing_name(df, c("analysis_variant"))
     branch_col <- first_existing_name(df, c("hsu_formula_branch", "analysis_variant"))
-
+    
     out_stage6 <- bind_rows(lapply(seq_len(nrow(df)), function(i) {
       one <- df[i, , drop = FALSE]
       dataset_value <- if (!is.null(dataset_source_col)) one[[dataset_source_col]][[1L]] else NA_character_
@@ -1075,21 +1076,21 @@ read_screening_flags <- function(path) {
       )
     })) %>%
       filter(dataset %in% c("PNU", "SNU", "merged"))
-
+    
     if (nrow(out_stage6) > 0L) {
       return(out_stage6)
     }
   }
-
+  
   dataset_col <- first_existing_name(df, c("dataset", "cohort", "source_dataset"))
   flag_col <- first_existing_name(df, c("cure_model_eligibility_flag", "final_decision_flag", "decision_flag", "screening_flag"))
   note_col <- first_existing_name(df, c("screening_note", "screening_detail", "detail"))
   formula_col <- first_existing_name(df, c("formula_anchor", "formula_name", "formula_type"))
-
+  
   if (is.null(dataset_col) || is.null(flag_col)) {
     return(empty_out)
   }
-
+  
   out <- df %>%
     transmute(
       dataset = normalize_dataset_label(.data[[dataset_col]]),
@@ -1105,7 +1106,7 @@ read_screening_flags <- function(path) {
       screening_note = if (!is.null(note_col)) as.character(.data[[note_col]]) else NA_character_
     ) %>%
     filter(dataset %in% c("PNU", "SNU", "merged"))
-
+  
   if (nrow(out) == 0L) empty_out else out
 }
 
@@ -1124,7 +1125,7 @@ build_screening_model_lookup <- function(screening_flags, model_grid) {
       screening_note = NA_character_
     ))
   }
-
+  
   exact_lookup <- model_base %>%
     left_join(
       screening_flags %>%
@@ -1132,7 +1133,7 @@ build_screening_model_lookup <- function(screening_flags, model_grid) {
         distinct(dataset, formula_anchor, .keep_all = TRUE),
       by = c("dataset", "formula_anchor")
     )
-
+  
   all_lookup <- model_base %>%
     left_join(
       screening_flags %>%
@@ -1141,7 +1142,7 @@ build_screening_model_lookup <- function(screening_flags, model_grid) {
         rename_with(~paste0(.x, "_all"), -dataset),
       by = "dataset"
     )
-
+  
   exact_lookup %>%
     left_join(select(all_lookup, -dataset, -formula_anchor), by = "model_id") %>%
     transmute(
@@ -1173,7 +1174,7 @@ normalize_nocure_cohort <- function(path) {
     return(NULL)
   }
   df <- tibble::as_tibble(df)
-
+  
   if (all(c("metric_domain", "metric_name", "metric_value") %in% names(df))) {
     out <- df %>%
       filter(model_class == "non_cure", metric_domain == "horizon_summary", metric_name == "mean_predicted_risk") %>%
@@ -1190,17 +1191,17 @@ normalize_nocure_cohort <- function(path) {
       return(out)
     }
   }
-
+  
   dataset_col <- first_existing_name(df, c("dataset", "cohort"))
   horizon_col <- first_existing_name(df, c("horizon_year", "horizon", "year"))
   formula_col <- first_existing_name(df, c("formula_anchor", "formula_name", "formula_type"))
   model_col <- first_existing_name(df, c("no_cure_model_id", "model_id", "family", "model"))
   risk_col <- first_existing_name(df, c("meanRisk_no_cure", "meanRisk", "mean_risk", "risk_mean"))
-
+  
   if (is.null(dataset_col) || is.null(horizon_col) || is.null(risk_col)) {
     return(NULL)
   }
-
+  
   tibble(
     dataset = normalize_dataset_label(df[[dataset_col]]),
     formula_anchor = if (!is.null(formula_col)) as.character(df[[formula_col]]) else "ALL",
@@ -1222,7 +1223,7 @@ normalize_nocure_classification <- function(path) {
     return(NULL)
   }
   df <- tibble::as_tibble(df)
-
+  
   if (all(c("metric_domain", "metric_name", "metric_value") %in% names(df))) {
     metric_name_map <- c(
       false_positive_burden_nonevents = "false_positive_burden",
@@ -1248,13 +1249,13 @@ normalize_nocure_classification <- function(path) {
       return(out)
     }
   }
-
+  
   dataset_col <- first_existing_name(df, c("dataset", "cohort"))
   horizon_col <- first_existing_name(df, c("horizon_year", "horizon", "year"))
   threshold_col <- first_existing_name(df, c("threshold", "risk_threshold"))
   formula_col <- first_existing_name(df, c("formula_anchor", "formula_name", "formula_type"))
   model_col <- first_existing_name(df, c("no_cure_model_id", "model_id", "family", "model"))
-
+  
   metric_candidates <- c(
     false_positive_burden = first_existing_name(df, c("false_positive_burden", "fp_burden")),
     FP100 = first_existing_name(df, c("FP100", "fp100", "false_positives_per_100")),
@@ -1264,11 +1265,11 @@ normalize_nocure_classification <- function(path) {
     FPR = first_existing_name(df, c("FPR", "fpr"))
   )
   metric_candidates <- metric_candidates[!vapply(metric_candidates, is.null, logical(1))]
-
+  
   if (is.null(dataset_col) || is.null(horizon_col) || is.null(threshold_col) || length(metric_candidates) == 0L) {
     return(NULL)
   }
-
+  
   out_base <- tibble(
     dataset = normalize_dataset_label(df[[dataset_col]]),
     formula_anchor = if (!is.null(formula_col)) as.character(df[[formula_col]]) else "ALL",
@@ -1276,7 +1277,7 @@ normalize_nocure_classification <- function(path) {
     horizon_year = as.integer(safe_numeric(df[[horizon_col]])),
     threshold = as.numeric(safe_numeric(df[[threshold_col]]))
   )
-
+  
   bind_rows(lapply(names(metric_candidates), function(metric_name) {
     tibble(
       dataset = out_base$dataset,
@@ -1290,6 +1291,7 @@ normalize_nocure_classification <- function(path) {
   })) %>%
     filter(!is.na(horizon_year), !is.na(threshold), !is.na(value))
 }
+
 # 🔴 Define: model-grid construction, reuse bundles, and prior encoding ===============================
 ## 🟠 Define: RDS reuse extraction and compatibility checks ===============================
 empty_reuse_bundle <- function() {
@@ -1304,6 +1306,7 @@ empty_reuse_bundle <- function() {
     prior_predictive_summary = NULL,
     selected_parameter_draws = NULL,
     fit_object = NULL,
+    meta = list(),
     rds_path = NA_character_
   )
 }
@@ -1339,6 +1342,23 @@ extract_stage8_bundle_tables <- function(obj) {
     if (inherits(obj$selected_parameter_draws, "data.frame")) out$selected_parameter_draws <- obj$selected_parameter_draws
     if (inherits(obj$fit, "stanfit")) out$fit_object <- obj$fit
     if (inherits(obj$stanfit, "stanfit")) out$fit_object <- obj$stanfit
+    
+    meta_fields <- c(
+      "dataset", "model_id", "branch", "risk_scale", "prior_branch",
+      "site_prior_family", "site_placement_label", "latency_family", "family_code",
+      "formula_anchor", "fit_status", "fit_error_message", "admissible_flag",
+      "admissibility_reasons", "prior_degenerate_flag", "posterior_degenerate_flag",
+      "ppc_gross_contradiction_flag", "divergences", "max_rhat", "min_bulk_ess",
+      "min_tail_ess", "treedepth_exceeded", "waic", "looic", "p_waic",
+      "p_waic_high_n", "p_waic_high_pct", "p_loo", "pareto_k_max",
+      "pareto_k_bad_n", "pareto_k_bad_pct", "pareto_k_very_bad_n",
+      "waic_warning_flag", "loo_warning_flag", "info_criteria_warning_detail",
+      "n", "n_event", "n_censor_main", "n_remission",
+      "cohort_mean_cure_fraction_mean", "cohort_mean_cure_fraction_q025",
+      "cohort_mean_cure_fraction_q50", "cohort_mean_cure_fraction_q975",
+      "rds_path"
+    )
+    out$meta <- obj[intersect(names(obj), meta_fields)]
   }
   out
 }
@@ -1366,15 +1386,230 @@ get_reuse_bundle <- function(model_id, export_dir, registry_row = NULL) {
   out
 }
 
+safe_meta_value <- function(meta, field, default = NA) {
+  value <- meta[[field]]
+  if (is.null(value) || length(value) == 0L) {
+    return(default)
+  }
+  if (length(value) == 1L && is.na(value)) {
+    return(default)
+  }
+  value[[1L]]
+}
+
+append_missing_model_rows <- function(existing_df, bundle_df, model_id) {
+  if (is.null(bundle_df) || !inherits(bundle_df, "data.frame") || nrow(bundle_df) == 0L) {
+    return(existing_df)
+  }
+  
+  if (is.null(existing_df) || !inherits(existing_df, "data.frame") || nrow(existing_df) == 0L) {
+    return(tibble::as_tibble(bundle_df))
+  }
+  
+  if (!("model_id" %in% names(bundle_df))) {
+    return(existing_df)
+  }
+  
+  if ("model_id" %in% names(existing_df) && nrow(subset_model_table(existing_df, model_id)) > 0L) {
+    return(existing_df)
+  }
+  
+  bind_rows_safe(list(existing_df, bundle_df))
+}
+
+build_registry_row_from_reuse_bundle <- function(model_row, dataset_df, reuse_bundle) {
+  if (is.null(reuse_bundle) || is.na(reuse_bundle$rds_path) || !nzchar(reuse_bundle$rds_path)) {
+    return(NULL)
+  }
+  
+  model_id_now <- model_row$model_id[[1L]]
+  meta <- reuse_bundle$meta %||% list()
+  
+  diag_sub <- subset_model_table(reuse_bundle$diagnostics_parameter_level, model_id_now)
+  ppc_sub <- subset_model_table(reuse_bundle$ppc_summary, model_id_now)
+  cohort_sub <- subset_model_table(reuse_bundle$posterior_cohort_yearly, model_id_now)
+  profile_sub <- subset_model_table(reuse_bundle$posterior_subject_profile, model_id_now)
+  prior_sub <- normalize_prior_predictive_summary(subset_model_table(reuse_bundle$prior_predictive_summary, model_id_now))
+  
+  fit_status <- as.character(safe_meta_value(meta, "fit_status", if ((nrow_or_zero(diag_sub) > 0L) || (nrow_or_zero(ppc_sub) > 0L)) "ok" else NA_character_))
+  if (is.na(fit_status) || !nzchar(fit_status)) {
+    return(NULL)
+  }
+  
+  admissible_flag <- safe_meta_value(meta, "admissible_flag", NA)
+  if (length(admissible_flag) == 0L || is.na(admissible_flag)) {
+    admissible_flag <- nrow_or_zero(profile_sub) > 0L || nrow_or_zero(cohort_sub) > 0L
+  }
+  admissible_flag <- isTRUE(as.logical(admissible_flag))
+  
+  max_rhat <- safe_numeric(safe_meta_value(meta, "max_rhat", NA_real_))
+  if ((!is.finite(max_rhat)) && nrow_or_zero(diag_sub) > 0L && ("rhat" %in% names(diag_sub))) {
+    max_rhat <- suppressWarnings(max(safe_numeric(diag_sub$rhat), na.rm = TRUE))
+    if (!is.finite(max_rhat)) max_rhat <- NA_real_
+  }
+  
+  min_bulk_ess <- safe_numeric(safe_meta_value(meta, "min_bulk_ess", NA_real_))
+  if ((!is.finite(min_bulk_ess)) && nrow_or_zero(diag_sub) > 0L && ("ess_bulk" %in% names(diag_sub))) {
+    min_bulk_ess <- suppressWarnings(min(safe_numeric(diag_sub$ess_bulk), na.rm = TRUE))
+    if (!is.finite(min_bulk_ess)) min_bulk_ess <- NA_real_
+  }
+  
+  min_tail_ess <- safe_numeric(safe_meta_value(meta, "min_tail_ess", NA_real_))
+  if ((!is.finite(min_tail_ess)) && nrow_or_zero(diag_sub) > 0L && ("ess_tail" %in% names(diag_sub))) {
+    min_tail_ess <- suppressWarnings(min(safe_numeric(diag_sub$ess_tail), na.rm = TRUE))
+    if (!is.finite(min_tail_ess)) min_tail_ess <- NA_real_
+  }
+  
+  ppc_gross_contradiction_flag <- safe_meta_value(meta, "ppc_gross_contradiction_flag", NA)
+  if (length(ppc_gross_contradiction_flag) == 0L || is.na(ppc_gross_contradiction_flag)) {
+    if (nrow_or_zero(ppc_sub) > 0L && ("gross_contradiction_flag" %in% names(ppc_sub))) {
+      ppc_gross_contradiction_flag <- any(as.logical(ppc_sub$gross_contradiction_flag), na.rm = TRUE)
+    } else {
+      ppc_gross_contradiction_flag <- NA
+    }
+  }
+  
+  prior_degenerate_flag <- safe_meta_value(meta, "prior_degenerate_flag", NA)
+  if (length(prior_degenerate_flag) == 0L || is.na(prior_degenerate_flag)) {
+    if (nrow_or_zero(prior_sub) > 0L) {
+      prior_degenerate_flag <- any(as.logical(prior_sub$prior_degenerate_flag), na.rm = TRUE)
+    } else {
+      prior_degenerate_flag <- NA
+    }
+  }
+  
+  cohort_mean_cure_fraction_mean <- safe_numeric(safe_meta_value(meta, "cohort_mean_cure_fraction_mean", NA_real_))
+  cohort_mean_cure_fraction_q025 <- safe_numeric(safe_meta_value(meta, "cohort_mean_cure_fraction_q025", NA_real_))
+  cohort_mean_cure_fraction_q50  <- safe_numeric(safe_meta_value(meta, "cohort_mean_cure_fraction_q50",  NA_real_))
+  cohort_mean_cure_fraction_q975 <- safe_numeric(safe_meta_value(meta, "cohort_mean_cure_fraction_q975", NA_real_))
+  
+  if ((!is.finite(cohort_mean_cure_fraction_mean)) && nrow_or_zero(cohort_sub) > 0L && all(c(
+    "cohort_mean_cure_fraction_mean", "cohort_mean_cure_fraction_q025",
+    "cohort_mean_cure_fraction_q50", "cohort_mean_cure_fraction_q975"
+  ) %in% names(cohort_sub))) {
+    cohort_mean_cure_fraction_mean <- safe_numeric(cohort_sub$cohort_mean_cure_fraction_mean[[1L]])
+    cohort_mean_cure_fraction_q025 <- safe_numeric(cohort_sub$cohort_mean_cure_fraction_q025[[1L]])
+    cohort_mean_cure_fraction_q50  <- safe_numeric(cohort_sub$cohort_mean_cure_fraction_q50[[1L]])
+    cohort_mean_cure_fraction_q975 <- safe_numeric(cohort_sub$cohort_mean_cure_fraction_q975[[1L]])
+  }
+  
+  tibble(
+    dataset = as.character(model_row$dataset[[1L]]),
+    dataset_key = as.character(model_row$dataset_key[[1L]] %||% model_row$dataset[[1L]]),
+    model_id = model_id_now,
+    legacy_model_id = as.character(model_row$legacy_model_id[[1L]]),
+    branch = as.character(safe_meta_value(meta, "branch", "Stage8A")),
+    risk_scale = as.character(safe_meta_value(meta, "risk_scale", "transition_only_main")),
+    prior_branch = normalize_prior_branch_value(safe_meta_value(meta, "prior_branch", as.character(model_row$prior_branch[[1L]]))),
+    site_prior_family = as.character(safe_meta_value(meta, "site_prior_family", as.character(model_row$site_prior_family[[1L]]))),
+    site_placement_label = as.character(safe_meta_value(meta, "site_placement_label", as.character(model_row$site_placement_label[[1L]]))),
+    structural_model_id = as.character(model_row$structural_model_id[[1L]]),
+    latency_family = as.character(safe_meta_value(meta, "latency_family", as.character(model_row$latency_family[[1L]]))),
+    family_code = as.character(model_row$family_code[[1L]]),
+    formula_anchor = as.character(safe_meta_value(meta, "formula_anchor", as.character(model_row$formula_anchor[[1L]]))),
+    incidence_site_indicator = isTRUE(model_row$incidence_site_indicator[[1L]]),
+    latency_site_indicator = isTRUE(model_row$latency_site_indicator[[1L]]),
+    latency_interaction_indicator = isTRUE(model_row$latency_interaction_indicator[[1L]]),
+    is_supplementary_branch = isTRUE(model_row$is_supplementary_branch[[1L]]),
+    fit_status = fit_status,
+    fit_error_message = as.character(safe_meta_value(meta, "fit_error_message", NA_character_)),
+    admissible_flag = admissible_flag,
+    admissibility_reasons = as.character(safe_meta_value(meta, "admissibility_reasons", if (admissible_flag) "" else "recovered_from_rds_bundle")),
+    prior_degenerate_flag = ifelse(length(prior_degenerate_flag) == 0L, NA, as.logical(prior_degenerate_flag)),
+    posterior_degenerate_flag = as.logical(safe_meta_value(meta, "posterior_degenerate_flag", NA)),
+    ppc_gross_contradiction_flag = ifelse(length(ppc_gross_contradiction_flag) == 0L, NA, as.logical(ppc_gross_contradiction_flag)),
+    divergences = safe_integer(safe_meta_value(meta, "divergences", NA_integer_)),
+    max_rhat = max_rhat,
+    min_bulk_ess = min_bulk_ess,
+    min_tail_ess = min_tail_ess,
+    treedepth_exceeded = safe_integer(safe_meta_value(meta, "treedepth_exceeded", NA_integer_)),
+    waic = safe_numeric(safe_meta_value(meta, "waic", NA_real_)),
+    looic = safe_numeric(safe_meta_value(meta, "looic", NA_real_)),
+    p_waic = safe_numeric(safe_meta_value(meta, "p_waic", NA_real_)),
+    p_waic_high_n = safe_integer(safe_meta_value(meta, "p_waic_high_n", NA_integer_)),
+    p_waic_high_pct = safe_numeric(safe_meta_value(meta, "p_waic_high_pct", NA_real_)),
+    p_loo = safe_numeric(safe_meta_value(meta, "p_loo", NA_real_)),
+    pareto_k_max = safe_numeric(safe_meta_value(meta, "pareto_k_max", NA_real_)),
+    pareto_k_bad_n = safe_integer(safe_meta_value(meta, "pareto_k_bad_n", NA_integer_)),
+    pareto_k_bad_pct = safe_numeric(safe_meta_value(meta, "pareto_k_bad_pct", NA_real_)),
+    pareto_k_very_bad_n = safe_integer(safe_meta_value(meta, "pareto_k_very_bad_n", NA_integer_)),
+    waic_warning_flag = as.logical(safe_meta_value(meta, "waic_warning_flag", NA)),
+    loo_warning_flag = as.logical(safe_meta_value(meta, "loo_warning_flag", NA)),
+    info_criteria_warning_detail = as.character(safe_meta_value(meta, "info_criteria_warning_detail", NA_character_)),
+    n = nrow(dataset_df),
+    n_event = sum(dataset_df$event_main),
+    n_censor_main = sum(dataset_df$censor_main),
+    n_remission = sum(dataset_df$remission_flag),
+    cohort_mean_cure_fraction_mean = cohort_mean_cure_fraction_mean,
+    cohort_mean_cure_fraction_q025 = cohort_mean_cure_fraction_q025,
+    cohort_mean_cure_fraction_q50 = cohort_mean_cure_fraction_q50,
+    cohort_mean_cure_fraction_q975 = cohort_mean_cure_fraction_q975,
+    rds_path = reuse_bundle$rds_path
+  )
+}
+
+recover_existing_stage8_exports_from_rds <- function(existing_exports, model_grid, analysis_datasets, export_dir) {
+  out <- existing_exports
+  
+  export_names <- c(
+    "model_registry", "coefficient_summary", "posterior_subject_profile", "posterior_subject_yearly",
+    "posterior_cohort_yearly", "posterior_classification", "posterior_delta_vs_nocure",
+    "diagnostics_parameter_level", "ppc_summary", "prior_predictive_summary", "prior_branch_delta",
+    "incidence_anchor_update", "hazard_plausibility", "uncured_decomposition",
+    "stage8A_vs_stage8B_delta"
+  )
+  
+  for (nm in export_names) {
+    if (is.null(out[[nm]]) || !inherits(out[[nm]], "data.frame")) {
+      out[[nm]] <- tibble()
+    } else {
+      out[[nm]] <- tibble::as_tibble(out[[nm]])
+    }
+  }
+  
+  for (ii in seq_len(nrow(model_grid))) {
+    model_row <- model_grid[ii, , drop = FALSE]
+    model_id_now <- model_row$model_id[[1L]]
+    dataset_df <- analysis_datasets[[model_row$dataset[[1L]]]]
+    
+    current_reg <- subset_model_registry_row(out$model_registry, model_id_now)
+    reuse_bundle <- get_reuse_bundle(model_id_now, export_dir, current_reg)
+    
+    if (is.na(reuse_bundle$rds_path) || !nzchar(reuse_bundle$rds_path)) {
+      next
+    }
+    
+    if (is.null(current_reg) || nrow(current_reg) == 0L) {
+      reg_row <- build_registry_row_from_reuse_bundle(model_row, dataset_df, reuse_bundle)
+      if (!is.null(reg_row) && nrow(reg_row) > 0L) {
+        out$model_registry <- bind_rows_safe(list(out$model_registry, reg_row))
+      }
+    }
+    
+    out$coefficient_summary <- append_missing_model_rows(out$coefficient_summary, reuse_bundle$coefficient_summary, model_id_now)
+    out$diagnostics_parameter_level <- append_missing_model_rows(out$diagnostics_parameter_level, reuse_bundle$diagnostics_parameter_level, model_id_now)
+    out$ppc_summary <- append_missing_model_rows(out$ppc_summary, reuse_bundle$ppc_summary, model_id_now)
+    out$posterior_subject_profile <- append_missing_model_rows(out$posterior_subject_profile, reuse_bundle$posterior_subject_profile, model_id_now)
+    out$posterior_subject_yearly <- append_missing_model_rows(out$posterior_subject_yearly, reuse_bundle$posterior_subject_yearly, model_id_now)
+    out$posterior_cohort_yearly <- append_missing_model_rows(out$posterior_cohort_yearly, reuse_bundle$posterior_cohort_yearly, model_id_now)
+    out$posterior_classification <- append_missing_model_rows(out$posterior_classification, reuse_bundle$posterior_classification, model_id_now)
+    out$prior_predictive_summary <- append_missing_model_rows(out$prior_predictive_summary, reuse_bundle$prior_predictive_summary, model_id_now)
+  }
+  
+  if (!is.null(out$model_registry) && nrow(out$model_registry) > 0L && ("prior_branch" %in% names(out$model_registry))) {
+    out$model_registry <- out$model_registry %>%
+      mutate(prior_branch = normalize_prior_branch_value(prior_branch))
+  }
+  
+  out
+}
+
 normalize_prior_branch_value <- function(x) {
-  x <- as.character(x %||% NA_character_)
-  if (is.na(x) || !nzchar(x)) {
-    return(NA_character_)
-  }
-  if (identical(x, "neutral_weakly_informative")) {
-    return("neutral_no_external_info")
-  }
-  x
+  x_chr <- trimws(as.character(x))
+  x_chr[is.na(x)] <- NA_character_
+  x_chr[!nzchar(x_chr)] <- NA_character_
+  x_chr[x_chr == "neutral_weakly_informative"] <- "neutral_no_external_info"
+  x_chr
 }
 
 registry_field_value <- function(reg, field, default = NA) {
@@ -1411,10 +1646,22 @@ load_existing_stage8_exports <- function(export_dir) {
 
 is_model_reusable <- function(model_row, dataset_df, existing_exports, export_dir, require_existing_rds = FALSE) {
   reg <- subset_model_registry_row(existing_exports$model_registry, model_row$model_id[[1L]])
+  
+  rds_candidates <- get_model_rds_candidates(model_row$model_id[[1L]], export_dir, reg)
+  has_rds <- any(file.exists(rds_candidates))
+  if (isTRUE(require_existing_rds) && !has_rds) {
+    return(FALSE)
+  }
+  
+  reuse_bundle <- if (has_rds) get_reuse_bundle(model_row$model_id[[1L]], export_dir, reg) else empty_reuse_bundle()
+  
+  if (is.null(reg) || nrow(reg) != 1L) {
+    reg <- build_registry_row_from_reuse_bundle(model_row, dataset_df, reuse_bundle)
+  }
   if (is.null(reg) || nrow(reg) != 1L) {
     return(FALSE)
   }
-
+  
   reg_dataset <- as.character(registry_field_value(reg, "dataset", registry_field_value(reg, "dataset_key", NA_character_)))
   reg_family <- as.character(registry_field_value(reg, "family_code", NA_character_))
   reg_formula <- as.character(registry_field_value(reg, "formula_anchor", NA_character_))
@@ -1422,7 +1669,7 @@ is_model_reusable <- function(model_row, dataset_df, existing_exports, export_di
   reg_risk_scale <- as.character(registry_field_value(reg, "risk_scale", "transition_only_main"))
   reg_prior_branch <- normalize_prior_branch_value(registry_field_value(reg, "prior_branch", "anchor_informed"))
   reg_site_prior <- as.character(registry_field_value(reg, "site_prior_family", ifelse(model_row$has_site_term[[1L]], "normal_0_1_main", "not_applicable")))
-
+  
   if (!identical(reg_dataset, as.character(model_row$dataset[[1L]]))) return(FALSE)
   if (!identical(reg_family, as.character(model_row$family_code[[1L]]))) return(FALSE)
   if (!identical(reg_formula, as.character(model_row$formula_anchor[[1L]]))) return(FALSE)
@@ -1431,22 +1678,15 @@ is_model_reusable <- function(model_row, dataset_df, existing_exports, export_di
   if (!identical(reg_prior_branch, as.character(model_row$prior_branch[[1L]]))) return(FALSE)
   if (!identical(reg_site_prior, as.character(model_row$site_prior_family[[1L]]))) return(FALSE)
   if (!identical(as.character(registry_field_value(reg, "fit_status", NA_character_)), "ok")) return(FALSE)
-
+  
   n_event_now <- sum(dataset_df$event_main)
   n_censor_now <- sum(dataset_df$censor_main)
   n_remission_now <- sum(dataset_df$remission_flag)
-  if (!isTRUE(nrow(dataset_df) == as.integer(safe_numeric(registry_field_value(reg, "n", NA_integer_))))) return(FALSE)
-  if (!isTRUE(n_event_now == as.integer(safe_numeric(registry_field_value(reg, "n_event", NA_integer_))))) return(FALSE)
-  if (!isTRUE(n_censor_now == as.integer(safe_numeric(registry_field_value(reg, "n_censor_main", NA_integer_))))) return(FALSE)
-  if (!isTRUE(n_remission_now == as.integer(safe_numeric(registry_field_value(reg, "n_remission", NA_integer_))))) return(FALSE)
-
-  rds_candidates <- get_model_rds_candidates(model_row$model_id[[1L]], export_dir, reg)
-  has_rds <- any(file.exists(rds_candidates))
-  if (isTRUE(require_existing_rds) && !has_rds) {
-    return(FALSE)
-  }
-
-  reuse_bundle <- if (has_rds) get_reuse_bundle(model_row$model_id[[1L]], export_dir, reg) else empty_reuse_bundle()
+  if (!isTRUE(nrow(dataset_df) == as.integer(safe_numeric(registry_field_value(reg, "n", nrow(dataset_df)))))) return(FALSE)
+  if (!isTRUE(n_event_now == as.integer(safe_numeric(registry_field_value(reg, "n_event", n_event_now))))) return(FALSE)
+  if (!isTRUE(n_censor_now == as.integer(safe_numeric(registry_field_value(reg, "n_censor_main", n_censor_now))))) return(FALSE)
+  if (!isTRUE(n_remission_now == as.integer(safe_numeric(registry_field_value(reg, "n_remission", n_remission_now))))) return(FALSE)
+  
   required_nonadmissible <- c("coefficient_summary", "diagnostics_parameter_level", "ppc_summary")
   for (nm in required_nonadmissible) {
     has_existing <- nrow(subset_model_table(existing_exports[[nm]], model_row$model_id[[1L]])) > 0L
@@ -1455,7 +1695,7 @@ is_model_reusable <- function(model_row, dataset_df, existing_exports, export_di
       return(FALSE)
     }
   }
-
+  
   reg_admissible <- isTRUE(as.logical(registry_field_value(reg, "admissible_flag", FALSE)))
   if (reg_admissible) {
     required_admissible <- c("posterior_subject_profile", "posterior_subject_yearly", "posterior_cohort_yearly", "posterior_classification")
@@ -1467,6 +1707,7 @@ is_model_reusable <- function(model_row, dataset_df, existing_exports, export_di
       }
     }
   }
+  
   TRUE
 }
 
@@ -1483,7 +1724,7 @@ build_model_grid <- function(include_supplementary = TRUE) {
     "merged", "MERGED-L0S1", "L0S1", "site_added", FALSE, TRUE, FALSE, FALSE,
     "merged", "MERGED-L1S1", "L1S1", "site_interaction", FALSE, TRUE, TRUE, FALSE
   )
-
+  
   if (isTRUE(include_supplementary)) {
     base_rows <- bind_rows(
       base_rows,
@@ -1496,7 +1737,7 @@ build_model_grid <- function(include_supplementary = TRUE) {
       )
     )
   }
-
+  
   family_rows <- tibble::tribble(
     ~family_code, ~latency_family, ~family_id,
     "E", "exponential", 1L,
@@ -1504,13 +1745,13 @@ build_model_grid <- function(include_supplementary = TRUE) {
     "LN", "lognormal", 3L,
     "LL", "loglogistic", 4L
   )
-
+  
   prior_branch_rows <- tibble::tribble(
     ~prior_branch,
     "anchor_informed",
     "neutral_no_external_info"
   )
-
+  
   out <- tidyr::crossing(base_rows, family_rows, prior_branch_rows) %>%
     rowwise() %>%
     mutate(
@@ -1539,7 +1780,7 @@ build_model_grid <- function(include_supplementary = TRUE) {
       )
     ) %>%
     arrange(factor(dataset, levels = c("PNU", "SNU", "merged")), structural_model_id, family_code, prior_branch, site_prior_family)
-
+  
   out
 }
 
@@ -1583,7 +1824,7 @@ make_design_bundle <- function(df, model_row, prior_spec, snu_label) {
   x20_i <- as.integer(df$age_exact_entry >= 20 & df$age_exact_entry < 30)
   x30_i <- as.integer(df$age_exact_entry >= 30)
   s_i <- as.integer(df$site == snu_label)
-
+  
   X_inc <- cbind(
     sex_num = z_i,
     age20_29 = x20_i,
@@ -1594,14 +1835,14 @@ make_design_bundle <- function(df, model_row, prior_spec, snu_label) {
   mu_beta_inc <- prior_spec$mu_beta_inc_base
   sd_beta_inc <- prior_spec$sd_beta_inc_base
   incidence_site_position <- 0L
-
+  
   if (isTRUE(model_row$incidence_site_indicator[[1L]])) {
     X_inc <- cbind(X_inc, site_SNU = s_i)
     mu_beta_inc <- c(mu_beta_inc, 0)
     sd_beta_inc <- c(sd_beta_inc, prior_spec$sd_beta_inc_site)
     incidence_site_position <- ncol(X_inc)
   }
-
+  
   a_i <- as.numeric(df$age_s)
   az_i <- a_i * z_i
   latency_site_position <- 0L
@@ -1623,7 +1864,7 @@ make_design_bundle <- function(df, model_row, prior_spec, snu_label) {
     },
     stop(sprintf("Unknown latency branch `%s`.", model_row$latency_branch[[1L]]), call. = FALSE)
   )
-
+  
   shape_prior_sd <- switch(
     model_row$family_code[[1L]],
     E = 1.0,
@@ -1632,7 +1873,7 @@ make_design_bundle <- function(df, model_row, prior_spec, snu_label) {
     LL = prior_spec$loglogistic_shape_sd,
     1.0
   )
-
+  
   list(
     X_inc = unclass(as.matrix(X_inc)),
     X_lat = unclass(as.matrix(X_lat)),
@@ -1655,6 +1896,7 @@ make_design_bundle <- function(df, model_row, prior_spec, snu_label) {
     z_i = z_i
   )
 }
+
 # 🔴 Define: survival math, IPCW metrics, and Bayesian diagnostics ===============================
 ## 🟠 Define: posterior summaries, prior predictive simulation, and threshold metrics ===============================
 km_eval <- function(survfit_obj, times) {
@@ -1669,14 +1911,14 @@ km_eval <- function(survfit_obj, times) {
 build_ipcw_reference <- function(df, horizons) {
   event_fit <- survival::survfit(survival::Surv(time_year, event_main) ~ 1, data = df)
   censor_fit <- survival::survfit(survival::Surv(time_year, censor_main) ~ 1, data = df)
-
+  
   horizon_rows <- lapply(horizons, function(h) {
     G_t <- pmax(km_eval(censor_fit, h), 1e-8)
     G_tminus <- pmax(km_eval(censor_fit, pmax(df$time_year - 1e-10, 0)), 1e-8)
     w_case <- ifelse(df$event_main == 1L & df$time_year <= h, 1 / G_tminus, 0)
     w_control <- ifelse(df$time_year > h, 1 / G_t, 0)
     prevalence <- 1 - km_eval(event_fit, h)
-
+    
     tibble(
       horizon_year = h,
       observed_km_risk = prevalence,
@@ -1688,7 +1930,7 @@ build_ipcw_reference <- function(df, horizons) {
       w_control = list(w_control)
     )
   })
-
+  
   bind_rows(horizon_rows)
 }
 
@@ -1716,11 +1958,11 @@ compute_linear_terms <- function(draws, X_inc, X_lat, alpha_gp) {
   eta_inc <- draws$beta_inc %*% t(X_inc)
   eta_inc <- sweep(eta_inc, 1, alpha_gp + draws$delta0, FUN = "+")
   pi_mat <- plogis(eta_inc)
-
+  
   mu_lat <- draws$gamma_lat %*% t(X_lat)
   mu_lat <- sweep(mu_lat, 1, draws$gamma0, FUN = "+")
   median_mat <- exp(mu_lat)
-
+  
   list(
     pi_mat = pi_mat,
     cure_prob_mat = 1 - pi_mat,
@@ -1755,7 +1997,7 @@ family_survival_hazard <- function(horizon_year, family_code, mu_lat_mat, median
   } else {
     stop(sprintf("Unknown family code `%s`.", family_code), call. = FALSE)
   }
-
+  
   Su <- pmin(pmax(Su, 1e-12), 1 - 1e-12)
   haz <- pmax(haz, 1e-12)
   list(Su = Su, haz = haz)
@@ -1768,15 +2010,15 @@ extract_draws_compact <- function(fit, K_inc, K_lat) {
     permuted = TRUE,
     inc_warmup = FALSE
   )
-
+  
   beta_inc <- ext$beta_inc
   gamma_lat <- ext$gamma_lat
   log_lik <- ext$log_lik
-
+  
   if (is.null(dim(beta_inc))) beta_inc <- matrix(beta_inc, ncol = K_inc)
   if (is.null(dim(gamma_lat))) gamma_lat <- matrix(gamma_lat, ncol = K_lat)
   if (is.null(dim(log_lik))) log_lik <- matrix(log_lik, nrow = length(ext$delta0))
-
+  
   list(
     delta0 = as.numeric(ext$delta0),
     beta_inc = beta_inc,
@@ -1793,7 +2035,7 @@ compute_degeneracy <- function(pi_mat, median_mat, supported_risk_list) {
   near_zero_pi <- rowMeans(pi_mat < tiny_susceptible_prob) > degenerate_subject_fraction_threshold
   near_one_pi <- rowMeans(pi_mat > huge_susceptible_prob) > degenerate_subject_fraction_threshold
   near_zero_median <- rowMeans(median_mat < tiny_median_years) > degenerate_subject_fraction_threshold
-
+  
   if (length(supported_risk_list) > 0L) {
     risk_mean_supported <- Reduce("+", supported_risk_list) / length(supported_risk_list)
     huge_median_and_flat <- (rowMeans(median_mat > huge_median_years) > degenerate_subject_fraction_threshold) &
@@ -1801,9 +2043,9 @@ compute_degeneracy <- function(pi_mat, median_mat, supported_risk_list) {
   } else {
     huge_median_and_flat <- rep(FALSE, nrow(pi_mat))
   }
-
+  
   any_problem <- near_zero_pi | near_one_pi | near_zero_median | huge_median_and_flat
-
+  
   tibble(
     near_zero_pi_rate = mean(near_zero_pi),
     near_one_pi_rate = mean(near_one_pi),
@@ -1816,7 +2058,7 @@ compute_degeneracy <- function(pi_mat, median_mat, supported_risk_list) {
 simulate_prior_predictive <- function(df, design_bundle, model_row, prior_spec, n_draws, horizons_eval) {
   K_inc <- ncol(design_bundle$X_inc)
   K_lat <- ncol(design_bundle$X_lat)
-
+  
   sim_draws <- list(
     delta0 = rnorm(n_draws, 0, prior_spec$sd_delta),
     beta_inc = matrix(
@@ -1838,7 +2080,7 @@ simulate_prior_predictive <- function(df, design_bundle, model_row, prior_spec, 
     log_sigma_LN = rnorm(n_draws, 0, prior_spec$lognormal_shape_sd),
     psi_LL = rnorm(n_draws, 0, prior_spec$loglogistic_shape_sd)
   )
-
+  
   lin <- compute_linear_terms(sim_draws, design_bundle$X_inc, design_bundle$X_lat, design_bundle$alpha_gp)
   supported_horizons <- if (model_row$dataset[[1L]] == "PNU") c(1, 2) else c(1, 2, 5)
   supported_risk_list <- lapply(supported_horizons, function(h) {
@@ -1846,19 +2088,19 @@ simulate_prior_predictive <- function(df, design_bundle, model_row, prior_spec, 
     1 - ((1 - lin$pi_mat) + lin$pi_mat * fh$Su)
   })
   degeneracy <- compute_degeneracy(lin$pi_mat, lin$median_mat, supported_risk_list)
-
+  
   prior_rows <- list(
     tibble(dataset = model_row$dataset[[1L]], model_id = model_row$model_id[[1L]], branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], metric = "cohort_mean_susceptible_probability", horizon_year = NA_integer_, summary_scalar(rowMeans(lin$pi_mat)), prior_degenerate_flag = degeneracy$degenerate_flag),
     tibble(dataset = model_row$dataset[[1L]], model_id = model_row$model_id[[1L]], branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], metric = "cohort_mean_cure_probability", horizon_year = NA_integer_, summary_scalar(rowMeans(1 - lin$pi_mat)), prior_degenerate_flag = degeneracy$degenerate_flag),
     tibble(dataset = model_row$dataset[[1L]], model_id = model_row$model_id[[1L]], branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], metric = "cohort_median_susceptible_time", horizon_year = NA_integer_, summary_scalar(apply(lin$median_mat, 1, stats::median)), prior_degenerate_flag = degeneracy$degenerate_flag)
   )
-
+  
   risk_rows <- lapply(horizons_eval, function(h) {
     fh <- family_survival_hazard(h, model_row$family_code[[1L]], lin$mu_lat_mat, lin$median_mat, sim_draws)
     risk_mat <- 1 - ((1 - lin$pi_mat) + lin$pi_mat * fh$Su)
     tibble(dataset = model_row$dataset[[1L]], model_id = model_row$model_id[[1L]], branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], metric = "cohort_mean_risk", horizon_year = h, summary_scalar(rowMeans(risk_mat)), prior_degenerate_flag = degeneracy$degenerate_flag)
   })
-
+  
   list(summary = bind_rows(prior_rows, risk_rows), degeneracy = degeneracy)
 }
 
@@ -1870,7 +2112,7 @@ weighted_auc_horizon <- function(score, horizon_row) {
   if (length(case_idx) == 0L || length(control_idx) == 0L) {
     return(NA_real_)
   }
-
+  
   controls <- tibble(score = score[control_idx], w = w_control[control_idx]) %>%
     group_by(score) %>%
     summarise(w = sum(w), .groups = "drop") %>%
@@ -1902,25 +2144,25 @@ compute_classification_summary <- function(risk_draws, horizon_row, thresholds) 
   denom_case <- as.numeric(horizon_row$denom_case)
   denom_control <- as.numeric(horizon_row$denom_control)
   n_subject <- ncol(risk_draws)
-
+  
   out_abs <- vector("list", length(thresholds))
-
+  
   for (j in seq_along(thresholds)) {
     thr <- thresholds[[j]]
     H_mat <- (risk_draws >= thr) * 1
-
+    
     if (denom_case > 0) {
       tpr_draw <- as.vector(H_mat %*% w_case) / denom_case
     } else {
       tpr_draw <- rep(NA_real_, nrow(risk_draws))
     }
-
+    
     if (denom_control > 0) {
       fpr_draw <- as.vector(H_mat %*% w_control) / denom_control
     } else {
       fpr_draw <- rep(NA_real_, nrow(risk_draws))
     }
-
+    
     pos_rate_draw <- prevalence * tpr_draw + (1 - prevalence) * fpr_draw
     pos_count_draw <- pos_rate_draw * n_subject
     ppv_draw <- ifelse(pos_rate_draw > 0, prevalence * tpr_draw / pos_rate_draw, NA_real_)
@@ -1929,7 +2171,7 @@ compute_classification_summary <- function(risk_draws, horizon_row, thresholds) 
     fp_count_draw <- fp_burden_draw * n_subject
     fp100_draw <- 100 * fp_burden_draw
     nb_draw <- prevalence * tpr_draw - (1 - prevalence) * fpr_draw * (thr / (1 - thr))
-
+    
     out_abs[[j]] <- tibble(
       threshold = thr,
       positive_classification_rate_mean = mean(pos_rate_draw, na.rm = TRUE),
@@ -1996,13 +2238,13 @@ compute_information_criteria <- function(log_lik) {
   if (is.null(log_lik) || !requireNamespace("loo", quietly = TRUE)) {
     return(out)
   }
-
+  
   warning_texts <- character()
   collect_warning <- function(w) {
     warning_texts <<- c(warning_texts, conditionMessage(w))
     tryInvokeRestart("muffleWarning")
   }
-
+  
   waic_obj <- withCallingHandlers(tryCatch(loo::waic(log_lik), error = function(e) e), warning = collect_warning)
   if (!inherits(waic_obj, "error")) {
     if ("waic" %in% rownames(waic_obj$estimates)) out$waic <- as.numeric(waic_obj$estimates["waic", "Estimate"])
@@ -2015,7 +2257,7 @@ compute_information_criteria <- function(log_lik) {
   } else {
     warning_texts <- c(warning_texts, paste0("waic_error: ", conditionMessage(waic_obj)))
   }
-
+  
   loo_obj <- withCallingHandlers(tryCatch(loo::loo(log_lik), error = function(e) e), warning = collect_warning)
   if (!inherits(loo_obj, "error")) {
     if ("looic" %in% rownames(loo_obj$estimates)) out$looic <- as.numeric(loo_obj$estimates["looic", "Estimate"])
@@ -2030,7 +2272,7 @@ compute_information_criteria <- function(log_lik) {
   } else {
     warning_texts <- c(warning_texts, paste0("loo_error: ", conditionMessage(loo_obj)))
   }
-
+  
   out$waic_warning_flag <- any(grepl("p_waic", warning_texts, fixed = TRUE))
   out$loo_warning_flag <- any(grepl("Pareto k", warning_texts, fixed = TRUE))
   if (length(warning_texts) > 0L) out$info_criteria_warning_detail <- paste(unique(warning_texts), collapse = " | ")
@@ -2228,7 +2470,7 @@ generated quantities {
   }
 }
 )"
-  rstan::stan_model(model_code = stan_code, model_name = "stage8A_bayesian_cure_block")
+rstan::stan_model(model_code = stan_code, model_name = "stage8A_bayesian_cure_block")
 }
 
 select_trace_parameters <- function(family_code, K_inc, K_lat) {
@@ -2265,6 +2507,7 @@ plot_trace_record <- function(trace_record) {
     for (j in seq_len(4L - length(selected_pars))) plot.new()
   }
 }
+
 # 🔴 Define: post-fit derivations, deltas, and figure-source builders ===============================
 ## 🟠 Define: no-cure deltas, anchor updates, hazard plausibility, and plots ===============================
 empty_delta_template <- function() {
@@ -2302,7 +2545,7 @@ empty_delta_template <- function() {
 
 rebuild_delta_vs_nocure <- function(posterior_cohort_yearly, posterior_classification, nocure_cohort_long = NULL, nocure_class_long = NULL) {
   out_rows <- list()
-
+  
   if (!is.null(nocure_cohort_long) && nrow(nocure_cohort_long) > 0L && nrow(posterior_cohort_yearly) > 0L) {
     cohort_join <- posterior_cohort_yearly %>%
       select(dataset, branch, risk_scale, prior_branch, site_prior_family, model_id, latency_family, formula_anchor, horizon_year, meanRisk_Bayes_mean, meanRisk_Bayes_q025, meanRisk_Bayes_q50, meanRisk_Bayes_q975) %>%
@@ -2337,7 +2580,7 @@ rebuild_delta_vs_nocure <- function(posterior_cohort_yearly, posterior_classific
       distinct()
     out_rows[[length(out_rows) + 1L]] <- cohort_join
   }
-
+  
   if (!is.null(nocure_class_long) && nrow(nocure_class_long) > 0L && nrow(posterior_classification) > 0L) {
     metric_map <- tibble(
       metric = c("false_positive_burden", "FP100", "NB", "PPV", "TPR", "FPR"),
@@ -2346,7 +2589,7 @@ rebuild_delta_vs_nocure <- function(posterior_cohort_yearly, posterior_classific
       q50_col = c("false_positive_burden_q50", "FP100_q50", "NB_q50", "PPV_q50", "TPR_q50", "FPR_q50"),
       q975_col = c("false_positive_burden_q975", "FP100_q975", "NB_q975", "PPV_q975", "TPR_q975", "FPR_q975")
     )
-
+    
     class_long <- bind_rows(lapply(seq_len(nrow(metric_map)), function(i) {
       one <- metric_map[i, , drop = FALSE]
       posterior_classification %>%
@@ -2368,7 +2611,7 @@ rebuild_delta_vs_nocure <- function(posterior_cohort_yearly, posterior_classific
           bayes_q975 = .data[[one$q975_col[[1L]]]]
         )
     }))
-
+    
     class_join <- class_long %>%
       bind_rows(class_long %>% mutate(formula_anchor = "ALL")) %>%
       inner_join(nocure_class_long %>% select(dataset, no_cure_model_id, formula_anchor, horizon_year, threshold, metric, value), by = c("dataset", "formula_anchor", "horizon_year", "threshold", "metric")) %>%
@@ -2392,10 +2635,10 @@ rebuild_delta_vs_nocure <- function(posterior_cohort_yearly, posterior_classific
         delta_q975 = value - bayes_q025
       ) %>%
       distinct()
-
+    
     out_rows[[length(out_rows) + 1L]] <- class_join
   }
-
+  
   out <- bind_rows_safe(out_rows)
   if (nrow(out) == 0L) {
     return(empty_delta_template())
@@ -2430,97 +2673,168 @@ build_cohort_point_metrics <- function(posterior_subject_yearly, ipcw_registry) 
 }
 
 build_prior_branch_delta <- function(model_registry, posterior_cohort_yearly, posterior_classification) {
+  if (nrow_or_zero(model_registry) == 0L) {
+    return(empty_prior_branch_delta())
+  }
+  
   model_meta <- model_registry %>%
-    select(model_id, dataset, branch, risk_scale, structural_model_id, family_code, formula_anchor, site_prior_family, prior_branch)
-
-  cohort_base <- posterior_cohort_yearly %>%
-    left_join(model_meta, by = c("model_id", "dataset", "branch", "risk_scale", "formula_anchor", "site_prior_family"))
-
-  cohort_long <- bind_rows(
-    cohort_base %>%
-      transmute(
-        dataset = dataset,
-        branch = branch,
-        risk_scale = risk_scale,
-        structural_model_id = structural_model_id,
-        family_code = family_code,
-        formula_anchor = formula_anchor,
-        site_prior_family = site_prior_family,
-        model_id = model_id,
-        prior_branch = prior_branch,
-        horizon_year = horizon_year,
-        threshold = NA_real_,
-        metric = "risk",
-        mean = meanRisk_Bayes_mean,
-        q025 = meanRisk_Bayes_q025,
-        q50 = meanRisk_Bayes_q50,
-        q975 = meanRisk_Bayes_q975
-      ),
-    cohort_base %>%
-      transmute(
-        dataset = dataset,
-        branch = branch,
-        risk_scale = risk_scale,
-        structural_model_id = structural_model_id,
-        family_code = family_code,
-        formula_anchor = formula_anchor,
-        site_prior_family = site_prior_family,
-        model_id = model_id,
-        prior_branch = prior_branch,
-        horizon_year = horizon_year,
-        threshold = NA_real_,
-        metric = "cure_fraction",
-        mean = cohort_mean_cure_fraction_mean,
-        q025 = cohort_mean_cure_fraction_q025,
-        q50 = cohort_mean_cure_fraction_q50,
-        q975 = cohort_mean_cure_fraction_q975
-      )
-  )
-
-  metric_map <- tibble(
-    metric = c("false_positive_burden", "FP100", "NB", "PPV", "TPR"),
-    mean_col = c("false_positive_burden_mean", "FP100_mean", "NB_mean", "PPV_mean", "TPR_mean"),
-    q025_col = c("false_positive_burden_q025", "FP100_q025", "NB_q025", "PPV_q025", "TPR_q025"),
-    q50_col = c("false_positive_burden_q50", "FP100_q50", "NB_q50", "PPV_q50", "TPR_q50"),
-    q975_col = c("false_positive_burden_q975", "FP100_q975", "NB_q975", "PPV_q975", "TPR_q975")
-  )
-  class_long <- bind_rows(lapply(seq_len(nrow(metric_map)), function(i) {
-    one <- metric_map[i, , drop = FALSE]
-    posterior_classification %>%
-      transmute(
-        dataset = dataset,
-        branch = branch,
-        risk_scale = risk_scale,
-        structural_model_id = structural_model_id,
-        family_code = family_code,
-        formula_anchor = formula_anchor,
-        site_prior_family = site_prior_family,
-        model_id = model_id,
-        prior_branch = prior_branch,
-        horizon_year = horizon_year,
-        threshold = threshold,
-        metric = one$metric[[1L]],
-        mean = .data[[one$mean_col[[1L]]]],
-        q025 = .data[[one$q025_col[[1L]]]],
-        q50 = .data[[one$q50_col[[1L]]]],
-        q975 = .data[[one$q975_col[[1L]]]]
-      )
-  }))
-
-  source_long <- bind_rows(cohort_long, class_long)
-  anchor_df <- source_long %>% filter(prior_branch == "anchor_informed") %>% rename_with(~paste0(.x, "_anchor"), all_of(c("model_id", "mean", "q025", "q50", "q975")))
-  neutral_df <- source_long %>% filter(prior_branch == "neutral_no_external_info") %>% rename_with(~paste0(.x, "_neutral"), all_of(c("model_id", "mean", "q025", "q50", "q975")))
-
+    transmute(
+      model_id = model_id,
+      dataset = dataset,
+      branch = branch,
+      risk_scale = risk_scale,
+      structural_model_id = structural_model_id,
+      family_code = family_code,
+      formula_anchor = formula_anchor,
+      site_prior_family = site_prior_family,
+      prior_branch = normalize_prior_branch_value(prior_branch)
+    ) %>%
+    distinct(model_id, .keep_all = TRUE)
+  
+  cohort_base <- posterior_cohort_yearly
+  if (nrow_or_zero(cohort_base) > 0L) {
+    cohort_base <- cohort_base %>%
+      left_join_replacing_columns(model_meta, by = "model_id") %>%
+      mutate(prior_branch = normalize_prior_branch_value(prior_branch))
+  } else {
+    cohort_base <- tibble()
+  }
+  
+  class_base <- posterior_classification
+  if (nrow_or_zero(class_base) > 0L) {
+    class_base <- class_base %>%
+      left_join_replacing_columns(model_meta, by = "model_id") %>%
+      mutate(prior_branch = normalize_prior_branch_value(prior_branch))
+  } else {
+    class_base <- tibble()
+  }
+  
+  cohort_long <- tibble()
+  if (nrow_or_zero(cohort_base) > 0L) {
+    cohort_long <- bind_rows(
+      cohort_base %>%
+        transmute(
+          dataset = dataset,
+          branch = branch,
+          risk_scale = risk_scale,
+          structural_model_id = structural_model_id,
+          family_code = family_code,
+          formula_anchor = formula_anchor,
+          site_prior_family = site_prior_family,
+          model_id = model_id,
+          prior_branch = prior_branch,
+          horizon_year = horizon_year,
+          threshold = NA_real_,
+          metric = "risk",
+          mean = meanRisk_Bayes_mean,
+          q025 = meanRisk_Bayes_q025,
+          q50 = meanRisk_Bayes_q50,
+          q975 = meanRisk_Bayes_q975
+        ),
+      cohort_base %>%
+        transmute(
+          dataset = dataset,
+          branch = branch,
+          risk_scale = risk_scale,
+          structural_model_id = structural_model_id,
+          family_code = family_code,
+          formula_anchor = formula_anchor,
+          site_prior_family = site_prior_family,
+          model_id = model_id,
+          prior_branch = prior_branch,
+          horizon_year = horizon_year,
+          threshold = NA_real_,
+          metric = "cure_fraction",
+          mean = cohort_mean_cure_fraction_mean,
+          q025 = cohort_mean_cure_fraction_q025,
+          q50 = cohort_mean_cure_fraction_q50,
+          q975 = cohort_mean_cure_fraction_q975
+        )
+    )
+  }
+  
+  class_long <- tibble()
+  if (nrow_or_zero(class_base) > 0L) {
+    metric_map <- tibble(
+      metric = c("false_positive_burden", "FP100", "NB", "PPV", "TPR"),
+      mean_col = c("false_positive_burden_mean", "FP100_mean", "NB_mean", "PPV_mean", "TPR_mean"),
+      q025_col = c("false_positive_burden_q025", "FP100_q025", "NB_q025", "PPV_q025", "TPR_q025"),
+      q50_col = c("false_positive_burden_q50", "FP100_q50", "NB_q50", "PPV_q50", "TPR_q50"),
+      q975_col = c("false_positive_burden_q975", "FP100_q975", "NB_q975", "PPV_q975", "TPR_q975")
+    )
+    
+    class_long <- bind_rows(lapply(seq_len(nrow(metric_map)), function(i) {
+      one <- metric_map[i, , drop = FALSE]
+      class_base %>%
+        transmute(
+          dataset = dataset,
+          branch = branch,
+          risk_scale = risk_scale,
+          structural_model_id = structural_model_id,
+          family_code = family_code,
+          formula_anchor = formula_anchor,
+          site_prior_family = site_prior_family,
+          model_id = model_id,
+          prior_branch = prior_branch,
+          horizon_year = horizon_year,
+          threshold = threshold,
+          metric = one$metric[[1L]],
+          mean = .data[[one$mean_col[[1L]]]],
+          q025 = .data[[one$q025_col[[1L]]]],
+          q50 = .data[[one$q50_col[[1L]]]],
+          q975 = .data[[one$q975_col[[1L]]]]
+        )
+    }))
+  }
+  
+  source_long <- bind_rows_safe(list(cohort_long, class_long))
+  if (nrow(source_long) == 0L) {
+    return(empty_prior_branch_delta())
+  }
+  
+  anchor_df <- source_long %>%
+    filter(prior_branch == "anchor_informed") %>%
+    rename(
+      model_id_anchor = model_id,
+      anchor_mean = mean,
+      anchor_q025 = q025,
+      anchor_q50 = q50,
+      anchor_q975 = q975
+    ) %>%
+    select(-prior_branch)
+  
+  neutral_df <- source_long %>%
+    filter(prior_branch == "neutral_no_external_info") %>%
+    rename(
+      model_id_neutral = model_id,
+      neutral_mean = mean,
+      neutral_q025 = q025,
+      neutral_q50 = q50,
+      neutral_q975 = q975
+    ) %>%
+    select(-prior_branch)
+  
   out <- anchor_df %>%
     inner_join(
       neutral_df,
-      by = c("dataset", "branch", "risk_scale", "structural_model_id", "family_code", "formula_anchor", "site_prior_family", "horizon_year", "threshold", "metric")
+      by = c(
+        "dataset",
+        "branch",
+        "risk_scale",
+        "structural_model_id",
+        "family_code",
+        "formula_anchor",
+        "site_prior_family",
+        "horizon_year",
+        "threshold",
+        "metric"
+      )
     ) %>%
     mutate(
-      delta_mean_anchor_minus_neutral = mean_anchor - mean_neutral,
-      delta_q025_anchor_minus_neutral = q025_anchor - q975_neutral,
-      delta_q50_anchor_minus_neutral = q50_anchor - q50_neutral,
-      delta_q975_anchor_minus_neutral = q975_anchor - q025_neutral,
+      delta_mean_anchor_minus_neutral = anchor_mean - neutral_mean,
+      delta_q025_anchor_minus_neutral = anchor_q025 - neutral_q975,
+      delta_q50_anchor_minus_neutral = anchor_q50 - neutral_q50,
+      delta_q975_anchor_minus_neutral = anchor_q975 - neutral_q025,
       materiality_threshold = dplyr::case_when(
         metric == "risk" ~ prior_materiality_thresholds$risk,
         metric == "cure_fraction" ~ prior_materiality_thresholds$cure_fraction,
@@ -2531,8 +2845,15 @@ build_prior_branch_delta <- function(model_registry, posterior_cohort_yearly, po
         metric == "TPR" ~ prior_materiality_thresholds$TPR,
         TRUE ~ NA_real_
       ),
-      conclusion_sign_change_flag = metric == "NB" & is.finite(mean_anchor) & is.finite(mean_neutral) & sign(mean_anchor) != sign(mean_neutral),
-      materiality_exceeded_flag = ifelse(is.na(materiality_threshold), FALSE, abs(delta_mean_anchor_minus_neutral) >= materiality_threshold),
+      conclusion_sign_change_flag = metric == "NB" &
+        is.finite(anchor_mean) &
+        is.finite(neutral_mean) &
+        sign(anchor_mean) != sign(neutral_mean),
+      materiality_exceeded_flag = ifelse(
+        is.na(materiality_threshold),
+        FALSE,
+        abs(delta_mean_anchor_minus_neutral) >= materiality_threshold
+      ),
       prior_tail_sensitive = materiality_exceeded_flag | conclusion_sign_change_flag
     ) %>%
     transmute(
@@ -2548,8 +2869,8 @@ build_prior_branch_delta <- function(model_registry, posterior_cohort_yearly, po
       metric = metric,
       model_id_anchor = model_id_anchor,
       model_id_neutral = model_id_neutral,
-      anchor_mean = mean_anchor,
-      neutral_mean = mean_neutral,
+      anchor_mean = anchor_mean,
+      neutral_mean = neutral_mean,
       delta_mean_anchor_minus_neutral = delta_mean_anchor_minus_neutral,
       delta_q025_anchor_minus_neutral = delta_q025_anchor_minus_neutral,
       delta_q50_anchor_minus_neutral = delta_q50_anchor_minus_neutral,
@@ -2559,19 +2880,21 @@ build_prior_branch_delta <- function(model_registry, posterior_cohort_yearly, po
       conclusion_sign_change_flag = conclusion_sign_change_flag,
       prior_tail_sensitive = prior_tail_sensitive
     )
-
+  
   if (nrow(out) == 0L) {
     return(empty_prior_branch_delta())
   }
+  
   out
 }
+
 
 extract_parameter_draws_for_anchor_update <- function(model_id, export_dir, coefficient_summary) {
   bundle <- get_reuse_bundle(model_id, export_dir)
   if (inherits(bundle$selected_parameter_draws, "data.frame") && nrow(bundle$selected_parameter_draws) > 0L) {
     return(bundle$selected_parameter_draws)
   }
-
+  
   coef_tbl <- subset_model_table(coefficient_summary, model_id)
   if (nrow(coef_tbl) == 0L) {
     return(NULL)
@@ -2591,7 +2914,7 @@ build_incidence_anchor_update <- function(model_registry, coefficient_summary, e
   if (nrow(model_registry) == 0L) {
     return(empty_incidence_anchor_update())
   }
-
+  
   age_sex_cells <- tibble(
     age_sex_anchor_cell = c("Female_<20", "Female_20_29", "Female_30plus", "Male_<20", "Male_20_29", "Male_30plus"),
     sex_num = c(0, 0, 0, 1, 1, 1),
@@ -2605,14 +2928,14 @@ build_incidence_anchor_update <- function(model_registry, coefficient_summary, e
   external_logit <- alpha_anchor + as.matrix(age_sex_cells[, c("sex_num", "age20_29", "age30plus", "sex_x_age20_29", "sex_x_age30plus")]) %*% mu_anchor
   external_one_year_risk <- plogis(external_logit)
   external_incidence_rate_per10k <- -10000 * log(1 - external_one_year_risk)
-
+  
   bind_rows(lapply(seq_len(nrow(model_registry)), function(i) {
     reg <- model_registry[i, , drop = FALSE]
     param_draws <- extract_parameter_draws_for_anchor_update(reg$model_id[[1L]], export_dir, coefficient_summary)
     if (is.null(param_draws) || nrow(param_draws) == 0L) return(NULL)
     req_cols <- c("delta0", paste0("beta_inc[", 1:5, "]"))
     if (!all(req_cols %in% names(param_draws))) return(NULL)
-
+    
     alpha_gp <- if (normalize_prior_branch_value(reg$prior_branch[[1L]]) == "anchor_informed") -9.581369553169 else 0
     X_cell <- as.matrix(age_sex_cells[, c("sex_num", "age20_29", "age30plus", "sex_x_age20_29", "sex_x_age30plus")])
     beta_mat <- as.matrix(param_draws[, paste0("beta_inc[", 1:5, "]"), drop = FALSE])
@@ -2621,7 +2944,7 @@ build_incidence_anchor_update <- function(model_registry, coefficient_summary, e
     prior_center_risk <- plogis(prior_center_logit)
     q <- matrixStats::colQuantiles(eta, probs = c(0.025, 0.975), na.rm = TRUE)
     risk_q <- matrixStats::colQuantiles(plogis(eta), probs = c(0.025, 0.975), na.rm = TRUE)
-
+    
     tibble(
       dataset = reg$dataset[[1L]],
       dataset_key = reg$dataset[[1L]],
@@ -2802,13 +3125,13 @@ make_stage8_output_audit <- function(model_grid, model_registry, posterior_cohor
   posterior_classification <- simplify_scalar_list_cols(posterior_classification)
   ppc_summary <- simplify_scalar_list_cols(ppc_summary)
   posterior_delta_vs_nocure <- simplify_scalar_list_cols(posterior_delta_vs_nocure)
-
+  
   admissible_n <- sum(as.logical(model_registry$admissible_flag), na.rm = TRUE)
   registry_dup_n <- if ("model_id" %in% names(model_registry) && nrow(model_registry) > 0L) sum(duplicated(model_registry[c("model_id")])) else 0L
   cohort_dup_n <- if (all(c("model_id", "horizon_year") %in% names(posterior_cohort_yearly)) && nrow(posterior_cohort_yearly) > 0L) sum(duplicated(posterior_cohort_yearly[c("model_id", "horizon_year")])) else 0L
   class_dup_n <- if (all(c("model_id", "horizon_year", "threshold") %in% names(posterior_classification)) && nrow(posterior_classification) > 0L) sum(duplicated(posterior_classification[c("model_id", "horizon_year", "threshold")])) else 0L
   ppc_dup_n <- if (all(c("model_id", "horizon_year") %in% names(ppc_summary)) && nrow(ppc_summary) > 0L) sum(duplicated(ppc_summary[c("model_id", "horizon_year")])) else 0L
-
+  
   bind_rows(
     tibble(check_name = "model_registry_row_count", status = ifelse(nrow(model_registry) == nrow(model_grid), "pass", "fail"), observed_value = as.character(nrow(model_registry)), expected_value = as.character(nrow(model_grid)), detail = "One registry row should exist per model in the Stage 8A grid."),
     tibble(check_name = "model_registry_duplicate_model_id", status = ifelse(registry_dup_n == 0L, "pass", "fail"), observed_value = as.character(registry_dup_n), expected_value = "0", detail = "Model IDs must be unique in the model registry."),
@@ -2856,6 +3179,7 @@ safe_generate_diagnostic_pdf <- function(trace_records, plot_objects, final_path
   safe_promote_file(tmp_pdf, final_path)
   invisible(TRUE)
 }
+
 # 🔴 Load: Stage-1 backbone, optional comparators, and frozen horizon metadata ===============================
 ## 🟠 Load: analysis-ready datasets and cross-stage linkage tables ===============================
 backbone_objects <- load_stage1_backbone_or_fallback()
@@ -2944,6 +3268,13 @@ existing_exports <- if (isTRUE(reuse_existing_stage8_outputs)) load_existing_sta
   diagnostic_pdf_exists = FALSE
 )
 
+existing_exports <- recover_existing_stage8_exports_from_rds(
+  existing_exports = existing_exports,
+  model_grid = model_grid,
+  analysis_datasets = analysis_datasets,
+  export_dir = export_path
+)
+
 reuse_flags <- vapply(seq_len(nrow(model_grid)), function(ii) {
   model_row <- model_grid[ii, , drop = FALSE]
   dataset_df <- analysis_datasets[[model_row$dataset[[1L]]]]
@@ -2989,114 +3320,442 @@ prior_predictive_rows <- list()
 total_models <- nrow(model_grid)
 
 withCallingHandlers({
-for (ii in seq_len(nrow(model_grid))) {
-  model_row <- model_grid[ii, , drop = FALSE]
-  model_id_now <- model_row$model_id[[1L]]
-  dataset_name <- model_row$dataset[[1L]]
-  dataset_df <- analysis_datasets[[dataset_name]]
-  model_started_at <- Sys.time()
-
-  emit_stage8_progress(ii - 1L, total_models, model_id_now, paste0("starting Stage 8A model (dataset=", dataset_name, ", family=", model_row$family_code[[1L]], ", prior=", model_row$prior_branch[[1L]], ", site_prior=", model_row$site_prior_family[[1L]], ", reuse=", isTRUE(model_row$reuse_existing_fit[[1L]]), ")"))
-
-  screening_row <- screening_lookup %>% filter(model_id == model_id_now)
-  if (nrow(screening_row) == 0L) {
-    screening_row <- tibble(
-      model_id = model_id_now,
-      cure_model_eligibility_flag = NA_character_,
-      primary_gate_method = NA_character_,
-      primary_gate_flag = NA_character_,
-      receus_primary_class = NA_character_,
-      presence_modifier_flag = NA_character_,
-      cure_presence_support_flag = NA_character_,
-      followup_contradiction_flag = NA_character_,
-      followup_not_contradicted_flag = NA_character_,
-      screening_note = NA_character_,
-      screening_flag = NA_character_,
-      screening_detail = NA_character_,
-      carry_forward_stage8 = NA
+  for (ii in seq_len(nrow(model_grid))) {
+    model_row <- model_grid[ii, , drop = FALSE]
+    model_id_now <- model_row$model_id[[1L]]
+    dataset_name <- model_row$dataset[[1L]]
+    dataset_df <- analysis_datasets[[dataset_name]]
+    model_started_at <- Sys.time()
+    
+    emit_stage8_progress(ii - 1L, total_models, model_id_now, paste0("starting Stage 8A model (dataset=", dataset_name, ", family=", model_row$family_code[[1L]], ", prior=", model_row$prior_branch[[1L]], ", site_prior=", model_row$site_prior_family[[1L]], ", reuse=", isTRUE(model_row$reuse_existing_fit[[1L]]), ")"))
+    
+    screening_row <- screening_lookup %>% filter(model_id == model_id_now)
+    if (nrow(screening_row) == 0L) {
+      screening_row <- tibble(
+        model_id = model_id_now,
+        cure_model_eligibility_flag = NA_character_,
+        primary_gate_method = NA_character_,
+        primary_gate_flag = NA_character_,
+        receus_primary_class = NA_character_,
+        presence_modifier_flag = NA_character_,
+        cure_presence_support_flag = NA_character_,
+        followup_contradiction_flag = NA_character_,
+        followup_not_contradicted_flag = NA_character_,
+        screening_note = NA_character_,
+        screening_flag = NA_character_,
+        screening_detail = NA_character_,
+        carry_forward_stage8 = NA
+      )
+    }
+    
+    existing_reg <- subset_model_registry_row(existing_exports$model_registry, model_id_now)
+    if (isTRUE(model_row$reuse_existing_fit[[1L]]) && (is.null(existing_reg) || nrow(existing_reg) == 0L)) {
+      existing_reg <- build_registry_row_from_reuse_bundle(
+        model_row = model_row,
+        dataset_df = dataset_df,
+        reuse_bundle = get_reuse_bundle(model_id_now, export_path, NULL)
+      )
+    }
+    reuse_bundle <- if (isTRUE(model_row$reuse_existing_fit[[1L]])) get_reuse_bundle(model_id_now, export_path, existing_reg) else empty_reuse_bundle()
+    
+    prior_spec <- prior_specs[[model_row$prior_branch[[1L]]]]
+    existing_prior_model <- normalize_prior_predictive_summary(bind_rows_safe(list(subset_model_table(existing_exports$prior_predictive_summary, model_id_now), subset_model_table(reuse_bundle$prior_predictive_summary, model_id_now))))
+    need_prior_regeneration <- nrow(existing_prior_model) == 0L
+    design_main <- make_design_bundle(dataset_df, model_row, prior_spec, snu_site_label)
+    
+    if (need_prior_regeneration) {
+      set.seed(stan_seed + ii)
+      prior_pred_main <- simulate_prior_predictive(df = dataset_df, design_bundle = design_main, model_row = model_row, prior_spec = prior_spec, n_draws = prior_predictive_draws, horizons_eval = c(1, 2, 5, 10))
+      prior_predictive_rows[[length(prior_predictive_rows) + 1L]] <- prior_pred_main$summary
+    } else {
+      prior_pred_main <- list(degeneracy = tibble(degenerate_flag = any(existing_prior_model$prior_degenerate_flag, na.rm = TRUE)))
+      prior_predictive_rows[[length(prior_predictive_rows) + 1L]] <- existing_prior_model
+    }
+    
+    if (isTRUE(model_row$reuse_existing_fit[[1L]])) {
+      if (!is.null(existing_reg)) {
+        main_registry_rows[[length(main_registry_rows) + 1L]] <- existing_reg
+      }
+      coef_rows[[length(coef_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$coefficient_summary, reuse_bundle$coefficient_summary)
+      diagnostic_rows[[length(diagnostic_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$diagnostics_parameter_level, reuse_bundle$diagnostics_parameter_level)
+      ppc_rows_all[[length(ppc_rows_all) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$ppc_summary, reuse_bundle$ppc_summary)
+      
+      existing_reg_admissible <- !is.null(existing_reg) && isTRUE(as.logical(registry_field_value(existing_reg, "admissible_flag", FALSE)))
+      if (isTRUE(existing_reg_admissible)) {
+        subject_profile_rows[[length(subject_profile_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_subject_profile, reuse_bundle$posterior_subject_profile)
+        subject_yearly_rows[[length(subject_yearly_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_subject_yearly, reuse_bundle$posterior_subject_yearly)
+        cohort_yearly_rows[[length(cohort_yearly_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_cohort_yearly, reuse_bundle$posterior_cohort_yearly)
+        class_rows[[length(class_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_classification, reuse_bundle$posterior_classification)
+      }
+      
+      emit_stage8_progress(ii, total_models, model_id_now, paste0("reused existing outputs; elapsed=", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s"))
+      next
+    }
+    
+    stan_data <- list(
+      N = nrow(dataset_df),
+      time = as.numeric(design_main$time),
+      event = as.integer(design_main$event),
+      K_inc = ncol(design_main$X_inc),
+      X_inc = design_main$X_inc,
+      K_lat = ncol(design_main$X_lat),
+      X_lat = design_main$X_lat,
+      family_id = as.integer(model_row$family_id[[1L]]),
+      alpha_gp = as.numeric(design_main$alpha_gp),
+      mu_beta_inc = as.numeric(design_main$mu_beta_inc),
+      sd_beta_inc = as.numeric(design_main$sd_beta_inc),
+      sd_delta = as.numeric(prior_spec$sd_delta),
+      sd_gamma0 = as.numeric(prior_spec$sd_gamma0),
+      sd_gamma_lat = as.numeric(design_main$sd_gamma_lat),
+      sd_shape = as.numeric(design_main$shape_prior_sd),
+      incidence_site_position = as.integer(design_main$incidence_site_position),
+      latency_site_position = as.integer(design_main$latency_site_position),
+      use_student_t_site_prior = as.integer(design_main$use_student_t_site_prior),
+      site_prior_df = as.numeric(design_main$site_prior_df),
+      site_prior_scale = as.numeric(design_main$site_prior_scale)
     )
-  }
-
-  existing_reg <- subset_model_registry_row(existing_exports$model_registry, model_id_now)
-  reuse_bundle <- if (isTRUE(model_row$reuse_existing_fit[[1L]])) get_reuse_bundle(model_id_now, export_path, existing_reg) else empty_reuse_bundle()
-
-  prior_spec <- prior_specs[[model_row$prior_branch[[1L]]]]
-  existing_prior_model <- normalize_prior_predictive_summary(bind_rows_safe(list(subset_model_table(existing_exports$prior_predictive_summary, model_id_now), subset_model_table(reuse_bundle$prior_predictive_summary, model_id_now))))
-  need_prior_regeneration <- nrow(existing_prior_model) == 0L
-  design_main <- make_design_bundle(dataset_df, model_row, prior_spec, snu_site_label)
-
-  if (need_prior_regeneration) {
-    set.seed(stan_seed + ii)
-    prior_pred_main <- simulate_prior_predictive(df = dataset_df, design_bundle = design_main, model_row = model_row, prior_spec = prior_spec, n_draws = prior_predictive_draws, horizons_eval = c(1, 2, 5, 10))
-    prior_predictive_rows[[length(prior_predictive_rows) + 1L]] <- prior_pred_main$summary
-  } else {
-    prior_pred_main <- list(degeneracy = tibble(degenerate_flag = any(existing_prior_model$prior_degenerate_flag, na.rm = TRUE)))
-    prior_predictive_rows[[length(prior_predictive_rows) + 1L]] <- existing_prior_model
-  }
-
-  if (isTRUE(model_row$reuse_existing_fit[[1L]])) {
-    if (!is.null(existing_reg)) {
-      main_registry_rows[[length(main_registry_rows) + 1L]] <- existing_reg
+    
+    fit_status <- "ok"
+    fit_error_message <- NA_character_
+    fit <- tryCatch(
+      rstan::sampling(
+        object = stan_model_compiled,
+        data = stan_data,
+        chains = stan_chains,
+        iter = stan_iter,
+        warmup = stan_warmup,
+        thin = stan_thin,
+        seed = stan_seed + ii,
+        refresh = stan_refresh,
+        control = list(adapt_delta = stan_adapt_delta, max_treedepth = stan_max_treedepth)
+      ),
+      error = function(e) e
+    )
+    
+    if (inherits(fit, "error")) {
+      fit_status <- "sampling_error"
+      fit_error_message <- conditionMessage(fit)
+      main_registry_rows[[length(main_registry_rows) + 1L]] <- tibble(
+        dataset = dataset_name,
+        dataset_key = dataset_name,
+        model_id = model_id_now,
+        legacy_model_id = model_row$legacy_model_id[[1L]],
+        branch = "Stage8A",
+        risk_scale = "transition_only_main",
+        prior_branch = model_row$prior_branch[[1L]],
+        site_prior_family = model_row$site_prior_family[[1L]],
+        site_placement_label = model_row$site_placement_label[[1L]],
+        structural_model_id = model_row$structural_model_id[[1L]],
+        latency_family = model_row$latency_family[[1L]],
+        family_code = model_row$family_code[[1L]],
+        formula_anchor = model_row$formula_anchor[[1L]],
+        incidence_site_indicator = model_row$incidence_site_indicator[[1L]],
+        latency_site_indicator = model_row$latency_site_indicator[[1L]],
+        latency_interaction_indicator = model_row$latency_interaction_indicator[[1L]],
+        is_supplementary_branch = model_row$is_supplementary_branch[[1L]],
+        fit_status = fit_status,
+        fit_error_message = fit_error_message,
+        admissible_flag = FALSE,
+        admissibility_reasons = "sampling_error",
+        prior_degenerate_flag = prior_pred_main$degeneracy$degenerate_flag[[1L]],
+        posterior_degenerate_flag = NA,
+        ppc_gross_contradiction_flag = NA,
+        divergences = NA_integer_,
+        max_rhat = NA_real_,
+        min_bulk_ess = NA_real_,
+        min_tail_ess = NA_real_,
+        treedepth_exceeded = NA_integer_,
+        waic = NA_real_,
+        looic = NA_real_,
+        p_waic = NA_real_,
+        p_waic_high_n = NA_integer_,
+        p_waic_high_pct = NA_real_,
+        p_loo = NA_real_,
+        pareto_k_max = NA_real_,
+        pareto_k_bad_n = NA_integer_,
+        pareto_k_bad_pct = NA_real_,
+        pareto_k_very_bad_n = NA_integer_,
+        waic_warning_flag = NA,
+        loo_warning_flag = NA,
+        info_criteria_warning_detail = NA_character_,
+        n = nrow(dataset_df),
+        n_event = sum(dataset_df$event_main),
+        n_censor_main = sum(dataset_df$censor_main),
+        n_remission = sum(dataset_df$remission_flag),
+        rds_path = NA_character_
+      )
+      emit_stage8_progress(ii, total_models, model_id_now, paste0("sampling error after ", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s: ", fit_error_message))
+      next
     }
-    coef_rows[[length(coef_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$coefficient_summary, reuse_bundle$coefficient_summary)
-    diagnostic_rows[[length(diagnostic_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$diagnostics_parameter_level, reuse_bundle$diagnostics_parameter_level)
-    ppc_rows_all[[length(ppc_rows_all) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$ppc_summary, reuse_bundle$ppc_summary)
-
-    existing_reg_admissible <- !is.null(existing_reg) && isTRUE(as.logical(registry_field_value(existing_reg, "admissible_flag", FALSE)))
-    if (isTRUE(existing_reg_admissible)) {
-      subject_profile_rows[[length(subject_profile_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_subject_profile, reuse_bundle$posterior_subject_profile)
-      subject_yearly_rows[[length(subject_yearly_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_subject_yearly, reuse_bundle$posterior_subject_yearly)
-      cohort_yearly_rows[[length(cohort_yearly_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_cohort_yearly, reuse_bundle$posterior_cohort_yearly)
-      class_rows[[length(class_rows) + 1L]] <- pick_reuse_table(model_id_now, existing_exports$posterior_classification, reuse_bundle$posterior_classification)
+    
+    trace_records[[length(trace_records) + 1L]] <- make_trace_record(fit, model_id_now, model_row$family_code[[1L]], ncol(design_main$X_inc), ncol(design_main$X_lat))
+    
+    param_names <- c("delta0", "gamma0", paste0("beta_inc[", seq_len(ncol(design_main$X_inc)), "]"), paste0("gamma_lat[", seq_len(ncol(design_main$X_lat)), "]"))
+    if (model_row$family_code[[1L]] == "W") param_names <- c(param_names, "rho_W")
+    if (model_row$family_code[[1L]] == "LN") param_names <- c(param_names, "log_sigma_LN")
+    if (model_row$family_code[[1L]] == "LL") param_names <- c(param_names, "psi_LL")
+    
+    param_array <- posterior::as_draws_array(as.array(fit, pars = param_names))
+    param_diag_tbl <- posterior::summarise_draws(param_array, mean = base::mean, sd = stats::sd, rhat = posterior::rhat, ess_bulk = posterior::ess_bulk, ess_tail = posterior::ess_tail)
+    param_draws_mat <- posterior::as_draws_matrix(param_array)
+    
+    coef_tbl <- tibble(
+      dataset = dataset_name,
+      dataset_key = dataset_name,
+      model_id = model_id_now,
+      parameter = colnames(param_draws_mat),
+      mean = apply(param_draws_mat, 2, mean),
+      sd = apply(param_draws_mat, 2, stats::sd),
+      q025 = apply(param_draws_mat, 2, stats::quantile, probs = 0.025, names = FALSE),
+      q50 = apply(param_draws_mat, 2, stats::quantile, probs = 0.500, names = FALSE),
+      q975 = apply(param_draws_mat, 2, stats::quantile, probs = 0.975, names = FALSE)
+    )
+    coef_rows[[length(coef_rows) + 1L]] <- coef_tbl
+    
+    diagnostic_param_tbl_model <- tibble(
+      dataset = dataset_name,
+      dataset_key = dataset_name,
+      model_id = model_id_now,
+      parameter = param_diag_tbl$variable,
+      mean = param_diag_tbl$mean,
+      sd = param_diag_tbl$sd,
+      rhat = param_diag_tbl$rhat,
+      ess_bulk = param_diag_tbl$ess_bulk,
+      ess_tail = param_diag_tbl$ess_tail
+    )
+    
+    sampler_params <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
+    divergences <- sum(vapply(sampler_params, function(x) sum(x[, "divergent__"]), numeric(1)))
+    treedepth_exceeded <- sum(vapply(sampler_params, function(x) sum(x[, "treedepth__"] >= stan_max_treedepth), numeric(1)))
+    
+    draws_compact <- extract_draws_compact(fit, K_inc = ncol(design_main$X_inc), K_lat = ncol(design_main$X_lat))
+    total_draws <- length(draws_compact$delta0)
+    set.seed(stan_seed + 200000L + ii)
+    keep_draw_idx <- if (total_draws <= posterior_prediction_draws) seq_len(total_draws) else sort(sample(seq_len(total_draws), size = posterior_prediction_draws, replace = FALSE))
+    
+    draws_pred <- list(
+      delta0 = draws_compact$delta0[keep_draw_idx],
+      beta_inc = draws_compact$beta_inc[keep_draw_idx, , drop = FALSE],
+      gamma0 = draws_compact$gamma0[keep_draw_idx],
+      gamma_lat = draws_compact$gamma_lat[keep_draw_idx, , drop = FALSE],
+      rho_W = draws_compact$rho_W[keep_draw_idx],
+      log_sigma_LN = draws_compact$log_sigma_LN[keep_draw_idx],
+      psi_LL = draws_compact$psi_LL[keep_draw_idx]
+    )
+    
+    linear_terms <- compute_linear_terms(draws_pred, design_main$X_inc, design_main$X_lat, design_main$alpha_gp)
+    supported_horizons <- if (dataset_name == "PNU") c(1, 2) else c(1, 2, 5)
+    supported_risk_list <- lapply(supported_horizons, function(h) {
+      fh_sup <- family_survival_hazard(h, model_row$family_code[[1L]], linear_terms$mu_lat_mat, linear_terms$median_mat, draws_pred)
+      1 - ((1 - linear_terms$pi_mat) + linear_terms$pi_mat * fh_sup$Su)
+    })
+    posterior_degeneracy <- compute_degeneracy(linear_terms$pi_mat, linear_terms$median_mat, supported_risk_list)
+    info_criteria <- compute_information_criteria(draws_compact$log_lik)
+    
+    subject_profile_summary <- summarize_cols_matrix(linear_terms$cure_prob_mat)
+    susceptible_prob_summary <- summarize_cols_matrix(linear_terms$pi_mat)
+    median_susc_summary <- summarize_cols_matrix(linear_terms$median_mat)
+    subject_profile_tbl <- bind_cols(
+      tibble(dataset = dataset_name, dataset_key = dataset_name, model_id = model_id_now),
+      design_main$id_df,
+      tibble(
+        cure_prob_mean = subject_profile_summary$mean,
+        cure_prob_q025 = subject_profile_summary$q025,
+        cure_prob_q50 = subject_profile_summary$q50,
+        cure_prob_q975 = subject_profile_summary$q975,
+        susceptible_prob_mean = susceptible_prob_summary$mean,
+        susceptible_prob_q025 = susceptible_prob_summary$q025,
+        susceptible_prob_q50 = susceptible_prob_summary$q50,
+        susceptible_prob_q975 = susceptible_prob_summary$q975,
+        median_susc_time_mean = median_susc_summary$mean,
+        median_susc_time_q025 = median_susc_summary$q025,
+        median_susc_time_q50 = median_susc_summary$q50,
+        median_susc_time_q975 = median_susc_summary$q975
+      )
+    )
+    
+    ppc_model_rows <- list(); cohort_model_rows <- list(); subject_year_model_rows <- list(); class_model_rows <- list()
+    
+    for (h in horizons_year) {
+      fh <- family_survival_hazard(h, model_row$family_code[[1L]], linear_terms$mu_lat_mat, linear_terms$median_mat, draws_pred)
+      pop_surv <- (1 - linear_terms$pi_mat) + linear_terms$pi_mat * fh$Su
+      risk_mat <- 1 - pop_surv
+      meta_row <- horizon_metadata_registry %>% filter(dataset == dataset_name, horizon_year == h)
+      if (nrow(meta_row) == 0L) {
+        meta_row <- tibble(dataset = dataset_name, horizon_year = h, support_tier = derive_support_tier(dataset_name, h), horizon_evidence_class = derive_horizon_evidence_class(dataset_name, h), claim_restriction_flag = derive_claim_restriction_flag(derive_horizon_evidence_class(dataset_name, h)), interpretation_note = derive_interpretation_note(dataset_name, h, derive_support_tier(dataset_name, h), derive_horizon_evidence_class(dataset_name, h), derive_claim_restriction_flag(derive_horizon_evidence_class(dataset_name, h))), observed_km_risk = NA_real_, denom_case = NA_real_, denom_control = NA_real_, classification_estimable_flag = NA)
+      }
+      horizon_ref <- ipcw_registry[[dataset_name]] %>% filter(horizon_year == h)
+      
+      subj_surv_summary <- summarize_cols_matrix(pop_surv)
+      subj_risk_summary <- summarize_cols_matrix(risk_mat)
+      subj_su_summary <- summarize_cols_matrix(fh$Su)
+      point_risk_subject <- matrixStats::colMeans2(risk_mat, na.rm = TRUE)
+      mean_risk_draw <- rowMeans(risk_mat)
+      mean_surv_draw <- rowMeans(pop_surv)
+      mean_sus_surv_draw <- rowMeans(fh$Su)
+      mean_hazard_draw <- rowMeans(fh$haz)
+      mean_cure_draw <- rowMeans(linear_terms$cure_prob_mat)
+      
+      subject_year_model_rows[[length(subject_year_model_rows) + 1L]] <- bind_cols(
+        tibble(dataset = dataset_name, dataset_key = dataset_name, branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], site_prior_family = model_row$site_prior_family[[1L]], model_id = model_id_now, latency_family = model_row$latency_family[[1L]], formula_anchor = model_row$formula_anchor[[1L]], horizon_year = h, support_tier = meta_row$support_tier[[1L]], horizon_evidence_class = meta_row$horizon_evidence_class[[1L]], claim_restriction_flag = meta_row$claim_restriction_flag[[1L]]),
+        design_main$id_df,
+        tibble(
+          S_pop_mean = subj_surv_summary$mean,
+          S_pop_q025 = subj_surv_summary$q025,
+          S_pop_q50 = subj_surv_summary$q50,
+          S_pop_q975 = subj_surv_summary$q975,
+          risk_mean = subj_risk_summary$mean,
+          risk_q025 = subj_risk_summary$q025,
+          risk_q50 = subj_risk_summary$q50,
+          risk_q975 = subj_risk_summary$q975,
+          S_u_mean = subj_su_summary$mean,
+          S_u_q025 = subj_su_summary$q025,
+          S_u_q50 = subj_su_summary$q50,
+          S_u_q975 = subj_su_summary$q975
+        )
+      )
+      
+      cohort_model_rows[[length(cohort_model_rows) + 1L]] <- tibble(
+        dataset = dataset_name,
+        dataset_key = dataset_name,
+        branch = "Stage8A",
+        risk_scale = "transition_only_main",
+        prior_branch = model_row$prior_branch[[1L]],
+        site_prior_family = model_row$site_prior_family[[1L]],
+        model_id = model_id_now,
+        latency_family = model_row$latency_family[[1L]],
+        formula_anchor = model_row$formula_anchor[[1L]],
+        horizon_year = h,
+        support_tier = meta_row$support_tier[[1L]],
+        horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
+        claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
+        interpretation_note = meta_row$interpretation_note[[1L]],
+        observed_km_risk = horizon_ref$observed_km_risk[[1L]],
+        meanRisk_Bayes_mean = mean(mean_risk_draw),
+        meanRisk_Bayes_q025 = stats::quantile(mean_risk_draw, 0.025, names = FALSE),
+        meanRisk_Bayes_q50 = stats::quantile(mean_risk_draw, 0.500, names = FALSE),
+        meanRisk_Bayes_q975 = stats::quantile(mean_risk_draw, 0.975, names = FALSE),
+        meanSurvival_mean = mean(mean_surv_draw),
+        meanSurvival_q025 = stats::quantile(mean_surv_draw, 0.025, names = FALSE),
+        meanSurvival_q50 = stats::quantile(mean_surv_draw, 0.500, names = FALSE),
+        meanSurvival_q975 = stats::quantile(mean_surv_draw, 0.975, names = FALSE),
+        meanSusceptibleSurvival_mean = mean(mean_sus_surv_draw),
+        meanSusceptibleSurvival_q025 = stats::quantile(mean_sus_surv_draw, 0.025, names = FALSE),
+        meanSusceptibleSurvival_q50 = stats::quantile(mean_sus_surv_draw, 0.500, names = FALSE),
+        meanSusceptibleSurvival_q975 = stats::quantile(mean_sus_surv_draw, 0.975, names = FALSE),
+        meanHazard_mean = mean(mean_hazard_draw),
+        meanHazard_q025 = stats::quantile(mean_hazard_draw, 0.025, names = FALSE),
+        meanHazard_q50 = stats::quantile(mean_hazard_draw, 0.500, names = FALSE),
+        meanHazard_q975 = stats::quantile(mean_hazard_draw, 0.975, names = FALSE),
+        cohort_mean_cure_fraction_mean = mean(mean_cure_draw),
+        cohort_mean_cure_fraction_q025 = stats::quantile(mean_cure_draw, 0.025, names = FALSE),
+        cohort_mean_cure_fraction_q50 = stats::quantile(mean_cure_draw, 0.500, names = FALSE),
+        cohort_mean_cure_fraction_q975 = stats::quantile(mean_cure_draw, 0.975, names = FALSE),
+        auc_ipcw = weighted_auc_horizon(point_risk_subject, horizon_ref),
+        brier_ipcw = ipcw_brier_horizon(point_risk_subject, horizon_ref),
+        calibration_in_the_large = horizon_ref$observed_km_risk[[1L]] - mean(point_risk_subject, na.rm = TRUE),
+        calibration_ratio = ifelse(horizon_ref$observed_km_risk[[1L]] > 0, mean(point_risk_subject, na.rm = TRUE) / horizon_ref$observed_km_risk[[1L]], NA_real_),
+        calibration_abs_error = abs(horizon_ref$observed_km_risk[[1L]] - mean(point_risk_subject, na.rm = TRUE))
+      )
+      
+      ppc_model_rows[[length(ppc_model_rows) + 1L]] <- tibble(
+        dataset = dataset_name,
+        dataset_key = dataset_name,
+        branch = "Stage8A",
+        risk_scale = "transition_only_main",
+        prior_branch = model_row$prior_branch[[1L]],
+        site_prior_family = model_row$site_prior_family[[1L]],
+        model_id = model_id_now,
+        horizon_year = h,
+        support_tier = meta_row$support_tier[[1L]],
+        horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
+        claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
+        observed_km_risk = horizon_ref$observed_km_risk[[1L]],
+        posterior_mean_risk = mean(mean_risk_draw),
+        posterior_q025_risk = stats::quantile(mean_risk_draw, 0.025, names = FALSE),
+        posterior_q975_risk = stats::quantile(mean_risk_draw, 0.975, names = FALSE),
+        absolute_difference = abs(mean(mean_risk_draw) - horizon_ref$observed_km_risk[[1L]]),
+        gross_contradiction_flag = ((h %in% supported_horizons) && (horizon_ref$observed_km_risk[[1L]] < stats::quantile(mean_risk_draw, 0.025, names = FALSE) || horizon_ref$observed_km_risk[[1L]] > stats::quantile(mean_risk_draw, 0.975, names = FALSE)) && abs(mean(mean_risk_draw) - horizon_ref$observed_km_risk[[1L]]) > ppc_tolerance_abs)
+      )
+      
+      class_out <- compute_classification_summary(risk_draws = risk_mat, horizon_row = horizon_ref, thresholds = risk_thresholds)
+      if (nrow(class_out) > 0L) {
+        class_model_rows[[length(class_model_rows) + 1L]] <- class_out %>%
+          mutate(
+            dataset = dataset_name,
+            dataset_key = dataset_name,
+            branch = "Stage8A",
+            risk_scale = "transition_only_main",
+            prior_branch = model_row$prior_branch[[1L]],
+            site_prior_family = model_row$site_prior_family[[1L]],
+            model_id = model_id_now,
+            latency_family = model_row$latency_family[[1L]],
+            formula_anchor = model_row$formula_anchor[[1L]],
+            horizon_year = h,
+            support_tier = meta_row$support_tier[[1L]],
+            horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
+            claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
+            interpretation_note = meta_row$interpretation_note[[1L]],
+            observed_km_risk = horizon_ref$observed_km_risk[[1L]],
+            denom_case = horizon_ref$denom_case[[1L]],
+            denom_control = horizon_ref$denom_control[[1L]],
+            classification_estimable_flag = meta_row$classification_estimable_flag[[1L]]
+          ) %>%
+          relocate(dataset, dataset_key, branch, risk_scale, prior_branch, site_prior_family, model_id, latency_family, formula_anchor, horizon_year, threshold)
+      }
     }
-
-    emit_stage8_progress(ii, total_models, model_id_now, paste0("reused existing outputs; elapsed=", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s"))
-    next
-  }
-
-  stan_data <- list(
-    N = nrow(dataset_df),
-    time = as.numeric(design_main$time),
-    event = as.integer(design_main$event),
-    K_inc = ncol(design_main$X_inc),
-    X_inc = design_main$X_inc,
-    K_lat = ncol(design_main$X_lat),
-    X_lat = design_main$X_lat,
-    family_id = as.integer(model_row$family_id[[1L]]),
-    alpha_gp = as.numeric(design_main$alpha_gp),
-    mu_beta_inc = as.numeric(design_main$mu_beta_inc),
-    sd_beta_inc = as.numeric(design_main$sd_beta_inc),
-    sd_delta = as.numeric(prior_spec$sd_delta),
-    sd_gamma0 = as.numeric(prior_spec$sd_gamma0),
-    sd_gamma_lat = as.numeric(design_main$sd_gamma_lat),
-    sd_shape = as.numeric(design_main$shape_prior_sd),
-    incidence_site_position = as.integer(design_main$incidence_site_position),
-    latency_site_position = as.integer(design_main$latency_site_position),
-    use_student_t_site_prior = as.integer(design_main$use_student_t_site_prior),
-    site_prior_df = as.numeric(design_main$site_prior_df),
-    site_prior_scale = as.numeric(design_main$site_prior_scale)
-  )
-
-  fit_status <- "ok"
-  fit_error_message <- NA_character_
-  fit <- tryCatch(
-    rstan::sampling(
-      object = stan_model_compiled,
-      data = stan_data,
-      chains = stan_chains,
-      iter = stan_iter,
-      warmup = stan_warmup,
-      thin = stan_thin,
-      seed = stan_seed + ii,
-      refresh = stan_refresh,
-      control = list(adapt_delta = stan_adapt_delta, max_treedepth = stan_max_treedepth)
-    ),
-    error = function(e) e
-  )
-
-  if (inherits(fit, "error")) {
-    fit_status <- "sampling_error"
-    fit_error_message <- conditionMessage(fit)
+    
+    ppc_model_tbl <- bind_rows(ppc_model_rows)
+    cohort_model_tbl <- bind_rows(cohort_model_rows)
+    subject_year_model_tbl <- bind_rows(subject_year_model_rows)
+    class_model_tbl <- bind_rows(class_model_rows)
+    ppc_gross_contradiction_flag <- any(ppc_model_tbl$gross_contradiction_flag, na.rm = TRUE)
+    
+    max_rhat <- max(param_diag_tbl$rhat, na.rm = TRUE)
+    min_bulk_ess <- min(param_diag_tbl$ess_bulk, na.rm = TRUE)
+    min_tail_ess <- min(param_diag_tbl$ess_tail, na.rm = TRUE)
+    
+    admissibility_reasons <- character()
+    if (prior_pred_main$degeneracy$degenerate_flag[[1L]]) admissibility_reasons <- c(admissibility_reasons, "prior_degenerate")
+    if (posterior_degeneracy$degenerate_flag[[1L]]) admissibility_reasons <- c(admissibility_reasons, "posterior_degenerate")
+    if (!is.finite(max_rhat) || max_rhat >= 1.01) admissibility_reasons <- c(admissibility_reasons, "rhat")
+    if (!is.finite(min_bulk_ess) || min_bulk_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "bulk_ess")
+    if (!is.finite(min_tail_ess) || min_tail_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "tail_ess")
+    if (divergences > 0) admissibility_reasons <- c(admissibility_reasons, "divergences")
+    if (treedepth_exceeded > 0) admissibility_reasons <- c(admissibility_reasons, "treedepth")
+    if (isTRUE(ppc_gross_contradiction_flag)) admissibility_reasons <- c(admissibility_reasons, "ppc")
+    admissible_flag <- length(admissibility_reasons) == 0L
+    
+    set.seed(stan_seed + 300000L + ii)
+    selected_parameter_draws <- as.data.frame(param_draws_mat[sample(seq_len(nrow(param_draws_mat)), size = min(400L, nrow(param_draws_mat))), , drop = FALSE])
+    
+    compact_rds <- list(
+      dataset = dataset_name,
+      model_id = model_id_now,
+      branch = "Stage8A",
+      risk_scale = "transition_only_main",
+      prior_branch = model_row$prior_branch[[1L]],
+      site_prior_family = model_row$site_prior_family[[1L]],
+      site_placement_label = model_row$site_placement_label[[1L]],
+      latency_family = model_row$latency_family[[1L]],
+      formula_anchor = model_row$formula_anchor[[1L]],
+      fit_status = fit_status,
+      admissible_flag = admissible_flag,
+      admissibility_reasons = admissibility_reasons,
+      coefficient_summary = coef_tbl,
+      diagnostics_parameter_level = diagnostic_param_tbl_model,
+      ppc_summary = ppc_model_tbl,
+      posterior_subject_profile = if (isTRUE(admissible_flag)) subject_profile_tbl else tibble(),
+      posterior_subject_yearly = if (isTRUE(admissible_flag)) subject_year_model_tbl else tibble(),
+      posterior_cohort_yearly = if (isTRUE(admissible_flag)) cohort_model_tbl else tibble(),
+      posterior_classification = if (isTRUE(admissible_flag)) class_model_tbl else tibble(),
+      prior_predictive_summary = prior_pred_main$summary,
+      selected_parameter_draws = selected_parameter_draws
+    )
+    if (isTRUE(save_full_stanfit_rds)) compact_rds$fit <- fit
+    rds_path <- file.path(export_path, paste0(model_id_now, "__bayes_stage8_fit.rds"))
+    save_rds_preserve_schema(compact_rds, rds_path)
+    
     main_registry_rows[[length(main_registry_rows) + 1L]] <- tibble(
       dataset = dataset_name,
       dataset_key = dataset_name,
@@ -3117,377 +3776,57 @@ for (ii in seq_len(nrow(model_grid))) {
       is_supplementary_branch = model_row$is_supplementary_branch[[1L]],
       fit_status = fit_status,
       fit_error_message = fit_error_message,
-      admissible_flag = FALSE,
-      admissibility_reasons = "sampling_error",
+      admissible_flag = admissible_flag,
+      admissibility_reasons = if (length(admissibility_reasons) == 0L) "" else paste(admissibility_reasons, collapse = "|"),
       prior_degenerate_flag = prior_pred_main$degeneracy$degenerate_flag[[1L]],
-      posterior_degenerate_flag = NA,
-      ppc_gross_contradiction_flag = NA,
-      divergences = NA_integer_,
-      max_rhat = NA_real_,
-      min_bulk_ess = NA_real_,
-      min_tail_ess = NA_real_,
-      treedepth_exceeded = NA_integer_,
-      waic = NA_real_,
-      looic = NA_real_,
-      p_waic = NA_real_,
-      p_waic_high_n = NA_integer_,
-      p_waic_high_pct = NA_real_,
-      p_loo = NA_real_,
-      pareto_k_max = NA_real_,
-      pareto_k_bad_n = NA_integer_,
-      pareto_k_bad_pct = NA_real_,
-      pareto_k_very_bad_n = NA_integer_,
-      waic_warning_flag = NA,
-      loo_warning_flag = NA,
-      info_criteria_warning_detail = NA_character_,
+      posterior_degenerate_flag = posterior_degeneracy$degenerate_flag[[1L]],
+      ppc_gross_contradiction_flag = ppc_gross_contradiction_flag,
+      divergences = divergences,
+      max_rhat = max_rhat,
+      min_bulk_ess = min_bulk_ess,
+      min_tail_ess = min_tail_ess,
+      treedepth_exceeded = treedepth_exceeded,
+      waic = info_criteria$waic,
+      looic = info_criteria$looic,
+      p_waic = info_criteria$p_waic,
+      p_waic_high_n = info_criteria$p_waic_high_n,
+      p_waic_high_pct = info_criteria$p_waic_high_pct,
+      p_loo = info_criteria$p_loo,
+      pareto_k_max = info_criteria$pareto_k_max,
+      pareto_k_bad_n = info_criteria$pareto_k_bad_n,
+      pareto_k_bad_pct = info_criteria$pareto_k_bad_pct,
+      pareto_k_very_bad_n = info_criteria$pareto_k_very_bad_n,
+      waic_warning_flag = info_criteria$waic_warning_flag,
+      loo_warning_flag = info_criteria$loo_warning_flag,
+      info_criteria_warning_detail = info_criteria$info_criteria_warning_detail,
       n = nrow(dataset_df),
       n_event = sum(dataset_df$event_main),
       n_censor_main = sum(dataset_df$censor_main),
       n_remission = sum(dataset_df$remission_flag),
-      rds_path = NA_character_
+      cohort_mean_cure_fraction_mean = mean(rowMeans(linear_terms$cure_prob_mat)),
+      cohort_mean_cure_fraction_q025 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.025, names = FALSE),
+      cohort_mean_cure_fraction_q50 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.500, names = FALSE),
+      cohort_mean_cure_fraction_q975 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.975, names = FALSE),
+      rds_path = rds_path
     )
-    emit_stage8_progress(ii, total_models, model_id_now, paste0("sampling error after ", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s: ", fit_error_message))
-    next
-  }
-
-  trace_records[[length(trace_records) + 1L]] <- make_trace_record(fit, model_id_now, model_row$family_code[[1L]], ncol(design_main$X_inc), ncol(design_main$X_lat))
-
-  param_names <- c("delta0", "gamma0", paste0("beta_inc[", seq_len(ncol(design_main$X_inc)), "]"), paste0("gamma_lat[", seq_len(ncol(design_main$X_lat)), "]"))
-  if (model_row$family_code[[1L]] == "W") param_names <- c(param_names, "rho_W")
-  if (model_row$family_code[[1L]] == "LN") param_names <- c(param_names, "log_sigma_LN")
-  if (model_row$family_code[[1L]] == "LL") param_names <- c(param_names, "psi_LL")
-
-  param_array <- posterior::as_draws_array(as.array(fit, pars = param_names))
-  param_diag_tbl <- posterior::summarise_draws(param_array, mean = base::mean, sd = stats::sd, rhat = posterior::rhat, ess_bulk = posterior::ess_bulk, ess_tail = posterior::ess_tail)
-  param_draws_mat <- posterior::as_draws_matrix(param_array)
-
-  coef_tbl <- tibble(
-    dataset = dataset_name,
-    dataset_key = dataset_name,
-    model_id = model_id_now,
-    parameter = colnames(param_draws_mat),
-    mean = apply(param_draws_mat, 2, mean),
-    sd = apply(param_draws_mat, 2, stats::sd),
-    q025 = apply(param_draws_mat, 2, stats::quantile, probs = 0.025, names = FALSE),
-    q50 = apply(param_draws_mat, 2, stats::quantile, probs = 0.500, names = FALSE),
-    q975 = apply(param_draws_mat, 2, stats::quantile, probs = 0.975, names = FALSE)
-  )
-  coef_rows[[length(coef_rows) + 1L]] <- coef_tbl
-
-  diagnostic_param_tbl_model <- tibble(
-    dataset = dataset_name,
-    dataset_key = dataset_name,
-    model_id = model_id_now,
-    parameter = param_diag_tbl$variable,
-    mean = param_diag_tbl$mean,
-    sd = param_diag_tbl$sd,
-    rhat = param_diag_tbl$rhat,
-    ess_bulk = param_diag_tbl$ess_bulk,
-    ess_tail = param_diag_tbl$ess_tail
-  )
-
-  sampler_params <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
-  divergences <- sum(vapply(sampler_params, function(x) sum(x[, "divergent__"]), numeric(1)))
-  treedepth_exceeded <- sum(vapply(sampler_params, function(x) sum(x[, "treedepth__"] >= stan_max_treedepth), numeric(1)))
-
-  draws_compact <- extract_draws_compact(fit, K_inc = ncol(design_main$X_inc), K_lat = ncol(design_main$X_lat))
-  total_draws <- length(draws_compact$delta0)
-  set.seed(stan_seed + 200000L + ii)
-  keep_draw_idx <- if (total_draws <= posterior_prediction_draws) seq_len(total_draws) else sort(sample(seq_len(total_draws), size = posterior_prediction_draws, replace = FALSE))
-
-  draws_pred <- list(
-    delta0 = draws_compact$delta0[keep_draw_idx],
-    beta_inc = draws_compact$beta_inc[keep_draw_idx, , drop = FALSE],
-    gamma0 = draws_compact$gamma0[keep_draw_idx],
-    gamma_lat = draws_compact$gamma_lat[keep_draw_idx, , drop = FALSE],
-    rho_W = draws_compact$rho_W[keep_draw_idx],
-    log_sigma_LN = draws_compact$log_sigma_LN[keep_draw_idx],
-    psi_LL = draws_compact$psi_LL[keep_draw_idx]
-  )
-
-  linear_terms <- compute_linear_terms(draws_pred, design_main$X_inc, design_main$X_lat, design_main$alpha_gp)
-  supported_horizons <- if (dataset_name == "PNU") c(1, 2) else c(1, 2, 5)
-  supported_risk_list <- lapply(supported_horizons, function(h) {
-    fh_sup <- family_survival_hazard(h, model_row$family_code[[1L]], linear_terms$mu_lat_mat, linear_terms$median_mat, draws_pred)
-    1 - ((1 - linear_terms$pi_mat) + linear_terms$pi_mat * fh_sup$Su)
-  })
-  posterior_degeneracy <- compute_degeneracy(linear_terms$pi_mat, linear_terms$median_mat, supported_risk_list)
-  info_criteria <- compute_information_criteria(draws_compact$log_lik)
-
-  subject_profile_summary <- summarize_cols_matrix(linear_terms$cure_prob_mat)
-  susceptible_prob_summary <- summarize_cols_matrix(linear_terms$pi_mat)
-  median_susc_summary <- summarize_cols_matrix(linear_terms$median_mat)
-  subject_profile_tbl <- bind_cols(
-    tibble(dataset = dataset_name, dataset_key = dataset_name, model_id = model_id_now),
-    design_main$id_df,
-    tibble(
-      cure_prob_mean = subject_profile_summary$mean,
-      cure_prob_q025 = subject_profile_summary$q025,
-      cure_prob_q50 = subject_profile_summary$q50,
-      cure_prob_q975 = subject_profile_summary$q975,
-      susceptible_prob_mean = susceptible_prob_summary$mean,
-      susceptible_prob_q025 = susceptible_prob_summary$q025,
-      susceptible_prob_q50 = susceptible_prob_summary$q50,
-      susceptible_prob_q975 = susceptible_prob_summary$q975,
-      median_susc_time_mean = median_susc_summary$mean,
-      median_susc_time_q025 = median_susc_summary$q025,
-      median_susc_time_q50 = median_susc_summary$q50,
-      median_susc_time_q975 = median_susc_summary$q975
-    )
-  )
-
-  ppc_model_rows <- list(); cohort_model_rows <- list(); subject_year_model_rows <- list(); class_model_rows <- list()
-
-  for (h in horizons_year) {
-    fh <- family_survival_hazard(h, model_row$family_code[[1L]], linear_terms$mu_lat_mat, linear_terms$median_mat, draws_pred)
-    pop_surv <- (1 - linear_terms$pi_mat) + linear_terms$pi_mat * fh$Su
-    risk_mat <- 1 - pop_surv
-    meta_row <- horizon_metadata_registry %>% filter(dataset == dataset_name, horizon_year == h)
-    if (nrow(meta_row) == 0L) {
-      meta_row <- tibble(dataset = dataset_name, horizon_year = h, support_tier = derive_support_tier(dataset_name, h), horizon_evidence_class = derive_horizon_evidence_class(dataset_name, h), claim_restriction_flag = derive_claim_restriction_flag(derive_horizon_evidence_class(dataset_name, h)), interpretation_note = derive_interpretation_note(dataset_name, h, derive_support_tier(dataset_name, h), derive_horizon_evidence_class(dataset_name, h), derive_claim_restriction_flag(derive_horizon_evidence_class(dataset_name, h))), observed_km_risk = NA_real_, denom_case = NA_real_, denom_control = NA_real_, classification_estimable_flag = NA)
+    
+    diagnostic_rows[[length(diagnostic_rows) + 1L]] <- diagnostic_param_tbl_model
+    ppc_rows_all[[length(ppc_rows_all) + 1L]] <- ppc_model_tbl
+    if (isTRUE(admissible_flag)) {
+      subject_profile_rows[[length(subject_profile_rows) + 1L]] <- subject_profile_tbl
+      subject_yearly_rows[[length(subject_yearly_rows) + 1L]] <- subject_year_model_tbl
+      cohort_yearly_rows[[length(cohort_yearly_rows) + 1L]] <- cohort_model_tbl
+      class_rows[[length(class_rows) + 1L]] <- class_model_tbl
     }
-    horizon_ref <- ipcw_registry[[dataset_name]] %>% filter(horizon_year == h)
-
-    subj_surv_summary <- summarize_cols_matrix(pop_surv)
-    subj_risk_summary <- summarize_cols_matrix(risk_mat)
-    subj_su_summary <- summarize_cols_matrix(fh$Su)
-    point_risk_subject <- matrixStats::colMeans2(risk_mat, na.rm = TRUE)
-    mean_risk_draw <- rowMeans(risk_mat)
-    mean_surv_draw <- rowMeans(pop_surv)
-    mean_sus_surv_draw <- rowMeans(fh$Su)
-    mean_hazard_draw <- rowMeans(fh$haz)
-    mean_cure_draw <- rowMeans(linear_terms$cure_prob_mat)
-
-    subject_year_model_rows[[length(subject_year_model_rows) + 1L]] <- bind_cols(
-      tibble(dataset = dataset_name, dataset_key = dataset_name, branch = "Stage8A", risk_scale = "transition_only_main", prior_branch = model_row$prior_branch[[1L]], site_prior_family = model_row$site_prior_family[[1L]], model_id = model_id_now, latency_family = model_row$latency_family[[1L]], formula_anchor = model_row$formula_anchor[[1L]], horizon_year = h, support_tier = meta_row$support_tier[[1L]], horizon_evidence_class = meta_row$horizon_evidence_class[[1L]], claim_restriction_flag = meta_row$claim_restriction_flag[[1L]]),
-      design_main$id_df,
-      tibble(
-        S_pop_mean = subj_surv_summary$mean,
-        S_pop_q025 = subj_surv_summary$q025,
-        S_pop_q50 = subj_surv_summary$q50,
-        S_pop_q975 = subj_surv_summary$q975,
-        risk_mean = subj_risk_summary$mean,
-        risk_q025 = subj_risk_summary$q025,
-        risk_q50 = subj_risk_summary$q50,
-        risk_q975 = subj_risk_summary$q975,
-        S_u_mean = subj_su_summary$mean,
-        S_u_q025 = subj_su_summary$q025,
-        S_u_q50 = subj_su_summary$q50,
-        S_u_q975 = subj_su_summary$q975
-      )
-    )
-
-    cohort_model_rows[[length(cohort_model_rows) + 1L]] <- tibble(
-      dataset = dataset_name,
-      dataset_key = dataset_name,
-      branch = "Stage8A",
-      risk_scale = "transition_only_main",
-      prior_branch = model_row$prior_branch[[1L]],
-      site_prior_family = model_row$site_prior_family[[1L]],
-      model_id = model_id_now,
-      latency_family = model_row$latency_family[[1L]],
-      formula_anchor = model_row$formula_anchor[[1L]],
-      horizon_year = h,
-      support_tier = meta_row$support_tier[[1L]],
-      horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
-      claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
-      interpretation_note = meta_row$interpretation_note[[1L]],
-      observed_km_risk = horizon_ref$observed_km_risk[[1L]],
-      meanRisk_Bayes_mean = mean(mean_risk_draw),
-      meanRisk_Bayes_q025 = stats::quantile(mean_risk_draw, 0.025, names = FALSE),
-      meanRisk_Bayes_q50 = stats::quantile(mean_risk_draw, 0.500, names = FALSE),
-      meanRisk_Bayes_q975 = stats::quantile(mean_risk_draw, 0.975, names = FALSE),
-      meanSurvival_mean = mean(mean_surv_draw),
-      meanSurvival_q025 = stats::quantile(mean_surv_draw, 0.025, names = FALSE),
-      meanSurvival_q50 = stats::quantile(mean_surv_draw, 0.500, names = FALSE),
-      meanSurvival_q975 = stats::quantile(mean_surv_draw, 0.975, names = FALSE),
-      meanSusceptibleSurvival_mean = mean(mean_sus_surv_draw),
-      meanSusceptibleSurvival_q025 = stats::quantile(mean_sus_surv_draw, 0.025, names = FALSE),
-      meanSusceptibleSurvival_q50 = stats::quantile(mean_sus_surv_draw, 0.500, names = FALSE),
-      meanSusceptibleSurvival_q975 = stats::quantile(mean_sus_surv_draw, 0.975, names = FALSE),
-      meanHazard_mean = mean(mean_hazard_draw),
-      meanHazard_q025 = stats::quantile(mean_hazard_draw, 0.025, names = FALSE),
-      meanHazard_q50 = stats::quantile(mean_hazard_draw, 0.500, names = FALSE),
-      meanHazard_q975 = stats::quantile(mean_hazard_draw, 0.975, names = FALSE),
-      cohort_mean_cure_fraction_mean = mean(mean_cure_draw),
-      cohort_mean_cure_fraction_q025 = stats::quantile(mean_cure_draw, 0.025, names = FALSE),
-      cohort_mean_cure_fraction_q50 = stats::quantile(mean_cure_draw, 0.500, names = FALSE),
-      cohort_mean_cure_fraction_q975 = stats::quantile(mean_cure_draw, 0.975, names = FALSE),
-      auc_ipcw = weighted_auc_horizon(point_risk_subject, horizon_ref),
-      brier_ipcw = ipcw_brier_horizon(point_risk_subject, horizon_ref),
-      calibration_in_the_large = horizon_ref$observed_km_risk[[1L]] - mean(point_risk_subject, na.rm = TRUE),
-      calibration_ratio = ifelse(horizon_ref$observed_km_risk[[1L]] > 0, mean(point_risk_subject, na.rm = TRUE) / horizon_ref$observed_km_risk[[1L]], NA_real_),
-      calibration_abs_error = abs(horizon_ref$observed_km_risk[[1L]] - mean(point_risk_subject, na.rm = TRUE))
-    )
-
-    ppc_model_rows[[length(ppc_model_rows) + 1L]] <- tibble(
-      dataset = dataset_name,
-      dataset_key = dataset_name,
-      branch = "Stage8A",
-      risk_scale = "transition_only_main",
-      prior_branch = model_row$prior_branch[[1L]],
-      site_prior_family = model_row$site_prior_family[[1L]],
-      model_id = model_id_now,
-      horizon_year = h,
-      support_tier = meta_row$support_tier[[1L]],
-      horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
-      claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
-      observed_km_risk = horizon_ref$observed_km_risk[[1L]],
-      posterior_mean_risk = mean(mean_risk_draw),
-      posterior_q025_risk = stats::quantile(mean_risk_draw, 0.025, names = FALSE),
-      posterior_q975_risk = stats::quantile(mean_risk_draw, 0.975, names = FALSE),
-      absolute_difference = abs(mean(mean_risk_draw) - horizon_ref$observed_km_risk[[1L]]),
-      gross_contradiction_flag = ((h %in% supported_horizons) && (horizon_ref$observed_km_risk[[1L]] < stats::quantile(mean_risk_draw, 0.025, names = FALSE) || horizon_ref$observed_km_risk[[1L]] > stats::quantile(mean_risk_draw, 0.975, names = FALSE)) && abs(mean(mean_risk_draw) - horizon_ref$observed_km_risk[[1L]]) > ppc_tolerance_abs)
-    )
-
-    class_out <- compute_classification_summary(risk_draws = risk_mat, horizon_row = horizon_ref, thresholds = risk_thresholds)
-    if (nrow(class_out) > 0L) {
-      class_model_rows[[length(class_model_rows) + 1L]] <- class_out %>%
-        mutate(
-          dataset = dataset_name,
-          dataset_key = dataset_name,
-          branch = "Stage8A",
-          risk_scale = "transition_only_main",
-          prior_branch = model_row$prior_branch[[1L]],
-          site_prior_family = model_row$site_prior_family[[1L]],
-          model_id = model_id_now,
-          latency_family = model_row$latency_family[[1L]],
-          formula_anchor = model_row$formula_anchor[[1L]],
-          horizon_year = h,
-          support_tier = meta_row$support_tier[[1L]],
-          horizon_evidence_class = meta_row$horizon_evidence_class[[1L]],
-          claim_restriction_flag = meta_row$claim_restriction_flag[[1L]],
-          interpretation_note = meta_row$interpretation_note[[1L]],
-          observed_km_risk = horizon_ref$observed_km_risk[[1L]],
-          denom_case = horizon_ref$denom_case[[1L]],
-          denom_control = horizon_ref$denom_control[[1L]],
-          classification_estimable_flag = meta_row$classification_estimable_flag[[1L]]
-        ) %>%
-        relocate(dataset, dataset_key, branch, risk_scale, prior_branch, site_prior_family, model_id, latency_family, formula_anchor, horizon_year, threshold)
-    }
+    
+    rm(fit, draws_compact, draws_pred, linear_terms, param_array, param_draws_mat)
+    gc(verbose = FALSE)
+    emit_stage8_progress(ii, total_models, model_id_now, paste0("completed; elapsed=", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s; WAIC=", format_stage8_number(info_criteria$waic, 2L), "; LOOIC=", format_stage8_number(info_criteria$looic, 2L), "; Pareto k max=", format_stage8_number(info_criteria$pareto_k_max, 3L)))
   }
-
-  ppc_model_tbl <- bind_rows(ppc_model_rows)
-  cohort_model_tbl <- bind_rows(cohort_model_rows)
-  subject_year_model_tbl <- bind_rows(subject_year_model_rows)
-  class_model_tbl <- bind_rows(class_model_rows)
-  ppc_gross_contradiction_flag <- any(ppc_model_tbl$gross_contradiction_flag, na.rm = TRUE)
-
-  max_rhat <- max(param_diag_tbl$rhat, na.rm = TRUE)
-  min_bulk_ess <- min(param_diag_tbl$ess_bulk, na.rm = TRUE)
-  min_tail_ess <- min(param_diag_tbl$ess_tail, na.rm = TRUE)
-
-  admissibility_reasons <- character()
-  if (prior_pred_main$degeneracy$degenerate_flag[[1L]]) admissibility_reasons <- c(admissibility_reasons, "prior_degenerate")
-  if (posterior_degeneracy$degenerate_flag[[1L]]) admissibility_reasons <- c(admissibility_reasons, "posterior_degenerate")
-  if (!is.finite(max_rhat) || max_rhat >= 1.01) admissibility_reasons <- c(admissibility_reasons, "rhat")
-  if (!is.finite(min_bulk_ess) || min_bulk_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "bulk_ess")
-  if (!is.finite(min_tail_ess) || min_tail_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "tail_ess")
-  if (divergences > 0) admissibility_reasons <- c(admissibility_reasons, "divergences")
-  if (treedepth_exceeded > 0) admissibility_reasons <- c(admissibility_reasons, "treedepth")
-  if (isTRUE(ppc_gross_contradiction_flag)) admissibility_reasons <- c(admissibility_reasons, "ppc")
-  admissible_flag <- length(admissibility_reasons) == 0L
-
-  set.seed(stan_seed + 300000L + ii)
-  selected_parameter_draws <- as.data.frame(param_draws_mat[sample(seq_len(nrow(param_draws_mat)), size = min(400L, nrow(param_draws_mat))), , drop = FALSE])
-
-  compact_rds <- list(
-    dataset = dataset_name,
-    model_id = model_id_now,
-    branch = "Stage8A",
-    risk_scale = "transition_only_main",
-    prior_branch = model_row$prior_branch[[1L]],
-    site_prior_family = model_row$site_prior_family[[1L]],
-    site_placement_label = model_row$site_placement_label[[1L]],
-    latency_family = model_row$latency_family[[1L]],
-    formula_anchor = model_row$formula_anchor[[1L]],
-    fit_status = fit_status,
-    admissible_flag = admissible_flag,
-    admissibility_reasons = admissibility_reasons,
-    coefficient_summary = coef_tbl,
-    diagnostics_parameter_level = diagnostic_param_tbl_model,
-    ppc_summary = ppc_model_tbl,
-    posterior_subject_profile = if (isTRUE(admissible_flag)) subject_profile_tbl else tibble(),
-    posterior_subject_yearly = if (isTRUE(admissible_flag)) subject_year_model_tbl else tibble(),
-    posterior_cohort_yearly = if (isTRUE(admissible_flag)) cohort_model_tbl else tibble(),
-    posterior_classification = if (isTRUE(admissible_flag)) class_model_tbl else tibble(),
-    prior_predictive_summary = prior_pred_main$summary,
-    selected_parameter_draws = selected_parameter_draws
-  )
-  if (isTRUE(save_full_stanfit_rds)) compact_rds$fit <- fit
-  rds_path <- file.path(export_path, paste0(model_id_now, "__bayes_stage8_fit.rds"))
-  save_rds_preserve_schema(compact_rds, rds_path)
-
-  main_registry_rows[[length(main_registry_rows) + 1L]] <- tibble(
-    dataset = dataset_name,
-    dataset_key = dataset_name,
-    model_id = model_id_now,
-    legacy_model_id = model_row$legacy_model_id[[1L]],
-    branch = "Stage8A",
-    risk_scale = "transition_only_main",
-    prior_branch = model_row$prior_branch[[1L]],
-    site_prior_family = model_row$site_prior_family[[1L]],
-    site_placement_label = model_row$site_placement_label[[1L]],
-    structural_model_id = model_row$structural_model_id[[1L]],
-    latency_family = model_row$latency_family[[1L]],
-    family_code = model_row$family_code[[1L]],
-    formula_anchor = model_row$formula_anchor[[1L]],
-    incidence_site_indicator = model_row$incidence_site_indicator[[1L]],
-    latency_site_indicator = model_row$latency_site_indicator[[1L]],
-    latency_interaction_indicator = model_row$latency_interaction_indicator[[1L]],
-    is_supplementary_branch = model_row$is_supplementary_branch[[1L]],
-    fit_status = fit_status,
-    fit_error_message = fit_error_message,
-    admissible_flag = admissible_flag,
-    admissibility_reasons = if (length(admissibility_reasons) == 0L) "" else paste(admissibility_reasons, collapse = "|"),
-    prior_degenerate_flag = prior_pred_main$degeneracy$degenerate_flag[[1L]],
-    posterior_degenerate_flag = posterior_degeneracy$degenerate_flag[[1L]],
-    ppc_gross_contradiction_flag = ppc_gross_contradiction_flag,
-    divergences = divergences,
-    max_rhat = max_rhat,
-    min_bulk_ess = min_bulk_ess,
-    min_tail_ess = min_tail_ess,
-    treedepth_exceeded = treedepth_exceeded,
-    waic = info_criteria$waic,
-    looic = info_criteria$looic,
-    p_waic = info_criteria$p_waic,
-    p_waic_high_n = info_criteria$p_waic_high_n,
-    p_waic_high_pct = info_criteria$p_waic_high_pct,
-    p_loo = info_criteria$p_loo,
-    pareto_k_max = info_criteria$pareto_k_max,
-    pareto_k_bad_n = info_criteria$pareto_k_bad_n,
-    pareto_k_bad_pct = info_criteria$pareto_k_bad_pct,
-    pareto_k_very_bad_n = info_criteria$pareto_k_very_bad_n,
-    waic_warning_flag = info_criteria$waic_warning_flag,
-    loo_warning_flag = info_criteria$loo_warning_flag,
-    info_criteria_warning_detail = info_criteria$info_criteria_warning_detail,
-    n = nrow(dataset_df),
-    n_event = sum(dataset_df$event_main),
-    n_censor_main = sum(dataset_df$censor_main),
-    n_remission = sum(dataset_df$remission_flag),
-    cohort_mean_cure_fraction_mean = mean(rowMeans(linear_terms$cure_prob_mat)),
-    cohort_mean_cure_fraction_q025 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.025, names = FALSE),
-    cohort_mean_cure_fraction_q50 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.500, names = FALSE),
-    cohort_mean_cure_fraction_q975 = stats::quantile(rowMeans(linear_terms$cure_prob_mat), 0.975, names = FALSE),
-    rds_path = rds_path
-  )
-
-  diagnostic_rows[[length(diagnostic_rows) + 1L]] <- diagnostic_param_tbl_model
-  ppc_rows_all[[length(ppc_rows_all) + 1L]] <- ppc_model_tbl
-  if (isTRUE(admissible_flag)) {
-    subject_profile_rows[[length(subject_profile_rows) + 1L]] <- subject_profile_tbl
-    subject_yearly_rows[[length(subject_yearly_rows) + 1L]] <- subject_year_model_tbl
-    cohort_yearly_rows[[length(cohort_yearly_rows) + 1L]] <- cohort_model_tbl
-    class_rows[[length(class_rows) + 1L]] <- class_model_tbl
-  }
-
-  rm(fit, draws_compact, draws_pred, linear_terms, param_array, param_draws_mat)
-  gc(verbose = FALSE)
-  emit_stage8_progress(ii, total_models, model_id_now, paste0("completed; elapsed=", format_stage8_number(elapsed_stage8_seconds(model_started_at), 1L), "s; WAIC=", format_stage8_number(info_criteria$waic, 2L), "; LOOIC=", format_stage8_number(info_criteria$looic, 2L), "; Pareto k max=", format_stage8_number(info_criteria$pareto_k_max, 3L)))
-}
 }, warning = function(w) {
   if (is_localhost_connection_warning(w)) tryInvokeRestart("muffleWarning")
 })
+
 # 🔴 Assemble: final Stage-8A tables, prior-sensitivity flags, and plot sources ===============================
 ## 🟠 Assemble: bind, annotate, and enrich all exported Stage-8A objects ===============================
 model_annotation <- model_grid %>%
@@ -3655,13 +3994,132 @@ carryforward_metadata <- model_registry %>%
     screening_note, screening_flag, screening_detail, carry_forward_stage8
   )
 
+metadata_tbl <- function(group, names, values) {
+  tibble(
+    metadata_group = rep(as.character(group), length(names)),
+    metadata_name = as.character(names),
+    metadata_value = as.character(values)
+  )
+}
+
 stage8_metadata_registry <- bind_rows(
-  tibble(metadata_group = "stage", metadata_name = c("stage_name", "stage_role", "branch", "risk_scale"), metadata_value = c("Stage 8A", "Bayesian transition-only cure branch aligned to revised v5 specification.", "Stage8A", "transition_only_main")),
-  tibble(metadata_group = "paths", metadata_name = c("stage1_export_path", "stage1_bundle_file", "stage1_datasets_file", "stage5_export_path", "stage6_export_path", "stage8b_export_path", "export_path"), metadata_value = c(normalize_existing_path(stage1_export_path), normalize_existing_path(stage1_bundle_file), normalize_existing_path(stage1_datasets_file), normalize_existing_path(stage5_export_path), normalize_existing_path(stage6_export_path), normalize_existing_path(stage8b_export_path), normalize_existing_path(export_path))),
-  tibble(metadata_group = "reuse", metadata_name = c("reuse_existing_stage8_outputs", "require_existing_rds_to_skip_fit", "preserve_existing_diagnostic_pdf"), metadata_value = c(as.character(reuse_existing_stage8_outputs), as.character(require_existing_rds_to_skip_fit), as.character(preserve_existing_diagnostic_pdf))),
-  tibble(metadata_group = "stan", metadata_name = c("stan_chains", "stan_iter", "stan_warmup", "stan_thin", "stan_seed", "stan_adapt_delta", "stan_max_treedepth", "posterior_prediction_draws"), metadata_value = c(stan_chains, stan_iter, stan_warmup, stan_thin, stan_seed, stan_adapt_delta, stan_max_treedepth, posterior_prediction_draws)),
-  tibble(metadata_group = "prior", metadata_name = c("anchor_prior_branch_label", "neutral_prior_branch_label", "site_prior_main_label", "site_prior_sensitivity_label", "anchor_alpha_gp_female_under20", "anchor_materiality_risk", "anchor_materiality_cure_fraction", "anchor_materiality_false_positive_burden", "anchor_materiality_FP100", "anchor_materiality_NB", "anchor_materiality_PPV", "anchor_materiality_TPR"), metadata_value = c("anchor_informed", "neutral_no_external_info", "normal_0_1_main", "student_t3_0_1_sensitivity", -9.581369553169, prior_materiality_thresholds$risk, prior_materiality_thresholds$cure_fraction, prior_materiality_thresholds$false_positive_burden, prior_materiality_thresholds$FP100, prior_materiality_thresholds$NB, prior_materiality_thresholds$PPV, prior_materiality_thresholds$TPR)),
-  tibble(metadata_group = "grid", metadata_name = c("include_merged_incidence_site_supplementary", "common_horizons_year", "risk_thresholds", "n_models_total", "n_models_reused", "n_models_to_fit"), metadata_value = c(as.character(include_merged_incidence_site_supplementary), paste(horizons_year, collapse = ","), paste(format(risk_thresholds, trim = TRUE, scientific = FALSE), collapse = ","), nrow(model_grid), n_models_reused, n_models_to_fit))
+  metadata_tbl(
+    "stage",
+    c("stage_name", "stage_role", "branch", "risk_scale"),
+    c(
+      "Stage 8A",
+      "Bayesian transition-only cure branch aligned to revised v5 specification.",
+      "Stage8A",
+      "transition_only_main"
+    )
+  ),
+  metadata_tbl(
+    "paths",
+    c(
+      "stage1_export_path",
+      "stage1_bundle_file",
+      "stage1_datasets_file",
+      "stage5_export_path",
+      "stage6_export_path",
+      "stage8b_export_path",
+      "export_path"
+    ),
+    c(
+      normalize_existing_path(stage1_export_path),
+      normalize_existing_path(stage1_bundle_file),
+      normalize_existing_path(stage1_datasets_file),
+      normalize_existing_path(stage5_export_path),
+      normalize_existing_path(stage6_export_path),
+      normalize_existing_path(stage8b_export_path),
+      normalize_existing_path(export_path)
+    )
+  ),
+  metadata_tbl(
+    "reuse",
+    c(
+      "reuse_existing_stage8_outputs",
+      "require_existing_rds_to_skip_fit",
+      "preserve_existing_diagnostic_pdf"
+    ),
+    c(
+      reuse_existing_stage8_outputs,
+      require_existing_rds_to_skip_fit,
+      preserve_existing_diagnostic_pdf
+    )
+  ),
+  metadata_tbl(
+    "stan",
+    c(
+      "stan_chains",
+      "stan_iter",
+      "stan_warmup",
+      "stan_thin",
+      "stan_seed",
+      "stan_adapt_delta",
+      "stan_max_treedepth",
+      "posterior_prediction_draws"
+    ),
+    c(
+      stan_chains,
+      stan_iter,
+      stan_warmup,
+      stan_thin,
+      stan_seed,
+      stan_adapt_delta,
+      stan_max_treedepth,
+      posterior_prediction_draws
+    )
+  ),
+  metadata_tbl(
+    "prior",
+    c(
+      "anchor_prior_branch_label",
+      "neutral_prior_branch_label",
+      "site_prior_main_label",
+      "site_prior_sensitivity_label",
+      "anchor_alpha_gp_female_under20",
+      "anchor_materiality_risk",
+      "anchor_materiality_cure_fraction",
+      "anchor_materiality_false_positive_burden",
+      "anchor_materiality_FP100",
+      "anchor_materiality_NB",
+      "anchor_materiality_PPV",
+      "anchor_materiality_TPR"
+    ),
+    c(
+      "anchor_informed",
+      "neutral_no_external_info",
+      "normal_0_1_main",
+      "student_t3_0_1_sensitivity",
+      -9.581369553169,
+      prior_materiality_thresholds$risk,
+      prior_materiality_thresholds$cure_fraction,
+      prior_materiality_thresholds$false_positive_burden,
+      prior_materiality_thresholds$FP100,
+      prior_materiality_thresholds$NB,
+      prior_materiality_thresholds$PPV,
+      prior_materiality_thresholds$TPR
+    )
+  ),
+  metadata_tbl(
+    "grid",
+    c(
+      "include_merged_incidence_site_supplementary",
+      "common_horizons_year",
+      "risk_thresholds",
+      "n_models_total",
+      "n_models_reused",
+      "n_models_to_fit"
+    ),
+    c(
+      include_merged_incidence_site_supplementary,
+      paste(horizons_year, collapse = ","),
+      paste(format(risk_thresholds, trim = TRUE, scientific = FALSE), collapse = ","),
+      nrow(model_grid),
+      n_models_reused,
+      n_models_to_fit
+    )
+  )
 )
 
 output_audit <- make_stage8_output_audit(model_grid, model_registry, posterior_cohort_yearly, posterior_classification, ppc_summary, posterior_delta_vs_nocure, diagnostic_pdf_path)
@@ -3679,7 +4137,7 @@ if (nrow(posterior_cohort_yearly) > 0L) {
     labs(title = "Stage 8A posterior cohort mean risk trajectories", x = "Horizon (years)", y = "Posterior mean risk") +
     theme_bw() + theme(legend.position = "none")
   plot_objects[["bayes_stage8_plot01_risk_trajectories"]] <- g_risk
-
+  
   g_hazard <- posterior_cohort_yearly %>%
     ggplot(aes(x = horizon_year, y = meanHazard_mean, color = model_id, fill = model_id)) +
     geom_ribbon(aes(ymin = meanHazard_q025, ymax = meanHazard_q975), alpha = 0.15, linewidth = 0) +
@@ -3750,6 +4208,7 @@ if (nrow(uncured_decomposition) > 0L) {
     theme_bw() + theme(legend.position = "none")
   plot_objects[["bayes_stage8_plot07_uncured_decomposition"]] <- g_uncured
 }
+
 # 🔴 Export: CSV tables, plot files, and final manifest ===============================
 ## 🟠 Export: write schema-preserving Stage-8A artifacts ===============================
 model_registry <- simplify_scalar_list_cols(model_registry)

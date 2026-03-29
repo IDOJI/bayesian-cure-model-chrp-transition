@@ -268,12 +268,52 @@ bind_rows_from_df_lists <- function(..., object_name = "input_objects") {
   dplyr::bind_rows(out)
 }
 
+collapse_dataset_key_suffixes <- function(df) {
+  if (is.null(df) || !inherits(df, "data.frame")) {
+    return(df)
+  }
+
+  out <- tibble::as_tibble(df)
+
+  if (!"dataset_key" %in% names(out)) {
+    out$dataset_key <- NA_character_
+  }
+
+  if ("dataset_key.x" %in% names(out)) {
+    out$dataset_key <- dplyr::coalesce(out$dataset_key, as.character(out[["dataset_key.x"]]))
+  }
+
+  if ("dataset_key.y" %in% names(out)) {
+    out$dataset_key <- dplyr::coalesce(out$dataset_key, as.character(out[["dataset_key.y"]]))
+  }
+
+  out %>%
+    select(-any_of(c("dataset_key.x", "dataset_key.y")))
+}
+
+assert_no_dataset_key_suffixes <- function(df, object_name) {
+  bad_cols <- intersect(c("dataset_key.x", "dataset_key.y"), names(df))
+  if (length(bad_cols) > 0L) {
+    stop(
+      sprintf(
+        "`%s` still contains unresolved dataset_key suffix columns: %s",
+        object_name,
+        paste(bad_cols, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 safe_read_csv_file <- function(path) {
   if (!file.exists(path)) {
     return(NULL)
   }
   tryCatch(
-    readr::read_csv(path, show_col_types = FALSE, progress = FALSE),
+    collapse_dataset_key_suffixes(
+      readr::read_csv(path, show_col_types = FALSE, progress = FALSE)
+    ),
     error = function(e) NULL
   )
 }
@@ -610,13 +650,21 @@ join_horizon_metadata <- function(df, horizon_registry) {
   horizon_meta <- horizon_registry %>%
     mutate(horizon_label = paste0("Year ", horizon_year))
 
+  overlap_cols <- intersect(
+    setdiff(names(horizon_meta), c("dataset", "horizon_year")),
+    names(df)
+  )
+
   df %>%
+    collapse_dataset_key_suffixes() %>%
     mutate(
       dataset = normalize_dataset_label(dataset),
       horizon_year = as.integer(horizon_year)
     ) %>%
     drop_horizon_metadata_columns() %>%
-    left_join(horizon_meta, by = c("dataset", "horizon_year"))
+    select(-any_of(overlap_cols)) %>%
+    left_join(horizon_meta, by = c("dataset", "horizon_year")) %>%
+    collapse_dataset_key_suffixes()
 }
 
 join_formula_metadata <- function(df, formula_registry_core) {
@@ -1905,6 +1953,7 @@ finalize_model_registry <- function(model_registry, formula_registry_core, horiz
     ) %>%
     join_formula_metadata(formula_registry_core) %>%
     augment_anchor_horizon_metadata(horizon_registry) %>%
+    collapse_dataset_key_suffixes() %>%
     arrange(match(dataset, dataset_order), formula_name, model_family)
 
   out
@@ -1930,6 +1979,7 @@ finalize_subject_horizon_risk_long <- function(subject_horizon_risk_long, formul
     ) %>%
     join_formula_metadata(formula_registry_core) %>%
     join_horizon_metadata(horizon_registry) %>%
+    collapse_dataset_key_suffixes() %>%
     arrange(match(dataset, dataset_order), formula_name, model_family, unique_person_id, horizon_year)
 }
 
@@ -1953,6 +2003,7 @@ finalize_model_performance_long <- function(model_performance_long, formula_regi
     ) %>%
     join_formula_metadata(formula_registry_core) %>%
     join_horizon_metadata(horizon_registry) %>%
+    collapse_dataset_key_suffixes() %>%
     arrange(match(dataset, dataset_order), formula_name, model_family, horizon_year, threshold, metric_domain, metric_name)
 }
 
@@ -1976,6 +2027,7 @@ finalize_calibration_bins_long <- function(calibration_bins_long, formula_regist
     ) %>%
     join_formula_metadata(formula_registry_core) %>%
     join_horizon_metadata(horizon_registry) %>%
+    collapse_dataset_key_suffixes() %>%
     arrange(match(dataset, dataset_order), formula_name, model_family, horizon_year, bin_index)
 }
 
@@ -1999,6 +2051,7 @@ finalize_calibration_diagnostics_long <- function(calibration_diagnostics_long, 
     ) %>%
     join_formula_metadata(formula_registry_core) %>%
     join_horizon_metadata(horizon_registry) %>%
+    collapse_dataset_key_suffixes() %>%
     arrange(match(dataset, dataset_order), formula_name, model_family, horizon_year)
 }
 
@@ -2974,7 +3027,7 @@ prepare_stage5_plot_source_backbone <- function(df) {
     return(tibble())
   }
 
-  out <- tibble::as_tibble(df)
+  out <- collapse_dataset_key_suffixes(df)
 
   if ("dataset" %in% names(out)) {
     out <- out %>%
@@ -3466,6 +3519,11 @@ if (reuse_existing_core_candidate) {
     formula_registry_core = formula_registry_core,
     horizon_registry = horizon_registry
   )
+
+  assert_no_dataset_key_suffixes(subject_horizon_risk_long, "subject_horizon_risk_long")
+  assert_no_dataset_key_suffixes(model_performance_long, "model_performance_long")
+  assert_no_dataset_key_suffixes(calibration_bins_long, "calibration_bins_long")
+  assert_no_dataset_key_suffixes(calibration_diagnostics_long, "calibration_diagnostics_long")
 
   qc_summary <- build_stage5_qc_summary(
     model_plan = model_plan,
@@ -4084,6 +4142,11 @@ if (is.na(core_build_mode)) {
     formula_registry_core = formula_registry_core,
     horizon_registry = horizon_registry
   )
+
+  assert_no_dataset_key_suffixes(subject_horizon_risk_long, "subject_horizon_risk_long")
+  assert_no_dataset_key_suffixes(model_performance_long, "model_performance_long")
+  assert_no_dataset_key_suffixes(calibration_bins_long, "calibration_bins_long")
+  assert_no_dataset_key_suffixes(calibration_diagnostics_long, "calibration_diagnostics_long")
 
   qc_summary <- build_stage5_qc_summary(
     model_plan = model_plan,

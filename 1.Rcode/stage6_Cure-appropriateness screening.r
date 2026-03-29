@@ -1,5 +1,5 @@
 # 🔴 Configure: paths, reuse policy, and spec guards ===============================
-run_root_dir <- NA_character_
+run_root_dir <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage6_Cure-appropriateness screening'
 # If the completed Stage 6 run already lives in the folder you want to export into,
 # you usually only need to change `export_path`. The script will auto-resolve
 # `run_root_dir` from `export_path` whenever possible.
