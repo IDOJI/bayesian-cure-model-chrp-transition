@@ -1,12 +1,28 @@
-
 # 🔴 Configure: runtime paths and rerun-safe switches ===============================
-run_root_dir <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage7_Frequentist cure block'
-export_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage7_Frequentist cure block'
+# 🟧 Configure: OS-aware root path ===============================
+sys_name <- Sys.info()[["sysname"]]
+
+project_root <- switch(
+  sys_name,
+  "Darwin"  = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
+  "Windows" = "C:/Users/clair/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
+  stop("Unsupported OS: ", sys_name)
+)
+
+# 🟧 Configure: runtime paths ===============================
+run_root_dir <- file.path(project_root, "stage7_Frequentist cure block")
+export_path <- file.path(project_root, "stage7_Frequentist cure block")
 stage7_refresh_export_suffix <- ""
 
-stage1_data_path <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage1_Backbone lock"
-stage6_screening_file <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage6_Cure-appropriateness screening/stage6_carry_forward_flag_table.csv"
-stage5_root_dir <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage5_Individualized no-cure comparator"
+stage1_data_path <- file.path(project_root, "stage1_Backbone lock")
+stage6_screening_file <- file.path(
+  project_root,
+  "stage6_Cure-appropriateness screening",
+  "stage6_carry_forward_flag_table.csv"
+)
+stage5_root_dir <- file.path(project_root, "stage5_Individualized no-cure comparator")
+
+
 
 refresh_patched_exports_even_when_outputs_exist <- FALSE
 refresh_ipcw_registry_even_when_output_exists <- FALSE
@@ -2702,3 +2718,511 @@ output_manifest_file <- safe_write_csv(output_manifest, make_output_path("stage7
 
 message("✅ Stage 7 revised refresh completed using existing Stage 7 results whenever possible, with PDF and per-plot PNG exports preserved.")
 print(output_manifest)
+
+
+# 🔴 Patch: feedback-reflected export corrections ===============================
+## 🟠 Define: post-fit repair helpers ===============================
+stage7_v9_trim_na_char <- function(x) {
+  out <- trimws(as.character(x))
+  out[out %in% c('', 'NA', 'NaN', 'NULL')] <- NA_character_
+  out
+}
+
+stage7_v9_first_nonmissing_num <- function(df, candidates, default = NA_real_) {
+  if (nrow(df) == 0L) return(numeric(0))
+  out <- rep(default, nrow(df))
+  for (nm in candidates) {
+    if (!nm %in% names(df)) next
+    cand <- suppressWarnings(as.numeric(df[[nm]]))
+    idx <- is.na(out) & !is.na(cand)
+    out[idx] <- cand[idx]
+  }
+  out
+}
+
+stage7_v9_first_nonmissing_chr <- function(df, candidates, default = NA_character_) {
+  if (nrow(df) == 0L) return(character(0))
+  out <- rep(default, nrow(df))
+  for (nm in candidates) {
+    if (!nm %in% names(df)) next
+    cand <- stage7_v9_trim_na_char(df[[nm]])
+    idx <- (is.na(out) | out == '') & !is.na(cand) & cand != ''
+    out[idx] <- cand[idx]
+  }
+  out
+}
+
+stage7_v9_detect_site_term <- function(x) {
+  txt <- tolower(stage7_v9_trim_na_char(x))
+  out <- stringr::str_detect(txt, '(^|[^[:alnum:]_])(site|site_snu)([^[:alnum:]_]|$)')
+  out[is.na(out)] <- FALSE
+  out
+}
+
+stage7_v9_detect_age_sex_interaction <- function(x) {
+  txt <- stage7_v9_trim_na_char(x)
+  out <- stringr::str_detect(txt, 'age_s\\s*:\\s*sex_num|sex_num\\s*:\\s*age_s')
+  out[is.na(out)] <- FALSE
+  out
+}
+
+stage7_v9_formula_label_fallback <- function(formula_variant, site_branch, interaction_branch, existing_label = NA_character_) {
+  out <- stage7_v9_trim_na_char(existing_label)
+  fv <- tolower(stage7_v9_trim_na_char(formula_variant))
+  sb <- tolower(stage7_v9_trim_na_char(site_branch))
+  ib <- tolower(stage7_v9_trim_na_char(interaction_branch))
+  need <- is.na(out) | out == ''
+  out[need & stringr::str_detect(fv, 'benchmark')] <- 'Benchmark'
+  out[need & sb == 'site_adjusted' & (ib == 'age_sex_interaction' | stringr::str_detect(fv, 'interaction'))] <- 'Site + interaction'
+  out[need & sb == 'site_adjusted'] <- 'Site-added'
+  out[need & (ib == 'age_sex_interaction' | stringr::str_detect(fv, 'interaction'))] <- 'Interaction'
+  out[need] <- dplyr::coalesce(out[need], 'Base')
+  out
+}
+
+stage7_v9_formula_scope_fallback <- function(existing_scope = NA_character_) {
+  out <- stage7_v9_trim_na_char(existing_scope)
+  out[is.na(out) | out == ''] <- 'main_transition_only_scale'
+  out
+}
+
+stage7_v9_site_interpretation_fallback <- function(dataset, uses_site, existing_value = NA_character_) {
+  out <- stage7_v9_trim_na_char(existing_value)
+  ds <- stage7_v9_trim_na_char(dataset)
+  need <- is.na(out) | out == ''
+  out[need & ds == 'merged' & isTRUE(uses_site[need])] <- 'structural_context_proxy_not_causal_treatment_effect'
+  out[need & (ds != 'merged' | !isTRUE(uses_site[need]))] <- 'not_applicable'
+  out
+}
+
+stage7_v9_is_cure_model <- function(df) {
+  role_txt <- tolower(coalesce_character(
+    col_or_chr(df, 'model_block'),
+    col_or_chr(df, 'model_class'),
+    col_or_chr(df, 'model_id')
+  ))
+  derived <- stringr::str_detect(role_txt, 'cure') & !stringr::str_detect(role_txt, 'no[-_ ]?cure|benchmark')
+  if ('is_cure_model' %in% names(df)) {
+    supplied <- suppressWarnings(as.logical(df[['is_cure_model']]))
+    derived <- dplyr::coalesce(supplied, derived)
+  }
+  derived
+}
+
+stage7_v9_incidence_link <- function(df) {
+  existing <- stage7_v9_first_nonmissing_chr(df, c('incidence_link'), default = NA_character_)
+  need <- is.na(existing) | existing == ''
+  out <- existing
+  out[need & stage7_v9_is_cure_model(df)] <- 'logit'
+  out
+}
+
+stage7_v9_coalesce_dataset_key <- function(df) {
+  stage7_v9_first_nonmissing_chr(
+    df,
+    c('dataset_key', 'dataset_key.x', 'dataset_key.y', 'stage6_join_key'),
+    default = NA_character_
+  ) %>%
+    dplyr::coalesce(make_stage6_join_key(col_or_chr(df, 'dataset'), col_or_chr(df, 'site_branch')))
+}
+
+stage7_v9_patch_metadata <- function(df) {
+  df <- tibble::as_tibble(df)
+  if (nrow(df) == 0L) return(df)
+
+  df <- ensure_columns_exist(
+    df,
+    list(
+      dataset = NA_character_,
+      formula_variant = NA_character_,
+      formula_label = NA_character_,
+      site_branch = NA_character_,
+      interaction_branch = NA_character_,
+      formula_scope = NA_character_,
+      site_term_interpretation = NA_character_,
+      risk_scale = NA_character_,
+      incidence_rhs = NA_character_,
+      latency_rhs = NA_character_,
+      uses_site = NA,
+      uses_age_sex_interaction = NA,
+      incidence_uses_site = NA,
+      latency_uses_site = NA,
+      site_placement_label = NA_character_,
+      incidence_link = NA_character_
+    )
+  )
+
+  inc_site <- dplyr::coalesce(as.logical(df$incidence_uses_site), stage7_v9_detect_site_term(df$incidence_rhs))
+  lat_site <- dplyr::coalesce(as.logical(df$latency_uses_site), stage7_v9_detect_site_term(df$latency_rhs))
+  uses_site <- dplyr::coalesce(as.logical(df$uses_site), inc_site | lat_site)
+  uses_interaction <- dplyr::coalesce(
+    as.logical(df$uses_age_sex_interaction),
+    stage7_v9_detect_age_sex_interaction(df$incidence_rhs) | stage7_v9_detect_age_sex_interaction(df$latency_rhs)
+  )
+
+  out <- df %>%
+    mutate(
+      dataset = stage7_v9_trim_na_char(dataset),
+      formula_variant = stage7_v9_trim_na_char(formula_variant),
+      site_branch = dplyr::coalesce(stage7_v9_trim_na_char(site_branch), if_else(dataset == 'merged' & stage7_v9_detect_site_term(latency_rhs), 'site_adjusted', 'site_free')),
+      interaction_branch = dplyr::coalesce(stage7_v9_trim_na_char(interaction_branch), if_else(uses_interaction, 'age_sex_interaction', 'no_age_sex_interaction')),
+      incidence_uses_site = inc_site,
+      latency_uses_site = lat_site,
+      uses_site = uses_site,
+      uses_age_sex_interaction = uses_interaction,
+      formula_label = stage7_v9_formula_label_fallback(formula_variant, site_branch, interaction_branch, formula_label),
+      formula_scope = stage7_v9_formula_scope_fallback(formula_scope),
+      risk_scale = dplyr::coalesce(stage7_v9_trim_na_char(risk_scale), main_risk_scale),
+      dataset_key = stage7_v9_coalesce_dataset_key(cur_data_all()),
+      site_placement_label = derive_site_placement_label(
+        dataset = dataset,
+        site_branch = site_branch,
+        existing_label = NA_character_,
+        incidence_uses_site = incidence_uses_site,
+        latency_uses_site = latency_uses_site
+      ),
+      site_term_interpretation = dplyr::case_when(
+        dataset == 'merged' & uses_site ~ 'structural_context_proxy_not_causal_treatment_effect',
+        TRUE ~ dplyr::coalesce(stage7_v9_trim_na_char(site_term_interpretation), 'not_applicable')
+      ),
+      incidence_link = stage7_v9_incidence_link(cur_data_all())
+    )
+
+  if ('dataset_key.x' %in% names(out)) out[['dataset_key.x']] <- out[['dataset_key']]
+  if ('dataset_key.y' %in% names(out)) out[['dataset_key.y']] <- out[['dataset_key']]
+  out
+}
+
+stage7_v9_parameter_counts <- function(coefficients_tbl) {
+  coefficients_tbl %>%
+    tibble::as_tibble() %>%
+    stage7_v9_patch_metadata() %>%
+    filter(!is.na(model_id), model_id != '', !is.na(term), term != '') %>%
+    group_by(dataset, dataset_key, formula_variant, site_branch, interaction_branch, model_id) %>%
+    summarise(n_parameters_from_coeff = dplyr::n_distinct(paste(component, term, sep = '::')), .groups = 'drop')
+}
+
+stage7_v9_patch_fit_metrics <- function(fit_registry_tbl, coefficients_tbl = tibble()) {
+  fit_registry_tbl <- tibble::as_tibble(fit_registry_tbl) %>% stage7_v9_patch_metadata()
+  if (nrow(fit_registry_tbl) == 0L) return(fit_registry_tbl)
+
+  param_counts <- if (nrow(coefficients_tbl) > 0L) stage7_v9_parameter_counts(coefficients_tbl) else tibble()
+
+  out <- fit_registry_tbl %>%
+    left_join(param_counts, by = c('dataset','dataset_key','formula_variant','site_branch','interaction_branch','model_id')) %>%
+    mutate(
+      logLik = stage7_v9_first_nonmissing_num(cur_data_all(), c('logLik', 'loglik', 'fit_logLik', 'model_logLik', 'maximized_logLik', 'max_logLik', 'log_likelihood', 'll')),
+      n_parameters = dplyr::coalesce(
+        stage7_v9_first_nonmissing_num(cur_data_all(), c('n_parameters', 'parameter_count', 'df_model', 'effective_parameter_n')),
+        n_parameters_from_coeff
+      ),
+      AIC = dplyr::coalesce(
+        stage7_v9_first_nonmissing_num(cur_data_all(), c('AIC', 'fit_AIC', 'model_AIC', 'aic')),
+        if_else(is.finite(logLik) & is.finite(n_parameters), -2 * logLik + 2 * n_parameters, NA_real_)
+      ),
+      BIC = dplyr::coalesce(
+        stage7_v9_first_nonmissing_num(cur_data_all(), c('BIC', 'fit_BIC', 'model_BIC', 'bic')),
+        if_else(is.finite(logLik) & is.finite(n_parameters) & is.finite(suppressWarnings(as.numeric(n))), -2 * logLik + log(pmax(suppressWarnings(as.numeric(n)), 1)) * n_parameters, NA_real_)
+      )
+    ) %>%
+    select(-any_of('n_parameters_from_coeff'))
+
+  if ('loglik' %in% names(out)) out[['loglik']] <- dplyr::coalesce(suppressWarnings(as.numeric(out[['loglik']])), out[['logLik']])
+  out
+}
+
+stage7_v9_standardize_fit_metric_columns <- function(df) {
+  df <- tibble::as_tibble(df)
+  if (nrow(df) == 0L) return(df)
+  df %>%
+    mutate(
+      std_logLik = stage7_v9_first_nonmissing_num(cur_data_all(), c('logLik', 'loglik', 'fit_logLik', 'model_logLik', 'maximized_logLik', 'max_logLik', 'log_likelihood', 'll')),
+      std_n_parameters = stage7_v9_first_nonmissing_num(cur_data_all(), c('n_parameters', 'parameter_count', 'df_model', 'effective_parameter_n')),
+      std_AIC = dplyr::coalesce(
+        stage7_v9_first_nonmissing_num(cur_data_all(), c('AIC', 'fit_AIC', 'model_AIC', 'aic')),
+        if_else(is.finite(std_logLik) & is.finite(std_n_parameters), -2 * std_logLik + 2 * std_n_parameters, NA_real_)
+      ),
+      std_BIC = dplyr::coalesce(
+        stage7_v9_first_nonmissing_num(cur_data_all(), c('BIC', 'fit_BIC', 'model_BIC', 'bic')),
+        if_else(is.finite(std_logLik) & is.finite(std_n_parameters) & is.finite(suppressWarnings(as.numeric(n))), -2 * std_logLik + log(pmax(suppressWarnings(as.numeric(n)), 1)) * std_n_parameters, NA_real_)
+      ),
+      std_convergence_status = stage7_v9_first_nonmissing_chr(cur_data_all(), c('overall_status', 'fit_status', 'status', 'convergence_status'), default = NA_character_),
+      std_model_role = dplyr::case_when(
+        stringr::str_detect(tolower(stage7_v9_first_nonmissing_chr(cur_data_all(), c('model_block', 'model_class', 'model_id'), default = '')), 'no[-_ ]?cure') ~ 'no_cure',
+        stringr::str_detect(tolower(stage7_v9_first_nonmissing_chr(cur_data_all(), c('model_block', 'model_class', 'model_id'), default = '')), 'cure') ~ 'cure',
+        TRUE ~ NA_character_
+      )
+    )
+}
+
+stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl = tibble()) {
+  output_schema <- tibble(
+    dataset_key = character(), dataset = character(), formula_variant = character(), site_branch = character(),
+    family_pair = character(), cure_model_id = character(), matched_noncure_model_id = character(),
+    logLik_noncure = double(), logLik_cure = double(), delta_logLik_cure_minus_noncure = double(),
+    LR_2delta_logLik = double(), delta_AIC_cure_minus_noncure = double(), delta_BIC_cure_minus_noncure = double(),
+    lrt_calibration_status = character(), lrt_pvalue_bootstrap = double(), same_family_fit_gain_signal = character(),
+    convergence_pair_flag = logical(), risk_scale = character()
+  )
+
+  fit_registry_tbl <- tibble::as_tibble(fit_registry_tbl)
+  if (nrow(fit_registry_tbl) == 0L) return(output_schema)
+
+  cure_df <- stage7_v9_standardize_fit_metric_columns(fit_registry_tbl) %>%
+    stage7_v9_patch_metadata() %>%
+    filter(stage7_v9_is_cure_model(cur_data_all())) %>%
+    mutate(
+      family_pair = dplyr::coalesce(stage7_v9_trim_na_char(model_family), stage7_v9_trim_na_char(latency_type), stage7_v9_trim_na_char(model_id)),
+      matched_noncure_model_id = stage7_v9_trim_na_char(matched_nocure_model_id),
+      dataset_key = dplyr::coalesce(stage7_v9_trim_na_char(dataset_key), make_stage6_join_key(dataset, site_branch))
+    )
+
+  noncure_stage7 <- stage7_v9_standardize_fit_metric_columns(fit_registry_tbl) %>%
+    stage7_v9_patch_metadata() %>%
+    filter(std_model_role == 'no_cure') %>%
+    mutate(
+      family_pair = dplyr::coalesce(stage7_v9_trim_na_char(model_family), stage7_v9_trim_na_char(latency_type), stage7_v9_trim_na_char(model_id)),
+      dataset_key = dplyr::coalesce(stage7_v9_trim_na_char(dataset_key), make_stage6_join_key(dataset, site_branch))
+    )
+
+  stage5_fit_tbl <- ensure_columns_exist(stage5_fit_tbl, list(dataset = NA_character_, source_dataset = NA_character_, formula_variant = NA_character_, formula_name = NA_character_, analysis_variant = NA_character_, site_branch = NA_character_, model_family = NA_character_, latency_type = NA_character_, model_id = NA_character_, dataset_key = NA_character_))
+  noncure_stage5 <- stage7_v9_standardize_fit_metric_columns(stage5_fit_tbl) %>%
+    stage7_v9_patch_metadata() %>%
+    mutate(
+      dataset = dplyr::coalesce(stage7_v9_trim_na_char(dataset), stage7_v9_trim_na_char(source_dataset)),
+      formula_variant = dplyr::coalesce(stage7_v9_trim_na_char(formula_variant), stage7_v9_trim_na_char(formula_name), stage7_v9_trim_na_char(analysis_variant)),
+      site_branch = dplyr::coalesce(stage7_v9_trim_na_char(site_branch), if_else(dataset == 'merged' & stage7_v9_detect_site_term(latency_rhs), 'site_adjusted', 'site_free')),
+      family_pair = dplyr::coalesce(stage7_v9_trim_na_char(model_family), stage7_v9_trim_na_char(latency_type), stage7_v9_trim_na_char(model_id)),
+      dataset_key = dplyr::coalesce(stage7_v9_trim_na_char(dataset_key), make_stage6_join_key(dataset, site_branch))
+    )
+
+  noncure_df <- bind_rows(noncure_stage7, noncure_stage5) %>%
+    filter(!is.na(dataset), !is.na(formula_variant)) %>%
+    arrange(dataset_key, formula_variant, family_pair, desc(!is.na(std_logLik))) %>%
+    group_by(dataset_key, formula_variant, family_pair, model_id) %>%
+    slice_head(n = 1) %>%
+    ungroup()
+
+  if (nrow(cure_df) == 0L) return(output_schema)
+
+  by_model_id <- cure_df %>%
+    filter(!is.na(matched_noncure_model_id), matched_noncure_model_id != '') %>%
+    left_join(
+      noncure_df %>%
+        select(dataset_key, formula_variant, model_id, std_logLik, std_AIC, std_BIC, std_n_parameters, std_convergence_status) %>%
+        rename(noncure_model_id = model_id, logLik_noncure = std_logLik, AIC_noncure = std_AIC, BIC_noncure = std_BIC, n_parameters_noncure = std_n_parameters, convergence_status_noncure = std_convergence_status),
+      by = c('dataset_key', 'formula_variant', 'matched_noncure_model_id' = 'noncure_model_id')
+    )
+
+  remaining <- cure_df %>%
+    filter(is.na(matched_noncure_model_id) | matched_noncure_model_id == '') %>%
+    left_join(
+      noncure_df %>%
+        select(dataset_key, formula_variant, family_pair, model_id, std_logLik, std_AIC, std_BIC, std_n_parameters, std_convergence_status) %>%
+        rename(matched_noncure_model_id = model_id, logLik_noncure = std_logLik, AIC_noncure = std_AIC, BIC_noncure = std_BIC, n_parameters_noncure = std_n_parameters, convergence_status_noncure = std_convergence_status),
+      by = c('dataset_key', 'formula_variant', 'family_pair')
+    )
+
+  out <- bind_rows(by_model_id, remaining) %>%
+    transmute(
+      dataset_key = dataset_key,
+      dataset = stage7_v9_trim_na_char(dataset),
+      formula_variant = stage7_v9_trim_na_char(formula_variant),
+      site_branch = stage7_v9_trim_na_char(site_branch),
+      family_pair = stage7_v9_trim_na_char(family_pair),
+      cure_model_id = stage7_v9_trim_na_char(model_id),
+      matched_noncure_model_id = stage7_v9_trim_na_char(matched_noncure_model_id),
+      logLik_noncure = as.numeric(logLik_noncure),
+      logLik_cure = as.numeric(std_logLik),
+      delta_logLik_cure_minus_noncure = logLik_cure - logLik_noncure,
+      LR_2delta_logLik = if_else(is.finite(logLik_cure) & is.finite(logLik_noncure), 2 * (logLik_cure - logLik_noncure), NA_real_),
+      delta_AIC_cure_minus_noncure = as.numeric(std_AIC) - as.numeric(AIC_noncure),
+      delta_BIC_cure_minus_noncure = as.numeric(std_BIC) - as.numeric(BIC_noncure),
+      lrt_calibration_status = dplyr::case_when(
+        is.na(logLik_noncure) | is.na(logLik_cure) ~ 'missing_likelihood_metrics',
+        TRUE ~ 'delta_report_only_boundary_nonregular_problem'
+      ),
+      lrt_pvalue_bootstrap = NA_real_,
+      same_family_fit_gain_signal = dplyr::case_when(
+        is.na(delta_logLik_cure_minus_noncure) ~ 'cannot_assess',
+        delta_logLik_cure_minus_noncure > 0 & !is.na(delta_AIC_cure_minus_noncure) & delta_AIC_cure_minus_noncure < 0 & !is.na(delta_BIC_cure_minus_noncure) & delta_BIC_cure_minus_noncure < 0 ~ 'coherent_cure_fit_gain',
+        delta_logLik_cure_minus_noncure > 0 ~ 'partial_cure_fit_gain',
+        TRUE ~ 'no_cure_fit_gain'
+      ),
+      convergence_pair_flag = is_success_status(std_convergence_status) & is_success_status(convergence_status_noncure),
+      risk_scale = dplyr::coalesce(stage7_v9_trim_na_char(risk_scale), main_risk_scale)
+    ) %>%
+    distinct()
+
+  bind_rows(output_schema[0, ], out)
+}
+
+stage7_v9_integrate_survival_curve <- function(horizon_year, survival_value) {
+  h <- suppressWarnings(as.numeric(horizon_year))
+  s <- suppressWarnings(as.numeric(survival_value))
+  keep <- is.finite(h) & is.finite(s)
+  if (!any(keep)) return(NA_real_)
+  h <- h[keep]
+  s <- s[keep]
+  ord <- order(h)
+  h <- h[ord]
+  s <- s[ord]
+  agg <- tibble(h = h, s = s) %>% group_by(h) %>% summarise(s = dplyr::last(s), .groups = 'drop')
+  h <- agg$h
+  s <- agg$s
+  if (length(h) == 0L) return(NA_real_)
+  if (h[1] > 0) {
+    h <- c(0, h)
+    s <- c(1, s)
+  } else {
+    s[1] <- min(max(s[1], 0), 1)
+  }
+  if (length(h) == 1L) return(0)
+  sum(diff(h) * (head(s, -1) + tail(s, -1)) / 2)
+}
+
+stage7_v9_build_cure_supporting_decomposition <- function(fit_registry_tbl, risk_summary_tbl, subject_predictions_tbl = tibble()) {
+  output_schema <- tibble(
+    dataset = character(), dataset_key = character(), formula_variant = character(), formula_label = character(), site_branch = character(),
+    interaction_branch = character(), site_placement_label = character(), model_id = character(), model_class = character(),
+    model_family = character(), latency_type = character(), risk_scale = character(), horizon_year = integer(),
+    cure_fraction = double(), susceptible_fraction = double(), uncured_survival = double(), uncured_risk = double(), MSTu = double(),
+    uncured_mean_support_flag = character(), source_uncured_survival_col = character(), source_uncured_risk_col = character(),
+    stage6__cure_model_eligibility_flag = character(), stage6__followup_not_contradicted_flag = logical()
+  )
+
+  fit_registry_tbl <- tibble::as_tibble(fit_registry_tbl) %>% stage7_v9_patch_metadata()
+  risk_summary_tbl <- tibble::as_tibble(risk_summary_tbl) %>% stage7_v9_patch_metadata()
+  subject_predictions_tbl <- tibble::as_tibble(subject_predictions_tbl) %>% stage7_v9_patch_metadata()
+  if (nrow(fit_registry_tbl) == 0L) return(output_schema)
+
+  cure_model_level <- fit_registry_tbl %>%
+    filter(stage7_v9_is_cure_model(cur_data_all())) %>%
+    mutate(
+      cure_fraction = stage7_v9_first_nonmissing_num(cur_data_all(), c('cure_fraction', 'estimated_cure_fraction', 'mean_cure_fraction', 'pi_hat', 'cure_rate', 'cure_prob', 'prob_cure')),
+      susceptible_fraction = stage7_v9_first_nonmissing_num(cur_data_all(), c('susceptible_fraction', 'estimated_susceptible_fraction', 'mean_susceptible_fraction')),
+      MSTu = stage7_v9_first_nonmissing_num(cur_data_all(), c('MSTu', 'mstu', 'uncured_mean_survival', 'mean_survival_uncured', 'mst_uncured'))
+    ) %>%
+    mutate(
+      susceptible_fraction = if_else(is.na(susceptible_fraction) & !is.na(cure_fraction), 1 - cure_fraction, susceptible_fraction),
+      cure_fraction = if_else(is.na(cure_fraction) & !is.na(susceptible_fraction), 1 - susceptible_fraction, cure_fraction)
+    ) %>%
+    select(any_of(c('dataset','dataset_key','formula_variant','formula_label','site_branch','interaction_branch','site_placement_label','model_id','model_class','model_family','latency_type','risk_scale','stage6__cure_model_eligibility_flag','stage6__followup_not_contradicted_flag','cure_fraction','susceptible_fraction','MSTu'))) %>%
+    distinct()
+
+  if (nrow(cure_model_level) == 0L) return(output_schema)
+
+  uncured_survival_col <- first_existing_column_name(risk_summary_tbl, c('mean_survival_uncured', 'uncured_survival', 'mean_survival_susceptible', 'susceptible_survival', 'survival_uncured', 'survival_susceptible'))
+  uncured_risk_col <- first_existing_column_name(risk_summary_tbl, c('mean_risk_uncured', 'uncured_risk', 'mean_risk_susceptible', 'susceptible_risk', 'risk_uncured', 'risk_susceptible'))
+  cure_fraction_col <- first_existing_column_name(risk_summary_tbl, c('mean_cure_fraction', 'cure_fraction', 'predicted_cure_fraction'))
+
+  annual_tbl <- tibble()
+  if (!is.na(uncured_survival_col) || !is.na(uncured_risk_col) || !is.na(cure_fraction_col)) {
+    annual_tbl <- risk_summary_tbl %>%
+      filter(stage7_v9_is_cure_model(cur_data_all())) %>%
+      transmute(
+        dataset = dataset,
+        dataset_key = dataset_key,
+        formula_variant = formula_variant,
+        formula_label = formula_label,
+        site_branch = site_branch,
+        interaction_branch = interaction_branch,
+        site_placement_label = site_placement_label,
+        model_id = model_id,
+        model_class = model_class,
+        model_family = model_family,
+        latency_type = latency_type,
+        risk_scale = risk_scale,
+        horizon_year = as.integer(horizon_year),
+        uncured_survival = if (!is.na(uncured_survival_col)) suppressWarnings(as.numeric(.data[[uncured_survival_col]])) else NA_real_,
+        uncured_risk = if (!is.na(uncured_risk_col)) suppressWarnings(as.numeric(.data[[uncured_risk_col]])) else NA_real_,
+        cure_fraction_h = if (!is.na(cure_fraction_col)) suppressWarnings(as.numeric(.data[[cure_fraction_col]])) else NA_real_
+      )
+  }
+
+  if (nrow(annual_tbl) == 0L && nrow(subject_predictions_tbl) > 0L) {
+    annual_tbl <- subject_predictions_tbl %>%
+      filter(stage7_v9_is_cure_model(cur_data_all())) %>%
+      group_by(dataset, dataset_key, formula_variant, formula_label, site_branch, interaction_branch, site_placement_label, model_id, model_class, model_family, latency_type, risk_scale, horizon_year) %>%
+      summarise(
+        uncured_survival = mean(suppressWarnings(as.numeric(predicted_survival_susceptible)), na.rm = TRUE),
+        uncured_risk = mean(suppressWarnings(as.numeric(predicted_risk_susceptible)), na.rm = TRUE),
+        cure_fraction_h = mean(suppressWarnings(as.numeric(predicted_cure_fraction)), na.rm = TRUE),
+        .groups = 'drop'
+      )
+  }
+
+  mst_proxy_tbl <- if (nrow(annual_tbl) > 0L) {
+    annual_tbl %>%
+      group_by(dataset, dataset_key, formula_variant, site_branch, interaction_branch, site_placement_label, model_id) %>%
+      summarise(
+        MSTu_proxy = stage7_v9_integrate_survival_curve(horizon_year, uncured_survival),
+        MSTu_proxy_horizon_max = max(horizon_year, na.rm = TRUE),
+        .groups = 'drop'
+      )
+  } else {
+    tibble()
+  }
+
+  combined <- if (nrow(annual_tbl) > 0L) {
+    annual_tbl %>%
+      left_join(cure_model_level, by = c('dataset','dataset_key','formula_variant','formula_label','site_branch','interaction_branch','site_placement_label','model_id','model_class','model_family','latency_type','risk_scale')) %>%
+      left_join(mst_proxy_tbl, by = c('dataset','dataset_key','formula_variant','site_branch','interaction_branch','site_placement_label','model_id'))
+  } else {
+    cure_model_level %>% mutate(horizon_year = NA_integer_, uncured_survival = NA_real_, uncured_risk = NA_real_, cure_fraction_h = NA_real_, MSTu_proxy = NA_real_, MSTu_proxy_horizon_max = NA_real_)
+  }
+
+  out <- combined %>%
+    mutate(
+      cure_fraction = dplyr::coalesce(cure_fraction_h, cure_fraction),
+      susceptible_fraction = dplyr::coalesce(susceptible_fraction, if_else(!is.na(cure_fraction), 1 - cure_fraction, NA_real_)),
+      MSTu = dplyr::coalesce(MSTu, MSTu_proxy),
+      uncured_mean_support_flag = dplyr::case_when(
+        !is.na(stage7_v9_first_nonmissing_num(cur_data_all(), c('MSTu'))) ~ 'reported_from_fit_registry',
+        !is.na(MSTu_proxy) ~ paste0('restricted_to_', as.integer(MSTu_proxy_horizon_max), 'y_grid_proxy'),
+        (!is.na(uncured_survival) | !is.na(uncured_risk)) ~ 'annual_grid_only',
+        TRUE ~ 'not_available_from_stage7_outputs'
+      ),
+      source_uncured_survival_col = dplyr::coalesce(uncured_survival_col, 'predicted_survival_susceptible'),
+      source_uncured_risk_col = dplyr::coalesce(uncured_risk_col, 'predicted_risk_susceptible')
+    ) %>%
+    select(names(output_schema))
+
+  bind_rows(output_schema[0, ], out)
+}
+
+## 🟠 Apply: patched metadata and refreshed exports ===============================
+stage7_v9_export_root <- normalize_existing_path(export_path)
+
+stage7_v9_load_required <- function(file_name) {
+  path <- file.path(stage7_v9_export_root, file_name)
+  assert_file_exists(path, file_name)
+  safe_read_csv(path)
+}
+
+stage7_v9_fit_registry_tbl <- stage7_v9_load_required('stage7_fit_registry.csv')
+stage7_v9_coefficients_tbl <- stage7_v9_load_required('stage7_coefficients.csv')
+stage7_v9_risk_summary_tbl <- stage7_v9_load_required('stage7_risk_summary.csv')
+stage7_v9_delta_risk_tbl <- stage7_v9_load_required('stage7_delta_risk.csv')
+stage7_v9_threshold_metrics_tbl <- stage7_v9_load_required('stage7_threshold_metrics.csv')
+stage7_v9_subject_predictions_tbl <- stage7_v9_load_required('stage7_subject_predictions.csv')
+
+stage7_v9_fit_registry_tbl <- stage7_v9_patch_fit_metrics(stage7_v9_fit_registry_tbl, stage7_v9_coefficients_tbl)
+stage7_v9_coefficients_tbl <- stage7_v9_patch_metadata(stage7_v9_coefficients_tbl)
+stage7_v9_risk_summary_tbl <- stage7_v9_patch_metadata(stage7_v9_risk_summary_tbl)
+stage7_v9_delta_risk_tbl <- stage7_v9_patch_metadata(stage7_v9_delta_risk_tbl)
+stage7_v9_threshold_metrics_tbl <- stage7_v9_patch_metadata(stage7_v9_threshold_metrics_tbl)
+stage7_v9_subject_predictions_tbl <- stage7_v9_patch_metadata(stage7_v9_subject_predictions_tbl)
+
+stage7_v9_stage5_tbl <- if (exists('stage5_fit_registry_tbl')) stage5_fit_registry_tbl else load_stage5_fit_metrics_optional(stage5_root_dir)
+stage7_v9_family_contrast_tbl <- stage7_v9_build_family_matched_fit_contrast(stage7_v9_fit_registry_tbl, stage7_v9_stage5_tbl)
+stage7_v9_cure_decomp_tbl <- stage7_v9_build_cure_supporting_decomposition(stage7_v9_fit_registry_tbl, stage7_v9_risk_summary_tbl, stage7_v9_subject_predictions_tbl)
+
+safe_write_csv(stage7_v9_fit_registry_tbl, file.path(stage7_v9_export_root, 'stage7_fit_registry.csv'))
+safe_write_csv(stage7_v9_coefficients_tbl, file.path(stage7_v9_export_root, 'stage7_coefficients.csv'))
+safe_write_csv(stage7_v9_risk_summary_tbl, file.path(stage7_v9_export_root, 'stage7_risk_summary.csv'))
+safe_write_csv(stage7_v9_delta_risk_tbl, file.path(stage7_v9_export_root, 'stage7_delta_risk.csv'))
+safe_write_csv(stage7_v9_threshold_metrics_tbl, file.path(stage7_v9_export_root, 'stage7_threshold_metrics.csv'))
+safe_write_csv(stage7_v9_subject_predictions_tbl, file.path(stage7_v9_export_root, 'stage7_subject_predictions.csv'))
+safe_write_csv(stage7_v9_family_contrast_tbl, file.path(stage7_v9_export_root, 'stage7_family_matched_fit_contrast.csv'))
+safe_write_csv(stage7_v9_cure_decomp_tbl, file.path(stage7_v9_export_root, 'stage7_cure_supporting_decomposition.csv'))

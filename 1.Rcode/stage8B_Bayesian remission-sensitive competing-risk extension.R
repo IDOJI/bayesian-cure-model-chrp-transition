@@ -9,6 +9,7 @@ project_root <- switch(
   stop("Unsupported OS: ", sys_name)
 )
 
+
 # 🟧 Configure: Stage8B paths ===============================
 stage1_export_path  <- file.path(project_root, "stage1_Backbone lock")
 export_path         <- file.path(project_root, "stage8B_Bayesian remission-sensitive competing-risk extension")
@@ -460,16 +461,26 @@ read_stage6_screening_lookup <- function(path) {
   if (is.null(path) || !nzchar(path) || !file.exists(path)) {
     return(empty_stage6_lookup())
   }
+  
   df <- read_delimited_or_rds(path)
   df <- tibble::as_tibble(df)
   
-  dataset_col <- first_existing_name(df, c("dataset_key", "dataset", "source_dataset", "cohort", "screening_dataset_key"))
+  dataset_col <- first_existing_name(
+    df,
+    c("dataset_key", "dataset", "source_dataset", "cohort", "screening_dataset_key")
+  )
   formula_col <- first_existing_name(df, c("formula_anchor", "formula_name", "formula_type"))
-  eligibility_col <- first_existing_name(df, c("cure_model_eligibility_flag", "stage6_final_class", "final_decision_flag", "screening_flag"))
+  eligibility_col <- first_existing_name(
+    df,
+    c("cure_model_eligibility_flag", "stage6_final_class", "final_decision_flag", "screening_flag")
+  )
   receus_col <- first_existing_name(df, c("receus_primary_class", "primary_gate_flag"))
   presence_col <- first_existing_name(df, c("cure_presence_support_flag", "presence_modifier_flag"))
   followup_col <- first_existing_name(df, c("followup_not_contradicted_flag", "followup_contradiction_flag"))
-  note_col <- first_existing_name(df, c("screening_note", "screening_detail", "primary_gate_method", "screening_context"))
+  note_col <- first_existing_name(
+    df,
+    c("screening_note", "screening_detail", "primary_gate_method", "screening_context")
+  )
   
   if (is.null(dataset_col) || is.null(eligibility_col)) {
     return(empty_stage6_lookup())
@@ -477,7 +488,11 @@ read_stage6_screening_lookup <- function(path) {
   
   raw_out <- tibble(
     dataset_value = as.character(df[[dataset_col]]),
-    formula_anchor_value = if (!is.null(formula_col)) normalize_stage6_formula_anchor(df[[formula_col]]) else NA_character_,
+    formula_anchor_value = if (!is.null(formula_col)) {
+      normalize_stage6_formula_anchor(df[[formula_col]])
+    } else {
+      NA_character_
+    },
     cure_model_eligibility_flag = as.character(df[[eligibility_col]]),
     receus_primary_class = if (!is.null(receus_col)) as.character(df[[receus_col]]) else NA_character_,
     cure_presence_support_flag = if (!is.null(presence_col)) as.character(df[[presence_col]]) else NA_character_,
@@ -488,28 +503,31 @@ read_stage6_screening_lookup <- function(path) {
   out <- bind_rows(lapply(seq_len(nrow(raw_out)), function(i) {
     one <- raw_out[i, , drop = FALSE]
     expanded <- expand_stage6_dataset_key(one$dataset_value[[1]], one$formula_anchor_value[[1]])
-    bind_cols(
-      expanded,
-      one %>% select(-dataset_value, -formula_anchor_value)[rep(1L, nrow(expanded)), , drop = FALSE]
-    )
+    
+    carried <- dplyr::select(one, -dataset_value, -formula_anchor_value)
+    carried <- carried[rep(1L, nrow(expanded)), , drop = FALSE]
+    
+    dplyr::bind_cols(expanded, carried)
   })) %>%
-    filter(dataset %in% c("PNU", "SNU", "merged")) %>%
-    mutate(formula_anchor = ifelse(is.na(formula_anchor) | formula_anchor == "", "ALL", formula_anchor)) %>%
-    group_by(dataset, formula_anchor) %>%
-    summarise(
-      cure_model_eligibility_flag = paste(unique(na.omit(cure_model_eligibility_flag)), collapse = "|"),
-      receus_primary_class = paste(unique(na.omit(receus_primary_class)), collapse = "|"),
-      cure_presence_support_flag = paste(unique(na.omit(cure_presence_support_flag)), collapse = "|"),
-      followup_not_contradicted_flag = paste(unique(na.omit(followup_not_contradicted_flag)), collapse = "|"),
-      screening_note = paste(unique(na.omit(screening_note)), collapse = "; "),
+    dplyr::filter(dataset %in% c("PNU", "SNU", "merged")) %>%
+    dplyr::mutate(formula_anchor = ifelse(is.na(formula_anchor) | formula_anchor == "", "ALL", formula_anchor)) %>%
+    dplyr::group_by(dataset, formula_anchor) %>%
+    dplyr::summarise(
+      cure_model_eligibility_flag = paste(unique(stats::na.omit(cure_model_eligibility_flag)), collapse = "|"),
+      receus_primary_class = paste(unique(stats::na.omit(receus_primary_class)), collapse = "|"),
+      cure_presence_support_flag = paste(unique(stats::na.omit(cure_presence_support_flag)), collapse = "|"),
+      followup_not_contradicted_flag = paste(unique(stats::na.omit(followup_not_contradicted_flag)), collapse = "|"),
+      screening_note = paste(unique(stats::na.omit(screening_note)), collapse = "; "),
       .groups = "drop"
     )
   
   if (nrow(out) == 0L) {
     return(empty_stage6_lookup())
   }
+  
   out
 }
+
 
 build_stage6_model_lookup <- function(screening_lookup, model_grid) {
   if (nrow_or_zero(screening_lookup) == 0L) {
