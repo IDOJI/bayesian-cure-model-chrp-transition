@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage 3 — KM benchmark classifier report</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.75;
+    font-size:15px;
+  }
+  .container{
+    max-width:1040px;
+    margin:0 auto;
+    padding:36px 24px 84px;
+  }
+
+  .hero{
+    position:relative;
+    overflow:hidden;
+    padding:34px 32px 30px;
+    border-radius:var(--radius-xl);
+    background:
+      radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%),
+      linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;
+    box-shadow:0 24px 60px rgba(15,23,42,.18);
+    margin-bottom:18px;
+  }
+  .hero::after{
+    content:'';
+    position:absolute;
+    right:-48px;
+    top:-42px;
+    width:200px;
+    height:200px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);
+    pointer-events:none;
+  }
+  .hero .label{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#bfdbfe;
+    padding:7px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--line-dark);
+    margin-bottom:14px;
+  }
+  .hero h1{
+    font-size:clamp(30px, 4vw, 42px);
+    line-height:1.12;
+    letter-spacing:-.03em;
+    margin-bottom:12px;
+    max-width:900px;
+  }
+  .hero .sub{
+    max-width:840px;
+    font-size:15px;
+    color:#d1d5db;
+  }
+
+  .tab-shell{
+    position:sticky;
+    top:16px;
+    z-index:12;
+    margin-bottom:18px;
+  }
+  .tabs{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:14px;
+    border-radius:22px;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:blur(16px);
+    border:1px solid rgba(229,231,235,.9);
+    box-shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+  .tabs button{
+    appearance:none;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--text-soft);
+    padding:10px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:700;
+    transition:.18s ease;
+    box-shadow:0 1px 0 rgba(15,23,42,.02);
+  }
+  .tabs button:hover{
+    transform:translateY(-1px);
+    color:var(--text);
+    border-color:#cbd5e1;
+  }
+  .tabs button.active{
+    background:linear-gradient(180deg,#eff6ff,#dbeafe);
+    color:var(--accent-strong);
+    border-color:#bfdbfe;
+    box-shadow:0 8px 18px rgba(37,99,235,.14);
+  }
+
+  .panel{
+    display:none;
+  }
+  .panel.active{
+    display:block;
+    animation:fadeIn .18s ease;
+  }
+  @keyframes fadeIn{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:none}
+  }
+
+  .panel-head{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .panel-kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--accent-strong);
+    margin-bottom:6px;
+  }
+  .panel-title{
+    font-size:26px;
+    line-height:1.2;
+    letter-spacing:-.02em;
+  }
+  .panel-sub{
+    color:var(--text-soft);
+    max-width:760px;
+    margin-top:8px;
+  }
+
+  .panel-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow);
+    padding:28px;
+    margin-bottom:18px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12, 1fr);
+    gap:16px;
+  }
+  .card{
+    grid-column:span 6;
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    padding:22px 20px;
+    min-height:180px;
+  }
+  .card.full{grid-column:1/-1}
+  .card.wide{grid-column:span 8}
+  .card.narrow{grid-column:span 4}
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.03em;
+    margin-bottom:12px;
+    background:var(--accent-soft);
+    color:var(--accent-strong);
+  }
+  .eyebrow.green{background:var(--green-bg); color:var(--green)}
+  .eyebrow.amber{background:var(--amber-bg); color:var(--amber)}
+  .eyebrow.purple{background:var(--purple-bg); color:var(--purple)}
+  .card h3{
+    font-size:19px;
+    line-height:1.3;
+    margin-bottom:10px;
+    letter-spacing:-.01em;
+  }
+  .card p, .card li{
+    color:var(--text-soft);
+  }
+  .card ul{
+    margin-left:18px;
+  }
+
+  .callout{
+    padding:18px 20px;
+    border-radius:18px;
+    border:1px solid var(--border);
+    background:#fafcff;
+    color:var(--text);
+    margin-top:18px;
+  }
+  .callout strong{
+    color:var(--accent-strong);
+  }
+
+  .placeholder-box{
+    margin-top:14px;
+    padding:18px;
+    min-height:180px;
+    border:1.5px dashed #cbd5e1;
+    border-radius:18px;
+    background:
+      linear-gradient(180deg, rgba(248,250,252,.9), rgba(255,255,255,1));
+    color:#64748b;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    font-weight:600;
+  }
+
+  .summary-strip{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:12px;
+    margin-top:18px;
+  }
+  .summary-item{
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:16px;
+    padding:16px;
+  }
+  .summary-item .label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-bottom:6px;
+  }
+  .summary-item .value{
+    font-size:15px;
+    color:var(--text);
+    font-weight:700;
+  }
+
+  .ref-list{
+    margin-left:22px;
+  }
+  .ref-list li + li{
+    margin-top:12px;
+  }
+
+  .footer-note{
+    margin-top:28px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+  }
+
+  @media (max-width:900px){
+    .card, .card.wide, .card.narrow{
+      grid-column:1/-1;
+    }
+    .summary-strip{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width:640px){
+    .container{padding:22px 16px 64px}
+    .hero{padding:26px 22px 24px}
+    .panel-card{padding:20px}
+    .tabs{padding:10px}
+    .tabs button{width:100%; text-align:left}
+  }
+
+
+  .data-table, .matrix-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    font-size:14px;
+  }
+  .table-wrap{
+    width:100%;
+    overflow-x:auto;
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+    margin-top:14px;
+  }
+  .data-table th, .data-table td, .matrix-table th, .matrix-table td{
+    padding:12px 14px;
+    border-bottom:1px solid #eef2f7;
+    vertical-align:top;
+    text-align:left;
+  }
+  .data-table th, .matrix-table th{
+    position:sticky;
+    top:0;
+    background:#f8fafc;
+    color:var(--text);
+    font-size:13px;
+    font-weight:800;
+    z-index:1;
+  }
+  .data-table tbody tr:last-child td, .matrix-table tbody tr:last-child td, .matrix-table tbody tr:last-child th{
+    border-bottom:none;
+  }
+  .source-note{
+    margin-top:10px;
+    color:#94a3b8;
+    font-size:12px;
+  }
+  .mini-note{
+    margin-top:8px;
+    font-size:12px;
+    color:#64748b;
+    line-height:1.5;
+    font-weight:500;
+  }
+  .math{
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.95em;
+    color:#0f172a;
+  }
+  .stack-note{
+    margin-top:12px;
+    color:var(--text-soft);
+  }
+  .quiet-list{
+    margin:8px 0 0 18px;
+  }
+  .quiet-list li{
+    margin-bottom:6px;
+    color:var(--text-soft);
+  }
+  .spark-wrap{
+    margin-top:18px;
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+    padding:18px;
+  }
+  .spark-axis{
+    display:grid;
+    grid-template-columns:180px 1fr 240px;
+    gap:14px;
+    align-items:end;
+    margin-bottom:8px;
+  }
+  .spark-axis-cell{
+    text-align:center;
+    font-size:11px;
+    color:#64748b;
+  }
+  .spark-axis .spark-axis-cell:first-child{
+    text-align:left;
+  }
+  .spark-axis > div:first-child{
+    color:#64748b;
+    font-size:12px;
+    font-weight:700;
+  }
+  .spark-row{
+    display:grid;
+    grid-template-columns:180px 1fr 240px;
+    gap:14px;
+    align-items:end;
+    margin-top:10px;
+  }
+  .spark-label{
+    color:var(--text);
+    font-weight:700;
+    font-size:14px;
+  }
+  .spark-bars{
+    display:grid;
+    grid-template-columns:repeat(10, minmax(0,1fr));
+    gap:6px;
+    align-items:end;
+    height:86px;
+    padding:4px 0 0;
+    border-bottom:1px solid #e2e8f0;
+  }
+  .spark-bar{
+    border-radius:10px 10px 4px 4px;
+    min-height:8px;
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.2);
+  }
+  .fill-amber{background:linear-gradient(180deg,#f59e0b,#d97706);}
+  .fill-green{background:linear-gradient(180deg,#22c55e,#16a34a);}
+  .fill-blue{background:linear-gradient(180deg,#60a5fa,#2563eb);}
+  .fill-amber-soft{background:linear-gradient(180deg,#fdba74,#f59e0b);}
+  .fill-green-soft{background:linear-gradient(180deg,#86efac,#22c55e);}
+  .spark-values{
+    color:#64748b;
+    font-size:12px;
+    line-height:1.5;
+  }
+  .legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:12px;
+  }
+  .legend-item{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    color:#64748b;
+    font-size:12px;
+    font-weight:700;
+  }
+  .legend-swatch{
+    width:14px;
+    height:14px;
+    border-radius:4px;
+    display:inline-block;
+  }
+  .matrix-title{
+    margin-top:18px;
+    margin-bottom:8px;
+    color:var(--text);
+    font-weight:800;
+    font-size:15px;
+  }
+  .matrix-table td{
+    text-align:center;
+    vertical-align:middle;
+  }
+  .pattern-cell{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:88px;
+    padding:8px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+  }
+  .cell-high{background:#fff7ed; color:#c2410c; border:1px solid #fed7aa;}
+  .cell-low{background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0;}
+  .cell-mixed{background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;}
+  .compare-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:16px;
+    margin-top:14px;
+  }
+  .compare-block{
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:16px;
+    padding:16px;
+  }
+  .compare-title{
+    font-size:14px;
+    font-weight:800;
+    color:var(--text);
+    margin-bottom:12px;
+  }
+  .compare-line{
+    display:grid;
+    grid-template-columns:88px 1fr 62px;
+    gap:10px;
+    align-items:center;
+    margin-top:10px;
+  }
+  .compare-label{
+    font-size:12px;
+    font-weight:800;
+    color:#475569;
+  }
+  .metric-bar{
+    width:100%;
+    height:12px;
+    border-radius:999px;
+    background:#e5e7eb;
+    overflow:hidden;
+  }
+  .metric-fill{
+    height:100%;
+    border-radius:999px;
+  }
+  .metric-number{
+    text-align:right;
+    font-size:12px;
+    font-weight:800;
+    color:var(--text);
+  }
+  .compare-sub{
+    margin-top:10px;
+    color:#64748b;
+    font-size:12px;
+  }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 12px;
+    border-radius:999px;
+    background:#f8fafc;
+    border:1px solid #e2e8f0;
+    font-size:12px;
+    font-weight:700;
+    color:#334155;
+    margin-right:8px;
+    margin-top:8px;
+  }
+  .keyline{
+    margin-top:14px;
+    border-top:1px dashed #dbeafe;
+    padding-top:14px;
+  }
+  @media (max-width:900px){
+    .spark-axis, .spark-row{
+      grid-template-columns:1fr;
+    }
+    .compare-grid{
+      grid-template-columns:1fr;
+    }
+  }
+
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="label">Stage 3</div>
+      <h1>Stage 3 — KM benchmark classifier</h1>
+      <p class="sub">이번 단계는 전체 Kaplan–Meier를 horizon별 benchmark classifier로 고정해, PNU와 SNU의 관측된 위험 구조가 얼마나 다른지와 site 구조를 반영하느냐에 따라 high-risk 과분류 부담이 얼마나 달라지는지를 보여드립니다.</p>
+    </header>
+
+    <div class="tab-shell">
+      <nav class="tabs" aria-label="Stage tabs">
+        <button class="active" data-tab="overview">개요</button>
+        <button data-tab="results-overview">결과 개요</button>
+        <button data-tab="result-1">결과 1</button>
+        <button data-tab="result-2">결과 2</button>
+        <button data-tab="result-3">결과 3</button>
+        <button data-tab="synthesis">종합 해석</button>
+        <button data-tab="references">References</button>
+      </nav>
+    </div>
+
+    
+<section class="panel active" data-panel="overview">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Overview</div>
+        <h2 class="panel-title">이 단계는 무엇을 보는가</h2>
+        <p class="panel-sub">Stage 3는 전체 Kaplan–Meier를 horizon별 benchmark classifier로 고정해, cohort와 site 구조에 따라 transition-only 위험과 high-risk 분류 부담이 얼마나 달라지는지 보여드립니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">Benchmarks</div><div class="value">4개</div><div class="mini-note">PNU, SNU, merged site-free, merged site-adjusted</div></div><div class="summary-item"><div class="label">Horizons</div><div class="value">10개</div><div class="mini-note">1년부터 10년까지 동일한 ruler를 사용했습니다.</div></div><div class="summary-item"><div class="label">Thresholds</div><div class="value">4개</div><div class="mini-note">5%, 10%, 15%, 20%로 high-risk를 분류했습니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Stage role</div>
+        <h3>Stage 3의 역할</h3>
+        <p>이 단계는 아직 개인화 회귀모형을 만들지 않고, 관찰된 Kaplan–Meier 곡선 자체를 benchmark로 삼아 horizon별 누적 transition 위험을 계산합니다. PNU와 SNU는 각각 cohort 전체의 곡선을 쓰고, merged 자료는 site를 무시한 overall benchmark와 site별 곡선을 따로 적용하는 structural benchmark를 함께 둡니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Reader takeaway</div>
+        <h3>먼저 알고 보면 좋은 점</h3>
+        <p>이번 Stage는 <strong>transition-only</strong> scale을 사용합니다. 즉, transition만 사건으로 보고 remission과 관찰 종료는 censoring으로 처리합니다. 따라서 여기의 숫자는 remission을 경쟁사건으로 둔 cumulative incidence가 아니라, “transition만을 기준으로 본 benchmark risk”입니다. 또 같은 benchmark group 안의 모든 사람에게 동일한 위험을 부여하므로, 이 단계의 차이는 patient-level personalization이 아니라 cohort 또는 site 구조의 차이로 읽으셔야 합니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Interpretation boundary</div>
+        <h3>어디까지 직접 읽고, 어디부터 조심해야 하는가</h3>
+        <p>PNU는 1년이 가장 직접적으로 읽히고, 2년은 sensitivity 수준, 3년 이후는 projection으로 보는 편이 안전합니다. SNU와 merged는 1–2년이 가장 직접적이고, 3–5년은 partly model-dependent, 6년 이후는 projection 성격이 강합니다. 또한 현재 export에서는 merged site-adjusted의 PNU-assigned rows에 standalone PNU보다 다소 강한 support label이 붙어 있어, 그 부분은 숫자는 그대로 읽되 해석 강도는 PNU 단독 cohort의 follow-up 맥락을 우선 적용하는 편이 안전합니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Methods map</div>
+        <h3>모델링 표</h3>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>분석 블록</th><th>무엇을 했는가</th><th>명시적 설정</th><th>주요 산출물</th></tr></thead><tbody><tr><td>Overall KM benchmark</td><td>각 cohort 전체의 Kaplan–Meier 생존함수로부터 horizon별 누적 위험을 만들고, 같은 cohort 안 모든 사람에게 동일한 benchmark risk를 부여했습니다.</td><td><span class='math'>Ŝ(t)</span>, <span class='math'>R̂(t)=1−Ŝ(t)</span><br>transition만 사건으로 보고 remission과 관찰 종료는 censoring으로 처리했습니다.</td><td>subject-by-horizon risk, group risk table, threshold classification table</td></tr><tr><td>Site-adjusted structural benchmark</td><td>merged cohort에서 site별 Kaplan–Meier 곡선을 따로 추정한 뒤, 각 사람에게 자기 site의 risk를 할당했습니다.</td><td><span class='math'>Ŝ(t|site=s)</span>, <span class='math'>R̂(t|site=s)=1−Ŝ(t|site=s)</span></td><td>site-adjusted comparator, pooled classification metrics after site-specific assignment</td></tr><tr><td>Threshold classifier</td><td>각 horizon마다 predicted risk가 threshold를 넘는지로 high-risk 여부를 나눴습니다.</td><td><span class='math'>Ŷ(t;c)=1{R̂(t)≥c}</span>, <span class='math'>c∈{0.05, 0.10, 0.15, 0.20}</span></td><td>predicted positive 수, TP / FP / TN / FN, FP100, specificity, PPV, TPR</td></tr><tr><td>Outcome-based evaluation rule</td><td>해당 horizon 안에 사건이 발생했거나, 적어도 그 horizon까지 event-free로 관찰된 경우만 outcome-based metric 계산에 넣었습니다.</td><td><span class='math'>event by t</span> 또는 <span class='math'>observed event-free through t</span><br>horizon 이전 조기 censoring은 evaluable subset에서 제외했습니다.</td><td>evaluable n, unknown due to early censoring</td></tr><tr><td>Optional subgroup KM sensitivity</td><td>subgroup-specific KM benchmark는 계획되어 있었지만 이번 실행에서는 돌리지 않았습니다.</td><td><span class='math'>Ŝ(t|g)</span>, <span class='math'>R̂(t|g)=1−Ŝ(t|g)</span> for subgroup <span class='math'>g</span></td><td>이번 실행 산출물 없음 (subgroup KM 미실행)</td></tr><tr><td>Formal tests</td><td>이번 Stage는 benchmark construction 단계이므로 가설검정 중심 설계가 아닙니다.</td><td>회귀계수, p-value, confidence interval을 생성하지 않았습니다.</td><td>descriptive / benchmark comparison only</td></tr></tbody></table></div>
+        <div class="callout"><strong>해석 포인트</strong> 이번 Stage는 benchmark construction 단계이므로 formal hypothesis test를 수행하지 않았습니다. 따라서 회귀계수, p-value, confidence interval은 제공되지 않으며, 관찰된 위험 구조와 threshold 기반 분류 부담을 중심으로 읽으시는 것이 맞습니다.</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="results-overview">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Results overview</div>
+        <h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+        <p class="panel-sub">이번 결과는 세 묶음으로 읽는 편이 가장 자연스럽습니다. 먼저 cohort와 site 구조가 관찰된 위험 곡선을 어떻게 바꾸는지 보고, 다음으로 같은 threshold에서 high-risk 과분류 부담이 얼마나 달라지는지 본 뒤, 마지막으로 어느 horizon까지 직접 해석할 수 있는지 정리하겠습니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">Result group 1</div><div class="value">관측된 위험 구조 비교</div><div class="mini-note">cohort와 site 구조가 early risk를 어떻게 바꾸는지 봅니다.</div></div><div class="summary-item"><div class="label">Result group 2</div><div class="value">threshold 기반 분류 부담</div><div class="mini-note">같은 cutoff에서 high-risk 과분류가 얼마나 달라지는지 봅니다.</div></div><div class="summary-item"><div class="label">Result group 3</div><div class="value">지지 구간과 해석 경계</div><div class="mini-note">어느 horizon까지 직접 읽을 수 있는지 구분합니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Reading map</div>
+        <h3>결과 흐름</h3>
+        <p>결과 1에서는 benchmark가 어떤 위험 구조를 만드는지 봅니다. 결과 2에서는 그 위험을 5%, 10%, 15%, 20% threshold에 걸었을 때 누가 high-risk로 분류되는지, 그리고 false positives가 얼마나 생기는지 확인합니다. 결과 3에서는 같은 숫자를 어디까지 직접 읽을 수 있고, 어디부터 projection과 label mismatch를 조심해야 하는지 정리합니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Analysis inventory</div>
+        <h3>이번 실행에 실제로 포함된 benchmark 분석</h3>
+        <p>아래 표는 이번 Stage에서 실제로 보고 가능한 benchmark analysis를 정리한 것입니다. <strong>위험 할당 단위</strong>가 1개이면 같은 benchmark 안의 모든 사람이 같은 위험을 받고, 2개이면 PNU와 SNU가 다른 위험을 받습니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>분석 블록</th><th>무엇을 비교했는가</th><th>N</th><th>위험 할당 단위</th><th>이 단계에서의 역할</th></tr></thead><tbody><tr><td>PNU overall KM</td><td>PNU cohort 전체를 하나의 KM benchmark로 요약했습니다.</td><td>54</td><td>전체 cohort 1개</td><td>단일 site benchmark</td></tr><tr><td>SNU overall KM</td><td>SNU cohort 전체를 하나의 KM benchmark로 요약했습니다.</td><td>208</td><td>전체 cohort 1개</td><td>단일 site benchmark</td></tr><tr><td>merged overall site-free KM</td><td>PNU와 SNU를 하나로 묶어 site 구분 없이 하나의 KM curve를 사용했습니다.</td><td>262</td><td>전체 merged cohort 1개</td><td>pooled benchmark</td></tr><tr><td>merged site-adjusted KM</td><td>merged cohort에서 각 사람에게 자기 site의 KM risk를 할당했습니다.</td><td>262</td><td>site 2개 (PNU / SNU)</td><td>구조적 comparator</td></tr></tbody></table></div>
+        <div class="source-note">Source: structured Stage 3 benchmark registry.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Cohort coverage</div>
+        <h3>각 benchmark가 기대고 있는 cohort 크기와 follow-up 범위</h3>
+        <p>이 표는 각 benchmark가 몇 명의 관찰을 바탕으로 만들어졌는지, transition·remission·right censoring 구성이 어떤지, 그리고 follow-up이 어느 정도까지 이어지는지를 보여줍니다. <strong>median follow-up</strong>과 <strong>max follow-up</strong>이 짧을수록 late horizon 해석은 더 조심해야 합니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>benchmark</th><th>N</th><th>transition</th><th>remission</th><th>right censoring</th><th>median follow-up (years)</th><th>max follow-up (years)</th></tr></thead><tbody><tr><td>PNU overall</td><td>54</td><td>12</td><td>13</td><td>29</td><td>1.11</td><td>2.67</td></tr><tr><td>SNU overall</td><td>208</td><td>38</td><td>0</td><td>170</td><td>3.80</td><td>10.11</td></tr><tr><td>merged site-adjusted</td><td>262</td><td>50</td><td>13</td><td>199</td><td>2.07</td><td>10.11</td></tr><tr><td>merged overall site-free</td><td>262</td><td>50</td><td>13</td><td>199</td><td>2.07</td><td>10.11</td></tr></tbody></table></div>
+        <div class="source-note">Source: unique subject rows reconstructed from the Stage 3 subject-horizon prediction export.</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-1">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 1</div>
+        <h2 class="panel-title">cohort와 site 구조에 따라 benchmark 위험 곡선이 어떻게 달라지는가</h2>
+        <p class="panel-sub">이 결과 묶음은 “관찰된 cohort-level KM curve만으로도 early transition pattern이 얼마나 다르게 보이는가?”라는 질문에 답합니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">PNU early pattern</div><div class="value">1년 16.99% · 2년 29.88%</div><div class="mini-note">약 100명 중 17명, 30명 수준으로 빠르게 올라갑니다.</div></div><div class="summary-item"><div class="label">SNU longer-tail pattern</div><div class="value">1년 7.28% · 10년 32.64%</div><div class="mini-note">초기에는 낮지만 더 긴 추적에서 위험이 계속 누적됩니다.</div></div><div class="summary-item"><div class="label">Merged site-free</div><div class="value">1년 9.15% · 2년 15.34%</div><div class="mini-note">두 cohort의 관측 패턴을 평균낸 중간 형태입니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>여기서의 위험은 특정 시점까지 transition이 누적될 benchmark probability입니다. 값이 클수록 그 horizon까지 transition이 더 많이 관찰된 패턴을 뜻합니다. 따라서 같은 시점의 위험을 비교하면 “어느 cohort에서 transition이 더 이르게 모였는지”를 읽을 수 있고, horizon이 길어질수록 tail에 추가 사건이 계속 쌓였는지도 함께 볼 수 있습니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">HTML-native visual summary</div>
+        <h3>10개 horizon에서 본 benchmark risk trajectory</h3>
+        <p>아래 막대열은 1년부터 10년까지의 KM risk를 같은 축 위에 놓은 것입니다. PNU는 2년까지 빠르게 올라간 뒤 plateau를 보이고, SNU는 초기 위험이 더 낮지만 더 긴 follow-up에서 추가 사건이 누적됩니다. merged site-free는 그 중간값을 만들고, merged site-adjusted는 다시 PNU와 SNU의 원래 곡선을 복원합니다.</p>
+        <div class="spark-wrap">
+          <div class="spark-axis"><div class="spark-axis-cell">1</div><div class="spark-axis-cell">2</div><div class="spark-axis-cell">3</div><div class="spark-axis-cell">4</div><div class="spark-axis-cell">5</div><div class="spark-axis-cell">6</div><div class="spark-axis-cell">7</div><div class="spark-axis-cell">8</div><div class="spark-axis-cell">9</div><div class="spark-axis-cell">10</div></div>
+        <div class="spark-row">
+          <div class="spark-label">PNU overall</div>
+          <div class="spark-bars"><div class="spark-bar fill-amber" style="height:42.5%;" title="1년: 16.99%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="2년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="3년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="4년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="5년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="6년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="7년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="8년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="9년: 29.88%"></div><div class="spark-bar fill-amber" style="height:74.7%;" title="10년: 29.88%"></div></div>
+          <div class="spark-values">1년 16.99% · 2년 29.88% · 5년 29.88% · 10년 29.88%</div>
+        </div>
+        <div class="spark-row">
+          <div class="spark-label">SNU overall</div>
+          <div class="spark-bars"><div class="spark-bar fill-green" style="height:18.2%;" title="1년: 7.28%"></div><div class="spark-bar fill-green" style="height:30.4%;" title="2년: 12.15%"></div><div class="spark-bar fill-green" style="height:42.2%;" title="3년: 16.90%"></div><div class="spark-bar fill-green" style="height:45.9%;" title="4년: 18.34%"></div><div class="spark-bar fill-green" style="height:52.7%;" title="5년: 21.08%"></div><div class="spark-bar fill-green" style="height:61.8%;" title="6년: 24.72%"></div><div class="spark-bar fill-green" style="height:61.8%;" title="7년: 24.72%"></div><div class="spark-bar fill-green" style="height:81.6%;" title="8년: 32.64%"></div><div class="spark-bar fill-green" style="height:81.6%;" title="9년: 32.64%"></div><div class="spark-bar fill-green" style="height:81.6%;" title="10년: 32.64%"></div></div>
+          <div class="spark-values">1년 7.28% · 2년 12.15% · 5년 21.08% · 10년 32.64%</div>
+        </div>
+        <div class="spark-row">
+          <div class="spark-label">merged overall site-free</div>
+          <div class="spark-bars"><div class="spark-bar fill-blue" style="height:22.9%;" title="1년: 9.15%"></div><div class="spark-bar fill-blue" style="height:38.4%;" title="2년: 15.34%"></div><div class="spark-bar fill-blue" style="height:49.7%;" title="3년: 19.88%"></div><div class="spark-bar fill-blue" style="height:53.2%;" title="4년: 21.27%"></div><div class="spark-bar fill-blue" style="height:59.8%;" title="5년: 23.91%"></div><div class="spark-bar fill-blue" style="height:68.6%;" title="6년: 27.42%"></div><div class="spark-bar fill-blue" style="height:68.6%;" title="7년: 27.42%"></div><div class="spark-bar fill-blue" style="height:87.7%;" title="8년: 35.06%"></div><div class="spark-bar fill-blue" style="height:87.7%;" title="9년: 35.06%"></div><div class="spark-bar fill-blue" style="height:87.7%;" title="10년: 35.06%"></div></div>
+          <div class="spark-values">1년 9.15% · 2년 15.34% · 5년 23.91% · 10년 35.06%</div>
+        </div>
+        <div class="spark-row">
+          <div class="spark-label">merged site-adjusted → PNU-assigned</div>
+          <div class="spark-bars"><div class="spark-bar fill-amber-soft" style="height:42.5%;" title="1년: 16.99%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="2년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="3년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="4년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="5년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="6년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="7년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="8년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="9년: 29.88%"></div><div class="spark-bar fill-amber-soft" style="height:74.7%;" title="10년: 29.88%"></div></div>
+          <div class="spark-values">1년 16.99% · 2년 29.88% · 5년 29.88% · 10년 29.88%</div>
+        </div>
+        <div class="spark-row">
+          <div class="spark-label">merged site-adjusted → SNU-assigned</div>
+          <div class="spark-bars"><div class="spark-bar fill-green-soft" style="height:18.2%;" title="1년: 7.28%"></div><div class="spark-bar fill-green-soft" style="height:30.4%;" title="2년: 12.15%"></div><div class="spark-bar fill-green-soft" style="height:42.2%;" title="3년: 16.90%"></div><div class="spark-bar fill-green-soft" style="height:45.9%;" title="4년: 18.34%"></div><div class="spark-bar fill-green-soft" style="height:52.7%;" title="5년: 21.08%"></div><div class="spark-bar fill-green-soft" style="height:61.8%;" title="6년: 24.72%"></div><div class="spark-bar fill-green-soft" style="height:61.8%;" title="7년: 24.72%"></div><div class="spark-bar fill-green-soft" style="height:81.6%;" title="8년: 32.64%"></div><div class="spark-bar fill-green-soft" style="height:81.6%;" title="9년: 32.64%"></div><div class="spark-bar fill-green-soft" style="height:81.6%;" title="10년: 32.64%"></div></div>
+          <div class="spark-values">1년 7.28% · 2년 12.15% · 5년 21.08% · 10년 32.64%</div>
+        </div>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-swatch fill-amber"></span>PNU pattern</span>
+            <span class="legend-item"><span class="legend-swatch fill-green"></span>SNU pattern</span>
+            <span class="legend-item"><span class="legend-swatch fill-blue"></span>merged site-free pattern</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Exact comparison</div>
+        <h3>대표 horizon의 exact risk 비교</h3>
+        <p>이 표는 1년, 2년, 5년, 10년의 exact risk를 한 번에 보여줍니다. 값이 클수록 그 시점까지 더 많은 transition이 누적된 benchmark입니다. plateau가 보인다고 해서 곧바로 cure를 뜻하는 것은 아니고, 현재 follow-up tail에서 추가 사건이 관찰되지 않았다는 뜻으로 읽는 편이 안전합니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>benchmark</th><th>assigned group</th><th>1 year risk</th><th>2 year risk</th><th>5 year risk</th><th>10 year risk</th><th>reading note</th></tr></thead><tbody><tr><td>PNU overall</td><td>overall</td><td>16.99%</td><td>29.88%</td><td>29.88%</td><td>29.88%</td><td>2년까지 빠르게 올라간 뒤 현재 tail에서는 plateau로 보입니다.</td></tr><tr><td>SNU overall</td><td>overall</td><td>7.28%</td><td>12.15%</td><td>21.08%</td><td>32.64%</td><td>초기 위험은 낮지만 더 긴 follow-up에서 추가 사건이 누적됩니다.</td></tr><tr><td>merged overall site-free</td><td>overall</td><td>9.15%</td><td>15.34%</td><td>23.91%</td><td>35.06%</td><td>PNU와 SNU의 관측 패턴을 평균낸 중간 형태입니다.</td></tr><tr><td>merged site-adjusted</td><td>PNU-assigned</td><td>16.99%</td><td>29.88%</td><td>29.88%</td><td>29.88%</td><td>숫자는 standalone PNU와 같습니다.</td></tr><tr><td>merged site-adjusted</td><td>SNU-assigned</td><td>7.28%</td><td>12.15%</td><td>21.08%</td><td>32.64%</td><td>숫자는 standalone SNU와 같습니다.</td></tr></tbody></table></div>
+        <div class="source-note">Source: structured Stage 3 group-risk table.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Interpretation</div>
+        <h3>그래서 무엇이 보였는가</h3>
+        <p>PNU는 1년 16.99%, 2년 29.88%로 초기 위험이 더 빠르게 쌓이는 반면, SNU는 1년 7.28%, 2년 12.15%로 초기에는 더 낮고 10년 32.64%까지 늦게 누적됩니다. merged site-free benchmark는 이 둘을 평균내어 1년 9.15%, 2년 15.34%의 중간 패턴을 만들고, merged site-adjusted benchmark는 다시 PNU-assigned와 SNU-assigned 곡선을 각각 원래 단일 cohort 패턴으로 되돌립니다. 즉, Stage 3만으로도 “한 개의 homogeneous observed-risk process”로는 요약하기 어려운 구조적 차이가 이미 보입니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-2">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 2</div>
+        <h2 class="panel-title">같은 threshold를 걸면 high-risk 분류 부담이 얼마나 달라지는가</h2>
+        <p class="panel-sub">이 결과 묶음은 “benchmark structure를 바꾸는 것만으로도 누가 high-risk로 분류되는지와 false-positive burden이 얼마나 달라지는가?”라는 질문에 답합니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">1년 10% · site-free</div><div class="value">Predicted positive 0명</div><div class="mini-note">TPR 0.00% · FP100 0.00</div></div><div class="summary-item"><div class="label">1년 10% · site-adjusted</div><div class="value">Predicted positive 54명 (20.61%)</div><div class="mini-note">TPR 36.36% · FP100 10.69</div></div><div class="summary-item"><div class="label">2년 15% 비교</div><div class="value">site-free FP100 51.53 ↔ site-adjusted 0.38</div><div class="mini-note">대신 TPR은 100.00% ↔ 35.29%입니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>각 horizon에서 predicted risk가 threshold 이상이면 high-risk로 분류했습니다. 값이 클수록 더 많은 사람을 high-risk로 묶는 규칙이고, <strong>FP / 100</strong>이 클수록 불필요한 high-risk labeling이 많다는 뜻입니다. 다만 outcome-based metric은 그 horizon까지 event 여부를 확인할 수 있는 사람만으로 계산되므로, horizon 이전 조기 censoring은 evaluable subset에서 빠집니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">HTML-native pattern map</div>
+        <h3>merged benchmark의 분류 패턴 지도</h3>
+        <p>cell이 <strong>전체 high</strong>이면 그 조합에서 모든 사람이 high-risk이고, <strong>전체 low</strong>이면 아무도 high-risk가 아닙니다. <strong>mixed</strong>는 일부만 high-risk라는 뜻입니다. merged site-adjusted는 1년 10–15%, 2년 15–20%, 3–4년 20%에서 mixed pattern을 만들어내지만, merged site-free는 많은 조합에서 전체 high 또는 전체 low로 쉽게 기울어집니다.</p>
+        <div class="matrix-title">merged overall site-free</div><div class="table-wrap"><table class="matrix-table"><thead><tr><th>horizon</th><th>5%</th><th>10%</th><th>15%</th><th>20%</th></tr></thead><tbody><tr><th>1년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-low">전체 low</span></td><td><span class="pattern-cell cell-low">전체 low</span></td><td><span class="pattern-cell cell-low">전체 low</span></td></tr><tr><th>2년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-low">전체 low</span></td></tr><tr><th>3년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-low">전체 low</span></td></tr><tr><th>4년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>5년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>6년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>7년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>8년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>9년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>10년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr></tbody></table></div>
+        <div class="matrix-title">merged site-adjusted</div><div class="table-wrap"><table class="matrix-table"><thead><tr><th>horizon</th><th>5%</th><th>10%</th><th>15%</th><th>20%</th></tr></thead><tbody><tr><th>1년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td><td><span class="pattern-cell cell-low">전체 low</span></td></tr><tr><th>2년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td></tr><tr><th>3년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td></tr><tr><th>4년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-mixed">mixed</span></td></tr><tr><th>5년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>6년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>7년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>8년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>9년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr><tr><th>10년</th><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td><td><span class="pattern-cell cell-high">전체 high</span></td></tr></tbody></table></div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch cell-high"></span>전체 high-risk</span>
+          <span class="legend-item"><span class="legend-swatch cell-low"></span>전체 low-risk</span>
+          <span class="legend-item"><span class="legend-swatch cell-mixed"></span>mixed</span>
+        </div>
+        <div class="source-note">Source: structured Stage 3 classification table. Site-adjusted rows are pooled metrics after assigning each person their site-specific benchmark risk.</div>
+      </article>
+
+      
+    <article class="card full">
+      <div class="eyebrow purple">대표 비교</div>
+      <h3>1년, threshold 10%</h3>
+      <p>site-free benchmark는 아무도 high-risk로 분류하지 않지만, site-adjusted benchmark는 PNU-assigned 54명만 high-risk로 분류합니다.</p>
+      <div class="compare-grid">
+        <div class="compare-block">
+          <div class="compare-title">merged site-free</div>
+          <div class="compare-line"><div class="compare-label">FP / 100</div><div class="metric-bar"><div class="metric-fill fill-blue" style="width:0.0%;"></div></div><div class="metric-number">0.00</div></div>
+          <div class="compare-line"><div class="compare-label">TPR</div><div class="metric-bar"><div class="metric-fill fill-blue" style="width:0.0%;"></div></div><div class="metric-number">0.00</div></div>
+          <div class="compare-sub">Predicted positive 0명 · pattern 전체 low-risk</div>
+        </div>
+        <div class="compare-block">
+          <div class="compare-title">merged site-adjusted</div>
+          <div class="compare-line"><div class="compare-label">FP / 100</div><div class="metric-bar"><div class="metric-fill fill-amber" style="width:17.8%;"></div></div><div class="metric-number">10.69</div></div>
+          <div class="compare-line"><div class="compare-label">TPR</div><div class="metric-bar"><div class="metric-fill fill-amber" style="width:36.4%;"></div></div><div class="metric-number">36.36</div></div>
+          <div class="compare-sub">Predicted positive 54명 · pattern mixed</div>
+        </div>
+      </div>
+    </article>
+    
+      
+    <article class="card full">
+      <div class="eyebrow purple">대표 비교</div>
+      <h3>2년, threshold 15%</h3>
+      <p>site-free benchmark는 전원을 high-risk로 분류하고, site-adjusted benchmark는 54명만 high-risk로 분류해 false positives를 크게 줄입니다.</p>
+      <div class="compare-grid">
+        <div class="compare-block">
+          <div class="compare-title">merged site-free</div>
+          <div class="compare-line"><div class="compare-label">FP / 100</div><div class="metric-bar"><div class="metric-fill fill-blue" style="width:85.9%;"></div></div><div class="metric-number">51.53</div></div>
+          <div class="compare-line"><div class="compare-label">TPR</div><div class="metric-bar"><div class="metric-fill fill-blue" style="width:100.0%;"></div></div><div class="metric-number">100.00</div></div>
+          <div class="compare-sub">Predicted positive 262명 · pattern 전체 high-risk</div>
+        </div>
+        <div class="compare-block">
+          <div class="compare-title">merged site-adjusted</div>
+          <div class="compare-line"><div class="compare-label">FP / 100</div><div class="metric-bar"><div class="metric-fill fill-amber" style="width:0.6%;"></div></div><div class="metric-number">0.38</div></div>
+          <div class="compare-line"><div class="compare-label">TPR</div><div class="metric-bar"><div class="metric-fill fill-amber" style="width:35.3%;"></div></div><div class="metric-number">35.29</div></div>
+          <div class="compare-sub">Predicted positive 54명 · pattern mixed</div>
+        </div>
+      </div>
+    </article>
+    
+
+      <article class="card full">
+        <div class="eyebrow amber">Exact classification rows</div>
+        <h3>핵심 비교를 위한 exact table</h3>
+        <p>아래 표는 이번 Stage에서 먼저 봐야 할 대표 조합들만 모은 것입니다. <strong>TP</strong>는 horizon 안에 실제 transition이 있었고 high-risk로 분류된 사람, <strong>FP</strong>는 실제로는 그 horizon까지 event-free였지만 high-risk로 분류된 사람입니다. <strong>PPV</strong>는 high-risk로 분류된 사람 중 실제 사건 비율, <strong>TPR</strong>은 실제 사건 중 포착한 비율입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>benchmark</th><th>horizon</th><th>threshold</th><th>predicted +</th><th>TP</th><th>FP</th><th>TN</th><th>FN</th><th>positive rate</th><th>FP / 100</th><th>PPV</th><th>TPR</th><th>unknown before horizon</th><th>pattern</th></tr></thead><tbody><tr><td>PNU overall</td><td>1</td><td>5%</td><td>54</td><td>8</td><td>28</td><td>0</td><td>0</td><td>100.00%</td><td>51.85</td><td>22.22%</td><td>100.00%</td><td>18</td><td>전체 high-risk</td></tr><tr><td>PNU overall</td><td>1</td><td>20%</td><td>0</td><td>0</td><td>0</td><td>28</td><td>8</td><td>0.00%</td><td>0.00</td><td>—</td><td>0.00%</td><td>18</td><td>전체 low-risk</td></tr><tr><td>SNU overall</td><td>1</td><td>5%</td><td>208</td><td>14</td><td>163</td><td>0</td><td>0</td><td>100.00%</td><td>78.37</td><td>7.91%</td><td>100.00%</td><td>31</td><td>전체 high-risk</td></tr><tr><td>SNU overall</td><td>1</td><td>10%</td><td>0</td><td>0</td><td>0</td><td>163</td><td>14</td><td>0.00%</td><td>0.00</td><td>—</td><td>0.00%</td><td>31</td><td>전체 low-risk</td></tr><tr><td>merged overall site-free</td><td>1</td><td>10%</td><td>0</td><td>0</td><td>0</td><td>191</td><td>22</td><td>0.00%</td><td>0.00</td><td>—</td><td>0.00%</td><td>49</td><td>전체 low-risk</td></tr><tr><td>merged site-adjusted</td><td>1</td><td>10%</td><td>54</td><td>8</td><td>28</td><td>163</td><td>14</td><td>20.61%</td><td>10.69</td><td>22.22%</td><td>36.36%</td><td>49</td><td>mixed</td></tr><tr><td>merged overall site-free</td><td>2</td><td>15%</td><td>262</td><td>34</td><td>135</td><td>0</td><td>0</td><td>100.00%</td><td>51.53</td><td>20.12%</td><td>100.00%</td><td>93</td><td>전체 high-risk</td></tr><tr><td>merged site-adjusted</td><td>2</td><td>15%</td><td>54</td><td>12</td><td>1</td><td>134</td><td>22</td><td>20.61%</td><td>0.38</td><td>92.31%</td><td>35.29%</td><td>93</td><td>mixed</td></tr></tbody></table></div>
+        <div class="callout"><strong>이 표를 읽는 법</strong> FP / 100은 100명당 불필요하게 high-risk로 붙는 사람 수로 읽으시면 됩니다. Unknown before horizon은 그 시점 이전에 censoring되어 event/no-event를 확정할 수 없던 사람 수입니다. 따라서 late horizon에서는 PPV나 specificity가 좋아 보여도, known nonevent 자체가 거의 남지 않았는지 함께 보셔야 합니다.</div>
+        <div class="source-note">Source: structured Stage 3 classification export.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Interpretation</div>
+        <h3>그래서 무엇이 보였는가</h3>
+        <p>site-free benchmark는 어떤 threshold에서는 전원을 low-risk로, 다른 threshold에서는 전원을 high-risk로 몰아가기 쉽습니다. 반면 merged site-adjusted benchmark는 PNU와 SNU를 다르게 취급하므로 일부 horizon과 threshold에서 mixed classification을 만들 수 있습니다. 예를 들어 1년 10% threshold에서 merged site-free는 아무도 high-risk로 분류하지 못하지만, site-adjusted는 54명(20.61%)을 high-risk로 분류해 22개 사건 중 8개를 포착합니다. 반대로 2년 15% threshold에서는 site-free가 전원을 high-risk로 분류해 FP / 100이 51.53이지만, site-adjusted는 54명만 high-risk로 분류해 FP / 100을 0.38까지 낮춥니다. 다만 이 감소는 TPR이 35.29%로 낮아지는 비용과 함께 옵니다. 즉, 이번 Stage의 핵심은 “누가 이겼는가”가 아니라 <strong>benchmark structure를 바꾸는 것만으로도 과분류와 미검출의 trade-off가 크게 움직인다</strong>는 점입니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-3">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 3</div>
+        <h2 class="panel-title">어느 horizon까지 직접 읽을 수 있고, 어디서부터 조심해야 하는가</h2>
+        <p class="panel-sub">이 결과 묶음은 “같은 숫자라도 해석 강도가 왜 다를 수 있는가?”라는 질문에 답합니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">PNU direct range</div><div class="value">1년</div><div class="mini-note">2년은 sensitivity, 3년 이후는 projection입니다.</div></div><div class="summary-item"><div class="label">SNU / merged direct range</div><div class="value">1–2년</div><div class="mini-note">3–5년은 partly model-dependent, 6년 이후는 projection입니다.</div></div><div class="summary-item"><div class="label">Late-tail warning</div><div class="value">10년 known nonevent가 거의 남지 않습니다.</div><div class="mini-note">PNU 0명, SNU 1명, merged 1명입니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>support tier는 숫자의 크기가 아니라 <strong>그 숫자를 얼마나 직접 읽을 수 있는지</strong>를 뜻합니다. directly supported horizon은 현재 follow-up이 그 시점을 비교적 직접 뒷받침하는 구간이고, partly model-dependent horizon은 tail support가 약해지기 시작한 구간, projection-dominant horizon은 실제 관측보다 extrapolation 성격이 더 강한 구간입니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Support map</div>
+        <h3>benchmark별 horizon support 요약</h3>
+        <p>아래 표는 이번 Stage 결과를 어디까지 직접 읽고, 어디부터 보수적으로 읽어야 하는지 정리한 것입니다. 같은 10년 비교라도 cohort에 따라 해석 강도가 다르므로, 값을 읽기 전에 먼저 이 표를 보시는 편이 안전합니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>benchmark</th><th>directly readable</th><th>partly model-dependent</th><th>projection-dominant</th><th>practical reading</th></tr></thead><tbody><tr><td>PNU overall</td><td>1년</td><td>2년 (sensitivity)</td><td>3–10년</td><td>1년 결과가 가장 직접적이며, 2년은 보조적, 3년 이후는 projection으로 읽는 편이 안전합니다.</td></tr><tr><td>SNU overall</td><td>1–2년</td><td>3–5년</td><td>6–10년</td><td>초기 1–2년이 가장 직접적이고, 3–5년은 model dependence를 인정한 2차 근거입니다.</td></tr><tr><td>merged overall site-free</td><td>1–2년</td><td>3–5년</td><td>6–10년</td><td>pooled benchmark이므로 해석 강도는 merged 규칙을 따릅니다.</td></tr><tr><td>merged site-adjusted</td><td>1–2년</td><td>3–5년</td><td>6–10년</td><td>export label은 merged 규칙을 따르지만, PNU-assigned curve는 숫자가 standalone PNU와 같아 더 보수적으로 읽어야 합니다.</td></tr></tbody></table></div>
+        <div class="source-note">Source: support-tier fields carried in the Stage 3 structured exports.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Late-tail denominator check</div>
+        <h3>왜 late horizon을 조심해야 하는가</h3>
+        <p>10년 시점의 outcome-based metric을 계산할 때, known nonevent가 거의 남지 않는 benchmark가 있습니다. 이 경우 PPV나 specificity가 좋아 보여도, 실제로는 비교 가능한 event-free 관찰이 거의 없기 때문에 late-tail 지표를 강하게 해석하기 어렵습니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>benchmark</th><th>events by 10y</th><th>known nonevents by 10y</th><th>unknown due to early censoring</th></tr></thead><tbody><tr><td>PNU overall</td><td>12</td><td>0</td><td>42</td></tr><tr><td>SNU overall</td><td>38</td><td>1</td><td>169</td></tr><tr><td>merged overall site-free</td><td>50</td><td>1</td><td>211</td></tr></tbody></table></div>
+        <div class="source-note">At 10 years, PNU의 known nonevent는 0명이고 SNU와 merged는 1명뿐입니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Conservative reading rule</div>
+        <h3>현재 export에서 보수적으로 읽어야 하는 PNU-assigned site-adjusted rows</h3>
+        <p>merged site-adjusted의 PNU-assigned curve는 숫자 자체는 standalone PNU와 같습니다. 그런데 현재 export에서는 2–5년 구간의 support / evidence / claim label이 standalone PNU보다 더 강하게 붙어 있습니다. 따라서 그 구간은 숫자는 사용하되, 해석 강도는 standalone PNU의 follow-up maturity를 기준으로 낮춰 읽는 편이 안전합니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>horizon</th><th>same KM risk</th><th>standalone PNU label</th><th>merged site-adjusted PNU label</th><th>safer reading</th></tr></thead><tbody><tr><td>2</td><td>29.88%</td><td>sensitivity / partly_model_dependent / secondary_or_sensitivity_only</td><td>primary_supported / directly_observed_data_supported / primary_claim_allowed</td><td>standalone PNU의 follow-up 맥락을 우선 적용합니다.</td></tr><tr><td>3</td><td>29.88%</td><td>projection / mostly_extrapolated / projection_only</td><td>secondary / partly_model_dependent / secondary_or_sensitivity_only</td><td>standalone PNU의 follow-up 맥락을 우선 적용합니다.</td></tr><tr><td>4</td><td>29.88%</td><td>projection / mostly_extrapolated / projection_only</td><td>secondary / partly_model_dependent / secondary_or_sensitivity_only</td><td>standalone PNU의 follow-up 맥락을 우선 적용합니다.</td></tr><tr><td>5</td><td>29.88%</td><td>projection / mostly_extrapolated / projection_only</td><td>secondary / partly_model_dependent / secondary_or_sensitivity_only</td><td>standalone PNU의 follow-up 맥락을 우선 적용합니다.</td></tr></tbody></table></div>
+        <div class="source-note">Same numeric curve, different interpretation labels in the current export.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">Interpretation</div>
+        <h3>그래서 어디까지 말할 수 있는가</h3>
+        <p>PNU의 1년, 그리고 SNU와 merged의 1–2년은 이번 Stage에서 가장 직접적으로 읽을 수 있는 구간입니다. 그 이후는 숫자를 보지 말라는 뜻이 아니라, “관찰이 직접 뒷받침한다”는 강한 문장 대신 “tail support가 약해진 상태에서의 benchmark pattern”으로 해석 강도를 조절해야 한다는 뜻입니다. 특히 PNU의 2년 이후 plateau는 cure의 증거로 단정하기보다, 현재 follow-up 안에서 추가 transition이 관찰되지 않은 tail pattern으로 읽는 편이 안전합니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="synthesis">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Synthesis</div>
+        <h2 class="panel-title">앞 결과를 묶어서 이 Stage의 결론을 제시합니다</h2>
+        <p class="panel-sub">개별 결과를 다시 묶어 보면, 이번 Stage는 individualized model 이전에 이미 cohort와 site 구조가 prediction burden을 크게 바꾼다는 점을 보여줍니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip"><div class="summary-item"><div class="label">Core finding 1</div><div class="value">초기 risk pattern은 cohort마다 이미 다릅니다.</div><div class="mini-note">개인화 모델을 넣기 전에도 구조적 차이가 보입니다.</div></div><div class="summary-item"><div class="label">Core finding 2</div><div class="value">site 구조를 반영하면 과분류 부담이 크게 달라집니다.</div><div class="mini-note">특정 threshold에서 false positives를 크게 줄일 수 있습니다.</div></div><div class="summary-item"><div class="label">Core finding 3</div><div class="value">late horizon은 해석 강도를 낮춰야 합니다.</div><div class="mini-note">특히 PNU 2년 이후와 SNU/merged 6년 이후는 projection이 우세합니다.</div></div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Conclusion</div>
+        <h3>최종 결론</h3>
+        <p>Stage 3는 전체 Kaplan–Meier만으로도 PNU와 SNU의 early transition pattern이 다르다는 점을 분명히 보여줍니다. PNU는 사건이 더 이르게 모이는 쪽에 가깝고, SNU는 초기 위험은 더 낮지만 긴 follow-up에서 추가 사건이 계속 누적됩니다. merged site-free benchmark는 이 둘을 평균내어 중간값을 만들고, merged site-adjusted benchmark는 각 site의 패턴을 다시 subject-level assignment에 반영합니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Directly readable range</div>
+        <h3>지금 비교적 직접 읽을 수 있는 부분</h3>
+        <p>PNU 1년, SNU 1–2년, merged 1–2년의 위험과 threshold-based burden은 이번 Stage에서 가장 직접적으로 읽을 수 있습니다. 이 구간에서는 “benchmark structure가 다르면 high-risk 분류 부담이 달라진다”는 메시지가 비교적 분명합니다. 특히 merged site-adjusted benchmark가 특정 threshold에서 false-positive burden을 크게 줄일 수 있다는 점은 현재 자료가 직접 보여주는 구조적 차이입니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Cautious interpretation</div>
+        <h3>조심해서 읽어야 하는 부분</h3>
+        <p>late horizon 해석, PNU 2년 이후 plateau, 그리고 merged site-adjusted PNU rows의 current label mismatch는 보수적으로 읽어야 합니다. 또한 site-adjusted benchmark의 성과를 treatment effect나 patient-level superiority로 읽어서는 안 됩니다. 이는 각 사람에게 자기 site의 observed-risk pattern을 할당했을 때 생기는 구조적 trade-off이지, 개인 covariate를 정교하게 학습한 결과가 아니기 때문입니다.</p>
+      </article>
+    </div>
+
+    <div class="callout"><strong>이번 Stage에서 독자가 가져가야 할 핵심</strong> PNU와 SNU의 초기 transition pattern은 이미 다르게 보이고, merged benchmark를 site-free로 둘지 site-adjusted로 둘지에 따라 같은 threshold에서도 high-risk 과분류 부담이 크게 달라집니다. 다만 late horizon과 PNU plateau는 cure의 직접 증거로 읽기보다, 현재 follow-up과 tail support의 한계 안에서 조심스럽게 해석하시는 것이 맞습니다.</div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="references">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">References</div>
+        <h2 class="panel-title">사용한 참고문헌</h2>
+        <p class="panel-sub">이번 Stage의 방법과 해석 경계와 직접 관련된 참고문헌만 정리했습니다.</p>
+      </div>
+    </div>
+
+    <ol class="ref-list">
+      <li>Betensky RA. Measures of Follow-up in Time-to-Event Studies: Why provide them and what should they be? <em>Clinical Trials</em>. 2015.</li>
+      <li>Vickers AJ, Elkin EB. Decision Curve Analysis: A Novel Method for Evaluating Prediction Models. <em>Medical Decision Making</em>. 2006.</li>
+      <li>Vickers AJ, Cronin AM, Elkin EB, Gonen M. Extensions to Decision Curve Analysis, a Novel Method for Evaluating Diagnostic Tests, Prediction Models and Molecular Markers. <em>BMC Medical Informatics and Decision Making</em>. 2008.</li>
+    </ol>
+  </div>
+</section>
+
+
+    <div class="footer-note">Stage 3 independent HTML report • KM benchmark classifier • structured export based</div>
+  </div>
+
+<script>
+
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+
+</script>
+</body>
+</html>
