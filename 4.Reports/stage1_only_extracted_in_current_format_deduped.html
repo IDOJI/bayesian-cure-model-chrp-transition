@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage 1 — 공통 backbone 잠금</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.75;
+    font-size:15px;
+  }
+  .container{
+    max-width:1040px;
+    margin:0 auto;
+    padding:36px 24px 84px;
+  }
+
+  .hero{
+    position:relative;
+    overflow:hidden;
+    padding:34px 32px 30px;
+    border-radius:var(--radius-xl);
+    background:
+      radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%),
+      linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;
+    box-shadow:0 24px 60px rgba(15,23,42,.18);
+    margin-bottom:18px;
+  }
+  .hero::after{
+    content:'';
+    position:absolute;
+    right:-48px;
+    top:-42px;
+    width:200px;
+    height:200px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);
+    pointer-events:none;
+  }
+  .hero .label{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#bfdbfe;
+    padding:7px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--line-dark);
+    margin-bottom:14px;
+  }
+  .hero h1{
+    font-size:clamp(30px, 4vw, 42px);
+    line-height:1.12;
+    letter-spacing:-.03em;
+    margin-bottom:12px;
+    max-width:900px;
+  }
+  .hero .sub{
+    max-width:840px;
+    font-size:15px;
+    color:#d1d5db;
+  }
+
+  .tab-shell{
+    position:sticky;
+    top:16px;
+    z-index:12;
+    margin-bottom:18px;
+  }
+  .tabs{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:14px;
+    border-radius:22px;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:blur(16px);
+    border:1px solid rgba(229,231,235,.9);
+    box-shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+  .tabs button{
+    appearance:none;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--text-soft);
+    padding:10px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:700;
+    transition:.18s ease;
+    box-shadow:0 1px 0 rgba(15,23,42,.02);
+  }
+  .tabs button:hover{
+    transform:translateY(-1px);
+    color:var(--text);
+    border-color:#cbd5e1;
+  }
+  .tabs button.active{
+    background:linear-gradient(180deg,#eff6ff,#dbeafe);
+    color:var(--accent-strong);
+    border-color:#bfdbfe;
+    box-shadow:0 8px 18px rgba(37,99,235,.14);
+  }
+
+  .panel{
+    display:none;
+  }
+  .panel.active{
+    display:block;
+    animation:fadeIn .18s ease;
+  }
+  @keyframes fadeIn{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:none}
+  }
+
+  .panel-head{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .panel-kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--accent-strong);
+    margin-bottom:6px;
+  }
+  .panel-title{
+    font-size:26px;
+    line-height:1.2;
+    letter-spacing:-.02em;
+  }
+  .panel-sub{
+    color:var(--text-soft);
+    max-width:760px;
+    margin-top:8px;
+  }
+
+  .panel-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow);
+    padding:28px;
+    margin-bottom:18px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12, 1fr);
+    gap:16px;
+  }
+  .card{
+    grid-column:span 6;
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    padding:22px 20px;
+    min-height:180px;
+  }
+  .card.full{grid-column:1/-1}
+  .card.wide{grid-column:span 8}
+  .card.narrow{grid-column:span 4}
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.03em;
+    margin-bottom:12px;
+    background:var(--accent-soft);
+    color:var(--accent-strong);
+  }
+  .eyebrow.green{background:var(--green-bg); color:var(--green)}
+  .eyebrow.amber{background:var(--amber-bg); color:var(--amber)}
+  .eyebrow.purple{background:var(--purple-bg); color:var(--purple)}
+  .card h3{
+    font-size:19px;
+    line-height:1.3;
+    margin-bottom:10px;
+    letter-spacing:-.01em;
+  }
+  .card p, .card li{
+    color:var(--text-soft);
+  }
+  .card ul{
+    margin-left:18px;
+  }
+
+  .callout{
+    padding:18px 20px;
+    border-radius:18px;
+    border:1px solid var(--border);
+    background:#fafcff;
+    color:var(--text);
+    margin-top:18px;
+  }
+  .callout strong{
+    color:var(--accent-strong);
+  }
+
+  .placeholder-box{
+    margin-top:14px;
+    padding:18px;
+    min-height:180px;
+    border:1.5px dashed #cbd5e1;
+    border-radius:18px;
+    background:
+      linear-gradient(180deg, rgba(248,250,252,.9), rgba(255,255,255,1));
+    color:#64748b;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    font-weight:600;
+  }
+
+  .summary-strip{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:12px;
+    margin-top:18px;
+  }
+  .summary-item{
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:16px;
+    padding:16px;
+  }
+  .summary-item .label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-bottom:6px;
+  }
+  .summary-item .value{
+    font-size:15px;
+    color:var(--text);
+    font-weight:700;
+  }
+
+  .ref-list{
+    margin-left:22px;
+  }
+  .ref-list li + li{
+    margin-top:12px;
+  }
+
+  .footer-note{
+    margin-top:28px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+  }
+
+  @media (max-width:900px){
+    .card, .card.wide, .card.narrow{
+      grid-column:1/-1;
+    }
+    .summary-strip{
+      grid-template-columns:1fr;
+    }
+  }
+
+  @media (max-width:640px){
+    .container{padding:22px 16px 64px}
+    .hero{padding:26px 22px 24px}
+    .panel-card{padding:20px}
+    .tabs{padding:10px}
+    .tabs button{width:100%; text-align:left}
+  }
+
+  .tab-shell { margin-bottom: 0; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="label">📘 Specification-based summary</div>
+      <h1>Stage 1 — 공통 backbone 잠금</h1>
+      <p class="sub">실제 모델 적합 전에, 이후 모든 Stage가 같은 기준으로 비교되도록 분석 backbone을 먼저 고정하는 단계입니다.</p>
+      <div class="tag-shell" style="margin-top:18px; display:flex; flex-wrap:wrap; gap:8px;">
+        <span style="display:inline-flex; align-items:center; border-radius:999px; padding:7px 12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e5efff; font-size:12px; font-weight:700;">Backbone lock</span><span style="display:inline-flex; align-items:center; border-radius:999px; padding:7px 12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e5efff; font-size:12px; font-weight:700;">모델 적합 전 단계</span><span style="display:inline-flex; align-items:center; border-radius:999px; padding:7px 12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e5efff; font-size:12px; font-weight:700;">1–10년 horizon 고정</span><span style="display:inline-flex; align-items:center; border-radius:999px; padding:7px 12px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08); color:#e5efff; font-size:12px; font-weight:700;">Threshold / formula registry 고정</span>
+      </div>
+    </header>
+
+    <section class="panel active" data-panel="stage1-only" style="display:block; margin-top:18px;">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Stage 1</div>
+            <h2 class="panel-title">공통 backbone 잠금</h2>
+          </div>
+        </div>
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow">🧭 이 Stage가 하는 일</div>
+            <h3>post hoc drift를 막는 공통 기준 고정</h3>
+            <ul><li>event definition, dataset split, horizon choice, threshold choice, formula choice, interpretation hierarchy를 먼저 확정합니다.</li><li>특히 1–10년 horizon vector와 threshold grid를 고정해 이후 KM, no-cure, frequentist cure, Bayesian cure 결과를 같은 ruler로 비교할 수 있게 합니다.</li><li>이 Stage는 model-fitting stage가 아니라, 전체 workflow의 backbone lock 단계입니다.</li></ul>
+          </article><article class="card full">
+            <div class="eyebrow">🗂️ 필수 산출물</div>
+            <h3>downstream stages가 그대로 상속해야 하는 registry</h3>
+            <ul><li>dataset / event / remission / censoring count 요약</li><li>person-time summary와 age / sex / site summary</li><li>modeling registry, formula registry, horizon registry, threshold registry, metadata registry</li><li>saved scaling constants와 이후 Stage에 넘길 analysis datasets</li></ul>
+          </article><article class="card full">
+            <div class="eyebrow">🔒 왜 중요한가</div>
+            <h3>같은 질문을 같은 축에서 비교하기 위한 준비</h3>
+            <p>Stage 1이 흔들리면 뒤 Stage의 차이가 모델 차이인지, 아니면 기준 변경 때문인지 분리할 수 없습니다.</p><p>따라서 이 Stage는 결과 자체를 내는 단계라기보다, Stage 2–10의 해석 가능성과 직접 비교 가능성을 보장하는 기반 단계입니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

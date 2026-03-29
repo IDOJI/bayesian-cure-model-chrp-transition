@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage 5 HTML Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.75;
+    font-size:15px;
+  }
+  .container{
+    max-width:1040px;
+    margin:0 auto;
+    padding:36px 24px 84px;
+  }
+  .hero{
+    position:relative;
+    overflow:hidden;
+    padding:34px 32px 30px;
+    border-radius:var(--radius-xl);
+    background:
+      radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%),
+      linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;
+    box-shadow:0 24px 60px rgba(15,23,42,.18);
+    margin-bottom:18px;
+  }
+  .hero::after{
+    content:'';
+    position:absolute;
+    right:-48px;
+    top:-42px;
+    width:200px;
+    height:200px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);
+    pointer-events:none;
+  }
+  .hero .label{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#bfdbfe;
+    padding:7px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--line-dark);
+    margin-bottom:14px;
+  }
+  .hero h1{
+    font-size:clamp(30px, 4vw, 42px);
+    line-height:1.12;
+    letter-spacing:-.03em;
+    margin-bottom:12px;
+    max-width:900px;
+  }
+  .hero .sub{
+    max-width:840px;
+    font-size:15px;
+    color:#d1d5db;
+  }
+  .tab-shell{
+    position:sticky;
+    top:16px;
+    z-index:12;
+    margin-bottom:18px;
+  }
+  .tabs{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:14px;
+    border-radius:22px;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:blur(16px);
+    border:1px solid rgba(229,231,235,.9);
+    box-shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+  .tabs button{
+    appearance:none;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--text-soft);
+    padding:10px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:700;
+    transition:.18s ease;
+    box-shadow:0 1px 0 rgba(15,23,42,.02);
+  }
+  .tabs button:hover{
+    transform:translateY(-1px);
+    color:var(--text);
+    border-color:#cbd5e1;
+  }
+  .tabs button.active{
+    background:linear-gradient(180deg,#eff6ff,#dbeafe);
+    color:var(--accent-strong);
+    border-color:#bfdbfe;
+    box-shadow:0 8px 18px rgba(37,99,235,.14);
+  }
+  .panel{display:none;}
+  .panel.active{display:block; animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .panel-head{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .panel-kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--accent-strong);
+    margin-bottom:6px;
+  }
+  .panel-title{
+    font-size:26px;
+    line-height:1.2;
+    letter-spacing:-.02em;
+  }
+  .panel-sub{
+    color:var(--text-soft);
+    max-width:760px;
+    margin-top:8px;
+  }
+  .panel-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow);
+    padding:28px;
+    margin-bottom:18px;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12, 1fr);
+    gap:16px;
+  }
+  .card{
+    grid-column:1/-1;
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    padding:22px 20px;
+    min-height:0;
+  }
+  .card.full{grid-column:1/-1}
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.03em;
+    margin-bottom:12px;
+    background:var(--accent-soft);
+    color:var(--accent-strong);
+  }
+  .eyebrow.green{background:var(--green-bg); color:var(--green)}
+  .eyebrow.amber{background:var(--amber-bg); color:var(--amber)}
+  .eyebrow.purple{background:var(--purple-bg); color:var(--purple)}
+  .card h3{
+    font-size:19px;
+    line-height:1.3;
+    margin-bottom:10px;
+    letter-spacing:-.01em;
+  }
+  .card p, .card li{color:var(--text-soft);}
+  .card strong{color:var(--text);}
+  .callout{
+    padding:18px 20px;
+    border-radius:18px;
+    border:1px solid var(--border);
+    background:#fafcff;
+    color:var(--text);
+    margin-top:18px;
+  }
+  .callout strong{color:var(--accent-strong)}
+  .ref-list{margin-left:22px;}
+  .ref-list li + li{margin-top:12px;}
+  .footer-note{
+    margin-top:28px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+  }
+  
+  .report-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    font-size:14px;
+    min-width:760px;
+  }
+  .table-wrap{
+    overflow-x:auto;
+    margin-top:14px;
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+  }
+  .report-table th,
+  .report-table td{
+    padding:12px 14px;
+    border-bottom:1px solid var(--border);
+    vertical-align:top;
+    text-align:left;
+  }
+  .report-table th{
+    background:#f8fafc;
+    color:var(--text);
+    font-size:13px;
+    font-weight:800;
+    white-space:nowrap;
+  }
+  .report-table tr:last-child td{border-bottom:none}
+  .table-guide{
+    padding:14px 16px;
+    border:1px solid var(--border);
+    border-radius:16px;
+    background:#fbfdff;
+    color:var(--text-soft);
+    margin-top:12px;
+  }
+  .table-guide strong{color:var(--text)}
+  .table-note{
+    margin-top:12px;
+    padding:14px 16px;
+    border-radius:16px;
+    background:#f8fafc;
+    border:1px solid var(--border);
+    color:var(--text);
+  }
+  .subtable-title{
+    font-size:18px;
+    margin:18px 0 8px;
+    letter-spacing:-.01em;
+  }
+  .subtable-title:first-of-type{margin-top:0}
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+    gap:12px;
+    margin-top:14px;
+  }
+  .stat-card{
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:18px 16px;
+    background:linear-gradient(180deg, #fff, #fbfbfd);
+    box-shadow:var(--card-shadow);
+  }
+  .stat-label{
+    font-size:12px;
+    font-weight:800;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:8px;
+  }
+  .stat-value{
+    font-size:24px;
+    font-weight:800;
+    letter-spacing:-.03em;
+    color:var(--text);
+    line-height:1.15;
+  }
+  .stat-note{
+    color:var(--text-soft);
+    font-size:13px;
+    margin-top:8px;
+  }
+  .source-pills,
+  .badge-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:12px;
+  }
+  .source-pill, .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:7px 11px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--text);
+    font-size:13px;
+    font-weight:700;
+  }
+  .badge.primary,
+  .year-pill.primary{
+    background:#eff6ff;
+    color:#1d4ed8;
+    border-color:#bfdbfe;
+  }
+  .badge.sensitivity,
+  .year-pill.sensitivity{
+    background:#fffbeb;
+    color:#b45309;
+    border-color:#fcd34d;
+  }
+  .badge.secondary,
+  .year-pill.secondary{
+    background:#f5f3ff;
+    color:#6d28d9;
+    border-color:#d8b4fe;
+  }
+  .badge.projection,
+  .year-pill.projection{
+    background:#f8fafc;
+    color:#475569;
+    border-color:#cbd5e1;
+  }
+  .math{
+    display:inline-block;
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px;
+    padding:4px 8px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:#f8fafc;
+    color:#0f172a;
+    margin:2px 4px 2px 0;
+  }
+  .inline-link{
+    color:var(--accent-strong);
+    text-decoration:none;
+    border-bottom:1px solid #bfdbfe;
+    font-weight:700;
+  }
+  .inline-link:hover{border-color:var(--accent-strong)}
+  .bar-group{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    margin-top:14px;
+  }
+  .bar-row{
+    display:grid;
+    grid-template-columns:minmax(170px, 250px) 1fr 70px;
+    gap:12px;
+    align-items:center;
+  }
+  .bar-label{
+    font-weight:700;
+    color:var(--text);
+    line-height:1.35;
+  }
+  .bar-track{
+    position:relative;
+    height:12px;
+    border-radius:999px;
+    background:#e5e7eb;
+    overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;
+    border-radius:999px;
+    background:linear-gradient(90deg, #93c5fd, #2563eb);
+  }
+  .bar-fill.alt{
+    background:linear-gradient(90deg, #c4b5fd, #7c3aed);
+  }
+  .bar-fill.green{
+    background:linear-gradient(90deg, #86efac, #16a34a);
+  }
+  .bar-value{
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px;
+    color:var(--text);
+    font-weight:700;
+    text-align:right;
+  }
+  .timeline{
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    margin-top:16px;
+  }
+  .timeline-row{
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:16px;
+    background:linear-gradient(180deg, #fff, #fbfbfd);
+  }
+  .timeline-label{
+    font-size:16px;
+    font-weight:800;
+    margin-bottom:10px;
+  }
+  .timeline-body{display:flex; flex-direction:column; gap:10px;}
+  .timeline-pills{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .year-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:7px 10px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:#fff;
+    font-size:13px;
+    font-weight:700;
+  }
+  .year-pill .yr{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    opacity:.9;
+  }
+  .timeline-note{
+    color:var(--text-soft);
+    font-size:14px;
+  }
+  .section-copy{
+    color:var(--text-soft);
+    margin-top:8px;
+  }
+  .mini-list{
+    margin-top:10px;
+    color:var(--text-soft);
+  }
+  .mini-list li+li{margin-top:6px}
+  .keyline{
+    height:1px;
+    background:var(--border);
+    margin:20px 0;
+  }
+  .small-kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color:var(--accent-strong);
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:8px;
+  }
+  .summary-strip{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin-top:18px;
+  }
+  .summary-item{
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:16px;
+    padding:16px;
+  }
+  .summary-item .label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-bottom:6px;
+  }
+  .summary-item .value{
+    font-size:15px;
+    color:var(--text);
+    font-weight:700;
+  }
+  .section-end{
+    margin-top:14px;
+    color:var(--text-soft);
+  }
+  .chip-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(200px,1fr));
+    gap:12px;
+    margin-top:14px;
+  }
+  .chip-box{
+    padding:14px 16px;
+    border-radius:16px;
+    border:1px solid var(--border);
+    background:#fff;
+  }
+  .chip-box h4{
+    font-size:15px;
+    margin-bottom:8px;
+  }
+  .chip-box p{
+    color:var(--text-soft);
+    margin:0;
+  }
+  .muted{
+    color:var(--text-soft);
+  }
+  .table-legend{
+    margin-top:12px;
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+  .table-legend div{
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:#fff;
+    color:var(--text-soft);
+  }
+  .table-legend strong{color:var(--text)}
+  @media (max-width:640px){
+    .bar-row{grid-template-columns:1fr; gap:8px}
+    .bar-value{text-align:left}
+  }
+
+  @media (max-width:640px){
+    .container{padding:22px 16px 64px}
+    .hero{padding:26px 22px 24px}
+    .panel-card{padding:20px}
+    .tabs{padding:10px}
+    .tabs button{width:100%; text-align:left}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="label">Stage 5</div>
+      <h1>Stage 5 — individualized non-cure comparator</h1>
+      <p class="sub">이 단계는 치유를 아직 포함하지 않은 여러 생존모형을 같은 backbone에서 적합해, 환자별 1–10년 예측위험과 그에 따른 성능·분류 부담을 비교하는 단계입니다.</p>
+    </header>
+
+    <div class="tab-shell">
+      <nav class="tabs" aria-label="Stage tabs">
+        <button class="active" data-tab="overview">개요</button>
+        <button data-tab="results-overview">결과 개요</button>
+        <button data-tab="result-1">결과 1</button>
+        <button data-tab="result-2">결과 2</button>
+        <button data-tab="result-3">결과 3</button>
+        <button data-tab="result-4">결과 4</button>
+        <button data-tab="synthesis">종합 해석</button>
+        <button data-tab="references">References</button>
+      </nav>
+    </div>
+
+    
+    <section class="panel active" data-panel="overview">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Overview</div>
+            <h2 class="panel-title">이 단계는 무엇을 보는가</h2>
+            <p class="panel-sub">Stage 5는 이후 cure model과 비교할 비치유 individualized benchmark를 같은 기준으로 정리하는 단계입니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow">Stage role</div>
+            <h3>이번 Stage의 역할</h3>
+            <p>이번 Stage에서는 <strong>비치유(non-cure) 생존모형</strong>을 공통 backbone 위에서 적합하고, 각 환자의 horizon별 <strong>예측 위험 행렬</strong>을 기준으로 discrimination, calibration, Brier score, threshold-based classification, decision-curve net benefit을 함께 비교합니다.</p>
+            <div class="badge-row">
+              <span class="badge ">PNU / SNU / merged</span>
+              <span class="badge ">5개 생존모형</span>
+              <span class="badge ">1–10 year horizons</span>
+              <span class="badge ">thresholds 0.05, 0.10, 0.15, 0.20</span>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Reader takeaway</div>
+            <h3>결과를 읽기 전에 먼저 알아두실 점</h3>
+            <p>이번 실행에서는 <strong>Cox proportional hazards</strong>, <strong>Exponential</strong>, <strong>Weibull</strong>, <strong>Log-normal</strong>, <strong>Log-logistic</strong> 모형을 적합했습니다. PNU와 SNU는 <strong>Base</strong>와 <strong>Interaction</strong>, merged는 여기에 <strong>Site-added</strong>와 <strong>Site + interaction</strong>을 추가해 총 <strong>40개 모델</strong>을 적합했습니다. event는 <strong>transition</strong>, remission과 right censoring은 main scale에서 <strong>censoring</strong>으로 처리했고, age는 두 표준편차로 나눈 standardized age를 사용했습니다.</p>
+            <div class="chip-grid">
+              <div class="chip-box">
+                <h4>보고 가능한 것</h4>
+                <p>모델 registry, horizon별 AUC/Brier/보정, threshold-based classification, false positives per 100, decision-curve net benefit입니다.</p>
+              </div>
+              <div class="chip-box">
+                <h4>이번 Stage에서 제공되지 않은 것</h4>
+                <p>계수의 신뢰구간·p-value와 bootstrap 반복 횟수는 이번 export에 포함되지 않았습니다.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Interpretation boundary</div>
+            <h3>어디까지 직접 읽고, 어디부터 조심해서 읽어야 하는가</h3>
+            <p>이 Stage의 표와 수치는 모두 같은 형식으로 제공되지만, <strong>해석 강도는 horizon마다 다릅니다</strong>. PNU는 Year 1이 1차 해석 가능 구간이고, Year 2는 민감도 확인, Year 3–10은 투영 중심입니다. SNU와 merged는 Year 1–2가 1차 해석 가능, Year 3–5는 보조 해석, Year 6–10은 투영 중심으로 읽는 것이 이번 Stage source와 가장 잘 맞습니다.</p>
+            <div class="timeline">
+              
+      <div class="timeline-row">
+        <div class="timeline-label">PNU</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill sensitivity"><span class="yr">2</span></span><span class="year-pill projection"><span class="yr">3</span></span><span class="year-pill projection"><span class="yr">4</span></span><span class="year-pill projection"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">직접 읽을 수 있는 핵심 구간은 Year 1이며, Year 2는 민감도 확인, Year 3–10은 투영 중심입니다.</div>
+        </div>
+      </div>
+    
+              
+      <div class="timeline-row">
+        <div class="timeline-label">SNU</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill primary"><span class="yr">2</span></span><span class="year-pill secondary"><span class="yr">3</span></span><span class="year-pill secondary"><span class="yr">4</span></span><span class="year-pill secondary"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">Year 1–2는 1차 해석 가능, Year 3–5는 보조 해석, Year 6–10은 투영 중심으로 읽어주시면 됩니다.</div>
+        </div>
+      </div>
+    
+              
+      <div class="timeline-row">
+        <div class="timeline-label">merged</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill primary"><span class="yr">2</span></span><span class="year-pill secondary"><span class="yr">3</span></span><span class="year-pill secondary"><span class="yr">4</span></span><span class="year-pill secondary"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">Year 1–2는 1차 해석 가능, Year 3–5는 보조 해석, Year 6–10은 투영 중심으로 읽어주시면 됩니다.</div>
+        </div>
+      </div>
+    
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow purple">Modeling table</div>
+            <h3>모델링 표</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              이 표는 코드 문법이 아니라 보고서용 통계 표기로, 이번 Stage가 실제로 무엇을 적합했고 어떤 산출물을 남겼는지 보여드립니다. <strong>Ŝ(t|X)</strong>는 예측 생존확률, <strong>R̂(t|X)=1−Ŝ(t|X)</strong>는 예측 위험, <strong>Ŷ(t;c)=1{R̂(t|X)≥c}</strong>는 임계값 분류기를 뜻합니다.
+            </div>
+            <div class="table-wrap">
+              <table class="report-table">
+                <thead>
+                  <tr>
+                    <th>분석 블록</th>
+                    <th>무엇을 했는가</th>
+                    <th>명시적 설정</th>
+                    <th>주요 산출물</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>공통 backbone</td>
+                    <td>세 dataset에서 같은 시간축과 event/censoring 정의를 유지했습니다.</td>
+                    <td>
+                      <span class="math">T = days_followup / 365.25</span>
+                      <span class="math">event = 1{status_num = 1}</span>
+                      <span class="math">censor = 1{status_num ∈ {0,2}}</span>
+                      <span class="math">age<sub>s</sub> = (age − ̄age) / (2·sd(age))</span>
+                    </td>
+                    <td>dataset별 model registry와 subject × horizon risk table</td>
+                  </tr>
+                  <tr>
+                    <td>비치유 생존모형 적합</td>
+                    <td>치유를 허용하지 않는 생존함수 <strong>Ŝ(t|X)</strong>를 여러 생존모형으로 적합했습니다.</td>
+                    <td>
+                      <span class="math">Ŝ(t|X)</span>
+                      <span class="math">X = (age<sub>s</sub>, sex)</span>
+                      <span class="math">X = (age<sub>s</sub>, sex, site)</span>
+                    </td>
+                    <td>logLik, 파라미터 수, AIC, BIC, convergence status</td>
+                  </tr>
+                  <tr>
+                    <td>개별화 위험 export</td>
+                    <td>모든 적합 모델에서 horizon별 환자별 위험을 뽑았습니다.</td>
+                    <td>
+                      <span class="math">R̂(t|X) = 1 − Ŝ(t|X)</span>
+                      <span class="math">t ∈ {1,2,…,10} years</span>
+                    </td>
+                    <td>subject × horizon predicted survival / risk long table</td>
+                  </tr>
+                  <tr>
+                    <td>예측 성능 비교</td>
+                    <td>고정 horizon에서 순위화 능력과 오차를 비교했습니다.</td>
+                    <td>
+                      <span class="math">AUC(t)</span>
+                      <span class="math">Brier(t)</span>
+                      <span class="math">IBS</span>
+                      <span class="math">Harrell’s C / Uno’s C</span>
+                    </td>
+                    <td>horizon summary, integrated summary, time-range discrimination</td>
+                  </tr>
+                  <tr>
+                    <td>보정(calibration)</td>
+                    <td>평균 예측위험과 관찰위험의 차이, intercept/slope, grouped bins를 점검했습니다.</td>
+                    <td>
+                      <span class="math">mean[R̂(t|X)]</span>
+                      <span class="math">observed risk(t)</span>
+                      <span class="math">intercept / slope</span>
+                    </td>
+                    <td>calibration diagnostics table, grouped calibration bins</td>
+                  </tr>
+                  <tr>
+                    <td>임계값 분류와 clinical usefulness</td>
+                    <td>예측위험이 임계값을 넘는지로 high-risk 분류를 만들고, false-positive burden과 순효익을 비교했습니다.</td>
+                    <td>
+                      <span class="math">Ŷ(t;c)=1{R̂(t|X) ≥ c}</span>
+                      <span class="math">c ∈ {0.05,0.10,0.15,0.20}</span>
+                    </td>
+                    <td>PPV, sensitivity, specificity, false positives per 100, net benefit, treat-all / treat-none reference</td>
+                  </tr>
+                  <tr>
+                    <td>반복 적합 / 재표본추출</td>
+                    <td>bootstrap이나 optimism correction이 export되었는지 확인했습니다.</td>
+                    <td><span class="math">B = ?</span></td>
+                    <td>이번 Stage source에는 bootstrap 반복 수나 bootstrap-based output이 제공되지 않았습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-note">즉, 이번 Stage는 <strong>가설검정 중심 단계가 아니라 예측 비교 단계</strong>입니다. 별도의 주가설 H0/H1 검정 표는 export되지 않았고, AIC·AUC·Brier·net benefit은 각기 다른 관점의 성능 지표로 읽어주시면 됩니다.</div>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="results-overview">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Results overview</div>
+            <h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+            <p class="panel-sub">먼저 무엇을 적합했는지와 보고 가능한 범위를 확인한 뒤, 지원구간의 성능, threshold-based 분류, calibration과 해석 경계를 차례로 읽으시면 됩니다.</p>
+          </div>
+        </div>
+
+        <div class="summary-strip">
+          <div class="summary-item">
+            <div class="label">Result group 1</div>
+            <div class="value">무엇을 적합했고 무엇이 실제로 보고 가능한가</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Result group 2</div>
+            <div class="value">지원구간에서의 예측 성능 비교</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Result group 3</div>
+            <div class="value">임계값 분류와 decision-curve 순효익</div>
+          </div>
+          <div class="summary-item">
+            <div class="label">Result group 4</div>
+            <div class="value">calibration과 장기 해석 경계</div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:18px">
+          <article class="card full">
+            <div class="eyebrow">Reading map</div>
+            <h3>결과 흐름</h3>
+            <p>이번 Stage는 숫자를 많이 보여주지만, 한 번에 모두 보실 필요는 없습니다. <strong>결과 1</strong>에서 모델 수와 export completeness를 확인하고, <strong>결과 2</strong>에서 primary-supported horizon의 AUC와 Brier를 보신 뒤, <strong>결과 3</strong>에서 같은 위험이 실제 분류 부담을 얼마나 바꾸는지 확인하시면 됩니다. 마지막으로 <strong>결과 4</strong>에서 calibration과 long-horizon interpretation boundary를 정리하면, 어떤 숫자를 바로 읽을 수 있고 어떤 숫자는 조심해서 읽어야 하는지가 분명해집니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow purple">Representative materials</div>
+            <h3>이번 보고서에서 우선 사용한 자료</h3>
+            <p>정확한 수치는 structured CSV에서 읽었고, 패턴 확인은 요약 플롯 PDF를 참고했습니다. 원하시면 원본 요약 플롯은 <a class="inline-link" href="stage5_summary_plots.pdf">stage5_summary_plots.pdf</a>로 확인하실 수 있습니다.</p>
+            <div class="source-pills">
+              <span class="source-pill">stage5_model_registry.csv</span>
+              <span class="source-pill">stage5_model_performance_long.csv</span>
+              <span class="source-pill">stage5_calibration_diagnostics_long.csv</span>
+              <span class="source-pill">stage5_calibration_bins_long.csv</span>
+              <span class="source-pill">stage5_qc_summary.csv</span>
+              <span class="source-pill">stage5_summary_plots.pdf</span>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Section planning</div>
+            <h3>결과 묶음별 질문</h3>
+            <p><strong>결과 1</strong>은 “이번 Stage에서 실제로 몇 개의 모델을 적합했고, 어떤 산출물이 남았는가?”에 답합니다. <strong>결과 2</strong>는 “지원구간에서 모형과 formula structure가 예측 성능을 얼마나 바꾸는가?”를 보여드립니다. <strong>결과 3</strong>은 “같은 위험추정이 high-risk labeling과 순효익을 얼마나 바꾸는가?”를 보여드리고, <strong>결과 4</strong>는 “보정 요약은 어디까지 직접 읽을 수 있고, 어디서부터 투영 중심으로 봐야 하는가?”를 정리합니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="result-1">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Result 1</div>
+            <h2 class="panel-title">어떤 모델을 적합했고, 무엇이 실제로 보고 가능한가</h2>
+            <p class="panel-sub">먼저 Stage 5의 fit inventory와 export completeness를 확인합니다. 이 단계가 튼튼한 comparator인지부터 보는 구간입니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow purple">Question</div>
+            <h3>이 결과가 답하는 질문</h3>
+            <p>이번 Stage의 첫 질문은 간단합니다. <strong>무엇을 몇 개 적합했고, 실제로 어떤 output까지 남았는가?</strong>입니다. 숫자가 많더라도 이 구조가 먼저 정리되어야 뒤의 AUC, Brier, net benefit을 같은 기준에서 비교하실 수 있습니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Key numbers</div>
+            <h3>핵심 수치 요약</h3>
+            <div class="stat-grid">
+              
+      <div class="stat-card">
+        <div class="stat-label">Fitted models</div>
+        <div class="stat-value">40</div>
+        <div class="stat-note">PNU 10, SNU 10, merged 20</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">Converged models</div>
+        <div class="stat-value">40 / 40</div>
+        <div class="stat-note">registry상 모든 모델이 수렴했습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">Subject × horizon predictions</div>
+        <div class="stat-value">78,600</div>
+        <div class="stat-note">예상 행 수와 실제 행 수가 일치했습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">Bootstrap / resampling</div>
+        <div class="stat-value">명시적 정보 없음</div>
+        <div class="stat-note">반복 수나 bootstrap-based output은 이번 source에 포함되지 않았습니다.</div>
+      </div>
+            </div>
+            <p class="section-end">즉, Stage 5는 <strong>구조적으로 완전한 비치유 comparator block</strong>으로 남아 있습니다. 다만 coefficient-level inference와 bootstrap 정보는 이번 export만으로는 보고할 수 없습니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow">HTML-native visualization</div>
+            <h3>dataset별 적합 모델 수</h3>
+            <p class="section-copy">모델 수가 많을수록 구조 변형이 더 많이 포함된 것입니다. merged가 20개로 가장 많은 이유는 site-adjusted 구조 두 개가 추가되었기 때문입니다.</p>
+            <div class="bar-group">
+        <div class="bar-row">
+          <div class="bar-label">PNU</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:50.0%"></div></div>
+          <div class="bar-value">10 models</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SNU</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:50.0%"></div></div>
+          <div class="bar-value">10 models</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:100.0%"></div></div>
+          <div class="bar-value">20 models</div>
+        </div></div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Model families</div>
+            <h3>어떤 생존모형을 적합했는지</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              이 표는 적합한 생존모형의 종류와 extrapolation rule을 보여드립니다. Cox PH는 semi-parametric이고, 나머지 네 모형은 parametric입니다. 여기서 <strong>extrapolation rule</strong>은 관찰 구간을 넘어갈 때 tail을 어떤 방식으로 이어가는지를 뜻합니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>모형</th>
+      <th>Model type</th>
+      <th>Fit engine</th>
+      <th>Extrapolation rule</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>semi-parametric</td>
+      <td>survival</td>
+      <td>last observed event 이후 baseline hazard를 carry-forward</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>parametric</td>
+      <td>flexsurv</td>
+      <td>parametric extrapolation</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>parametric</td>
+      <td>flexsurv</td>
+      <td>parametric extrapolation</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>parametric</td>
+      <td>flexsurv</td>
+      <td>parametric extrapolation</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>parametric</td>
+      <td>flexsurv</td>
+      <td>parametric extrapolation</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, Stage 5의 비교는 “한 모델 vs 한 모델”이 아니라, <strong>semi-parametric 1개 + parametric 4개</strong>를 같은 backbone에서 나란히 놓은 비교입니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Analysis inventory</div>
+            <h3>dataset별 적합 구조</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              이 표는 dataset마다 어떤 formula block이 있었는지, 총 몇 개의 model fit이 있었는지, 그리고 그 fit이 어떤 관찰량 위에서 이루어졌는지를 보여드립니다. <strong>N transitions</strong>는 main event로 들어간 transition 수이고, <strong>Anchor horizon</strong>은 그 dataset에서 1차적으로 강조된 대표 horizon입니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Dataset</th>
+      <th>Formula blocks</th>
+      <th>Model families</th>
+      <th>Fitted models</th>
+      <th>N subjects</th>
+      <th>N transitions</th>
+      <th>Anchor horizon</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PNU</td>
+      <td>Base, Interaction</td>
+      <td>Cox PH, Exponential, Log-logistic, Log-normal, Weibull</td>
+      <td>10</td>
+      <td>54</td>
+      <td>12</td>
+      <td>Year 1</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base, Interaction</td>
+      <td>Cox PH, Exponential, Log-logistic, Log-normal, Weibull</td>
+      <td>10</td>
+      <td>208</td>
+      <td>38</td>
+      <td>Year 2</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>Base, Interaction, Site-added, Site + interaction</td>
+      <td>Cox PH, Exponential, Log-logistic, Log-normal, Weibull</td>
+      <td>20</td>
+      <td>262</td>
+      <td>50</td>
+      <td>Year 2</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td>8 formula structures</td>
+      <td>5 families</td>
+      <td>40</td>
+      <td>—</td>
+      <td>—</td>
+      <td>dataset-specific</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, PNU와 SNU는 각각 10개, merged는 20개 모델로 구성되어 있고, 이번 Stage는 총 <strong>8개 formula structure × 5개 생존모형 = 40개 model fit</strong>으로 이루어져 있습니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow">Support-aware reading</div>
+            <h3>support tier를 먼저 보고 읽어야 하는 이유</h3>
+            <p>같은 table에 1–10년 값이 모두 있어도, 해석 강도는 같지 않습니다. 아래 band는 이번 Stage에서 각 dataset의 값을 어느 수준으로 읽어야 하는지 보여드립니다.</p>
+            <div class="timeline">
+              
+      <div class="timeline-row">
+        <div class="timeline-label">PNU</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill sensitivity"><span class="yr">2</span></span><span class="year-pill projection"><span class="yr">3</span></span><span class="year-pill projection"><span class="yr">4</span></span><span class="year-pill projection"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">직접 읽을 수 있는 핵심 구간은 Year 1이며, Year 2는 민감도 확인, Year 3–10은 투영 중심입니다.</div>
+        </div>
+      </div>
+    
+              
+      <div class="timeline-row">
+        <div class="timeline-label">SNU</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill primary"><span class="yr">2</span></span><span class="year-pill secondary"><span class="yr">3</span></span><span class="year-pill secondary"><span class="yr">4</span></span><span class="year-pill secondary"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">Year 1–2는 1차 해석 가능, Year 3–5는 보조 해석, Year 6–10은 투영 중심으로 읽어주시면 됩니다.</div>
+        </div>
+      </div>
+    
+              
+      <div class="timeline-row">
+        <div class="timeline-label">merged</div>
+        <div class="timeline-body">
+          <div class="timeline-pills"><span class="year-pill primary"><span class="yr">1</span></span><span class="year-pill primary"><span class="yr">2</span></span><span class="year-pill secondary"><span class="yr">3</span></span><span class="year-pill secondary"><span class="yr">4</span></span><span class="year-pill secondary"><span class="yr">5</span></span><span class="year-pill projection"><span class="yr">6</span></span><span class="year-pill projection"><span class="yr">7</span></span><span class="year-pill projection"><span class="yr">8</span></span><span class="year-pill projection"><span class="yr">9</span></span><span class="year-pill projection"><span class="yr">10</span></span></div>
+          <div class="timeline-note">Year 1–2는 1차 해석 가능, Year 3–5는 보조 해석, Year 6–10은 투영 중심으로 읽어주시면 됩니다.</div>
+        </div>
+      </div>
+    
+            </div>
+            <div class="table-note">즉, 이번 Stage에서 바로 가져가실 핵심은 <strong>PNU는 Year 1</strong>, <strong>SNU와 merged는 Year 1–2</strong>를 중심으로 읽고, 그 이후는 model dependence를 함께 적어야 한다는 점입니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Interpretation</div>
+            <h3>해석</h3>
+            <p>결과적으로 Stage 5는 “비교할 모델이 충분히 준비되어 있는가?”라는 질문에 <strong>그렇습니다</strong>라고 답할 수 있는 단계입니다. 총 40개 모델이 수렴했고, subject × horizon prediction export도 완전합니다. 그래서 이후에 보실 성능 차이는 <strong>약한 baseline과의 비교</strong>가 아니라, 꽤 넓고 정리된 비치유 comparator set 안에서의 차이로 읽으시면 됩니다. 반대로, 계수의 p-value나 bootstrap-based optimism correction처럼 이번 export에 없는 정보는 여기서 억지로 해석하지 않겠습니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="result-2">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Result 2</div>
+            <h2 class="panel-title">지원구간에서 모델 성능은 어떻게 달라졌는가</h2>
+            <p class="panel-sub">AUC, Brier, integrated Brier score, C-index를 함께 보되, 한 지표만으로 “우승 모델”을 고르지 않는 방식으로 읽습니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow purple">Question</div>
+            <h3>이 결과가 답하는 질문</h3>
+            <p>여기서는 <strong>primary-supported horizon에서 모형과 formula structure가 무엇을 바꾸는지</strong>를 봅니다. AUC는 사람을 순서대로 잘 세우는지, Brier score는 예측오차가 얼마나 작은지, integrated Brier score는 horizon 전체를 묶어 본 평균 오차가 얼마나 작은지를 보여줍니다. 값이 클수록 좋은 지표(AUC, C-index)와 작을수록 좋은 지표(Brier, IBS)가 섞여 있으니, 한 숫자만 보고 결론을 내리면 안 됩니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Key numbers</div>
+            <h3>핵심 수치 4개</h3>
+            <div class="stat-grid">
+              
+      <div class="stat-card">
+        <div class="stat-label">PNU · Base · Year 1 observed IPCW risk</div>
+        <div class="stat-value">17.0%</div>
+        <div class="stat-note">직접 해석 가능한 PNU 핵심 구간입니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">PNU · Base · Year 1 mean predicted risk range</div>
+        <div class="stat-value">17.1%–22.3%</div>
+        <div class="stat-note">AUC는 같아도 absolute risk scale은 달랐습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">SNU · Base · Year 2 best AUC</div>
+        <div class="stat-value">0.592</div>
+        <div class="stat-note">Base 모형들 가운데서는 Log-normal이 가장 높았습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">merged · Year 2 best site-adjusted AUC</div>
+        <div class="stat-value">0.728</div>
+        <div class="stat-note">site-free best AUC 0.659보다 높았습니다.</div>
+      </div>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow">HTML-native visualization</div>
+            <h3>formula block별 best primary-horizon AUC</h3>
+            <p class="section-copy">각 formula block에서 dataset-specific anchor horizon의 최고 AUC만 뽑아 그렸습니다. 막대가 길수록 같은 block 안에서 discrimination이 더 높았다는 뜻입니다.</p>
+            <div class="bar-group">
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:92.5%"></div></div>
+          <div class="bar-value">0.673</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">PNU · Interaction</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:89.5%"></div></div>
+          <div class="bar-value">0.652</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SNU · Base</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:81.3%"></div></div>
+          <div class="bar-value">0.592</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SNU · Interaction</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:74.0%"></div></div>
+          <div class="bar-value">0.538</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Base</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:90.6%"></div></div>
+          <div class="bar-value">0.659</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Interaction</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:89.9%"></div></div>
+          <div class="bar-value">0.654</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site-added</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:100.0%"></div></div>
+          <div class="bar-value">0.728</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site + interaction</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:99.1%"></div></div>
+          <div class="bar-value">0.721</div>
+        </div></div>
+            <div class="table-note">즉, merged에서는 <strong>site-adjusted block</strong>의 AUC가 site-free block보다 뚜렷하게 높았습니다. 반면 PNU Base는 모형이 달라도 AUC가 거의 같아서, 차이는 주로 absolute risk scaling 쪽에서 나타났습니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Main comparison</div>
+            <h3>global summary로 보면 어떤 모형이 앞섰는가</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              <strong>Best AIC 모형</strong>는 적합도와 파라미터 수를 함께 본 기준이고, <strong>Best IBS 모형</strong>는 전체 horizon을 묶은 예측오차가 가장 작은 모형, <strong>Best Harrell’s C 모형</strong>는 전반적 순위화가 가장 좋은 모형입니다. 세 열이 서로 다른 모형을 가리키면, 그 구조에서는 “한 숫자로 정리되는 단일 승자”가 없다는 뜻입니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Dataset</th>
+      <th>Formula</th>
+      <th>Best AIC 모형</th>
+      <th>Best IBS 모형</th>
+      <th>Best Harrell’s C 모형</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PNU</td>
+      <td>Base</td>
+      <td>exponential (63.861)</td>
+      <td>exponential (0.1559)</td>
+      <td>coxph (0.5768)</td>
+    </tr>
+    <tr>
+      <td>PNU</td>
+      <td>Interaction</td>
+      <td>exponential (64.731)</td>
+      <td>loglogistic (0.1703)</td>
+      <td>lognormal (0.6481)</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>lognormal (302.289)</td>
+      <td>coxph (0.1690)</td>
+      <td>lognormal (0.5185)</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Interaction</td>
+      <td>weibull (303.113)</td>
+      <td>coxph (0.1659)</td>
+      <td>lognormal (0.5158)</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>Base</td>
+      <td>lognormal (364.848)</td>
+      <td>coxph (0.1822)</td>
+      <td>lognormal (0.5687)</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>Interaction</td>
+      <td>lognormal (366.580)</td>
+      <td>coxph (0.1819)</td>
+      <td>lognormal (0.5677)</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>Site-added</td>
+      <td>lognormal (361.175)</td>
+      <td>exponential (0.1645)</td>
+      <td>lognormal (0.5988)</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>Site + interaction</td>
+      <td>lognormal (362.415)</td>
+      <td>exponential (0.1634)</td>
+      <td>lognormal (0.6009)</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, 이번 Stage에서는 <strong>AIC, IBS, C-index에서 가장 앞서는 모형이 자주 달랐습니다</strong>. 그래서 이후 해석은 “가장 작은 AIC”보다 <strong>supported horizon에서 어떤 위험 크기와 어떤 분류 부담을 만드는지</strong>를 중심으로 읽는 편이 안전합니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Representative comparison</div>
+            <h3>PNU · Base · Year 1</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              Year 1은 PNU에서 직접 해석 가능한 핵심 구간입니다. <strong>AUC</strong>는 클수록 좋고, <strong>Brier</strong>는 작을수록 좋습니다. <strong>Observed IPCW risk</strong>는 horizon-specific 관찰 기반 위험이고, <strong>Mean predicted risk</strong>가 이 값과 얼마나 가까운지가 전체 calibration 감각을 보여줍니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>AUC</th>
+      <th>Brier</th>
+      <th>Observed IPCW risk</th>
+      <th>Mean predicted risk</th>
+      <th>Mean calibration diff</th>
+      <th>Calibration slope</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>0.673</td>
+      <td>0.138</td>
+      <td>0.170</td>
+      <td>0.171</td>
+      <td>-0.001</td>
+      <td>1.192</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>0.673</td>
+      <td>0.139</td>
+      <td>0.170</td>
+      <td>0.213</td>
+      <td>-0.043</td>
+      <td>0.923</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>0.673</td>
+      <td>0.139</td>
+      <td>0.170</td>
+      <td>0.220</td>
+      <td>-0.050</td>
+      <td>1.123</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>0.673</td>
+      <td>0.139</td>
+      <td>0.170</td>
+      <td>0.223</td>
+      <td>-0.053</td>
+      <td>1.164</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>0.673</td>
+      <td>0.139</td>
+      <td>0.170</td>
+      <td>0.220</td>
+      <td>-0.050</td>
+      <td>1.070</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, PNU Base Year 1에서는 <strong>AUC가 모든 모형에서 0.673으로 사실상 같았지만</strong>, mean predicted risk는 17.1%에서 22.3%까지 벌어졌습니다. 순위화는 비슷해도 absolute risk scale은 다를 수 있다는 뜻입니다.</div>
+
+            <div class="keyline"></div>
+
+            <h3 class="subtable-title">SNU · Base · Year 2</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              Year 2는 SNU에서 직접 해석 가능한 대표 구간입니다. AUC가 조금 높아도 Brier가 함께 좋아지는지, mean predicted risk가 observed IPCW risk와 얼마나 가까운지 같이 보시면 됩니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>AUC</th>
+      <th>Brier</th>
+      <th>Observed IPCW risk</th>
+      <th>Mean predicted risk</th>
+      <th>Mean calibration diff</th>
+      <th>Calibration slope</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>0.575</td>
+      <td>0.106</td>
+      <td>0.122</td>
+      <td>0.121</td>
+      <td>0.000</td>
+      <td>4.684</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>0.585</td>
+      <td>0.107</td>
+      <td>0.122</td>
+      <td>0.099</td>
+      <td>0.023</td>
+      <td>4.634</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>0.591</td>
+      <td>0.106</td>
+      <td>0.122</td>
+      <td>0.125</td>
+      <td>-0.004</td>
+      <td>4.743</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>0.592</td>
+      <td>0.106</td>
+      <td>0.122</td>
+      <td>0.133</td>
+      <td>-0.011</td>
+      <td>7.452</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>0.588</td>
+      <td>0.106</td>
+      <td>0.122</td>
+      <td>0.123</td>
+      <td>-0.001</td>
+      <td>5.458</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, SNU Base Year 2에서는 AUC가 0.575–0.592, Brier가 약 0.106 수준으로 서로 가까웠습니다. absolute difference는 작았지만 calibration slope는 크게 나왔으므로, slope 하나만으로 “좋다/나쁘다”를 단정하기보다 전체 분포와 threshold 결과를 함께 보셔야 합니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Representative comparison</div>
+            <h3>merged · Year 2에서 site-free와 site-adjusted를 같이 보면</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              아래 두 표는 같은 merged data의 Year 2를 비교한 것입니다. 첫 표는 <strong>site-free Base</strong>, 둘째 표는 <strong>site-adjusted Site-added</strong>입니다. AUC는 클수록, Brier는 작을수록 좋습니다. 같은 observed IPCW risk를 두고도 formula structure가 성능을 바꿀 수 있는지를 보는 표입니다.
+            </div>
+
+            <h3 class="subtable-title">merged · Base · Year 2</h3>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>AUC</th>
+      <th>Brier</th>
+      <th>Observed IPCW risk</th>
+      <th>Mean predicted risk</th>
+      <th>Mean calibration diff</th>
+      <th>Calibration slope</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>0.659</td>
+      <td>0.125</td>
+      <td>0.153</td>
+      <td>0.156</td>
+      <td>-0.002</td>
+      <td>2.622</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>0.658</td>
+      <td>0.125</td>
+      <td>0.153</td>
+      <td>0.125</td>
+      <td>0.028</td>
+      <td>2.055</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>0.658</td>
+      <td>0.125</td>
+      <td>0.153</td>
+      <td>0.156</td>
+      <td>-0.003</td>
+      <td>2.523</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>0.656</td>
+      <td>0.126</td>
+      <td>0.153</td>
+      <td>0.162</td>
+      <td>-0.008</td>
+      <td>2.833</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>0.657</td>
+      <td>0.125</td>
+      <td>0.153</td>
+      <td>0.153</td>
+      <td>0.000</td>
+      <td>2.519</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+
+            <h3 class="subtable-title">merged · Site-added · Year 2</h3>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>AUC</th>
+      <th>Brier</th>
+      <th>Observed IPCW risk</th>
+      <th>Mean predicted risk</th>
+      <th>Mean calibration diff</th>
+      <th>Calibration slope</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>0.728</td>
+      <td>0.114</td>
+      <td>0.153</td>
+      <td>0.162</td>
+      <td>-0.008</td>
+      <td>3.484</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>0.727</td>
+      <td>0.110</td>
+      <td>0.153</td>
+      <td>0.154</td>
+      <td>-0.001</td>
+      <td>2.544</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>0.725</td>
+      <td>0.114</td>
+      <td>0.153</td>
+      <td>0.165</td>
+      <td>-0.012</td>
+      <td>3.517</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>0.723</td>
+      <td>0.116</td>
+      <td>0.153</td>
+      <td>0.168</td>
+      <td>-0.015</td>
+      <td>3.900</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>0.727</td>
+      <td>0.113</td>
+      <td>0.153</td>
+      <td>0.165</td>
+      <td>-0.012</td>
+      <td>3.335</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+
+            <div class="table-note">즉, merged Year 2에서는 <strong>site-added structure의 AUC가 0.723–0.728</strong>로, <strong>site-free Base의 0.656–0.659</strong>보다 높았습니다. 이번 source에서는 site term을 <strong>causal treatment effect가 아니라 structural context proxy</strong>로 다루므로, 이 차이는 “site를 반영한 구조가 risk ranking에 중요했다”는 정도로 읽는 것이 맞습니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Interpretation</div>
+            <h3>해석</h3>
+            <p>지원구간만 놓고 보면, Stage 5의 핵심은 “어느 모형이 절대적으로 이겼는가”보다 <strong>같은 사람들을 어떤 위험 크기로 스케일링하느냐</strong>에 있습니다. PNU Base Year 1에서는 AUC가 같아도 mean predicted risk가 다르게 나왔고, SNU Base Year 2에서는 AUC와 Brier가 비교적 좁은 범위에 모였습니다. merged에서는 모형 간 차이보다 <strong>site-adjusted structure 여부</strong>가 더 큰 변화를 만들었습니다. 따라서 이번 Stage의 성능 비교는 단순한 ranking보다, 뒤의 threshold 결과와 함께 보아야 해석이 살아납니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="result-3">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Result 3</div>
+            <h2 class="panel-title">임계값 분류와 decision-curve 순효익은 어떻게 달라졌는가</h2>
+            <p class="panel-sub">같은 위험추정이라도 실제로 몇 명을 high-risk로 찍는지, 그중 얼마나 많은 사람이 false positive가 되는지를 보면 해석이 훨씬 직관적으로 바뀝니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow purple">Question</div>
+            <h3>이 결과가 답하는 질문</h3>
+            <p>여기서는 <strong>예측위험이 실제 의사결정 부담으로 얼마나 번역되는지</strong>를 봅니다. 임계값을 넘으면 high-risk로 분류한다고 놓았을 때, <strong>Positive classification rate</strong>는 몇 %가 high-risk가 되는지, <strong>False positives per 100</strong>은 100명 중 몇 명이 불필요하게 high-risk로 분류되는지, <strong>Net benefit</strong>은 treat-all이나 treat-none보다 얼마나 유리한지 보여드립니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Key numbers</div>
+            <h3>핵심 수치 4개</h3>
+            <div class="stat-grid">
+              
+      <div class="stat-card">
+        <div class="stat-label">PNU · Base · Year 1 · threshold 0.15</div>
+        <div class="stat-value">FP/100 32.6–83.0</div>
+        <div class="stat-note">모형에 따라 false-positive burden이 크게 달랐습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">SNU · Base · Year 2 · threshold 0.15</div>
+        <div class="stat-value">최대 FP/100 1.3</div>
+        <div class="stat-note">최대 net benefit은 0.017였습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">merged · Year 2 best site-free row</div>
+        <div class="stat-value">NB 0.042 / FP100 30.7</div>
+        <div class="stat-note">threshold 0.15 기준입니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">merged · Year 2 best site-adjusted row</div>
+        <div class="stat-value">NB 0.064 / FP100 5.0</div>
+        <div class="stat-note">같은 threshold에서 훨씬 적은 false positives를 보였습니다.</div>
+      </div>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow">HTML-native visualization</div>
+            <h3>threshold 0.15에서 무엇이 달라졌는지</h3>
+            <p class="section-copy">아래 첫 번째 막대는 <strong>false positives per 100</strong>으로, 짧을수록 불필요한 high-risk labeling이 적다는 뜻입니다. 두 번째 막대는 <strong>net benefit</strong>으로, 길수록 threshold에서 실질적 의사결정 이득이 크다는 뜻입니다.</p>
+
+            <div class="small-kicker">False positives per 100 ↓</div>
+            <div class="bar-group">
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Cox PH</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:39.3%"></div></div>
+          <div class="bar-value">32.6</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Exponential</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:53.6%"></div></div>
+          <div class="bar-value">44.5</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Log-normal</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:100.0%"></div></div>
+          <div class="bar-value">83.0</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SNU · Base · Log-normal</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:0.8%"></div></div>
+          <div class="bar-value">0.7</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Base · Weibull</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:37.0%"></div></div>
+          <div class="bar-value">30.7</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site-added · Log-logistic</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:6.0%"></div></div>
+          <div class="bar-value">5.0</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site + interaction · Exponential</div>
+          <div class="bar-track"><div class="bar-fill green" style="width:3.0%"></div></div>
+          <div class="bar-value">2.5</div>
+        </div></div>
+            <div class="keyline"></div>
+            <div class="small-kicker">Net benefit ↑</div>
+            <div class="bar-group">
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Cox PH</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:61.6%"></div></div>
+          <div class="bar-value">0.045</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Exponential</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:100.0%"></div></div>
+          <div class="bar-value">0.073</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">PNU · Base · Log-normal</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:32.1%"></div></div>
+          <div class="bar-value">0.023</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">SNU · Base · Log-normal</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:22.9%"></div></div>
+          <div class="bar-value">0.017</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Base · Weibull</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:57.9%"></div></div>
+          <div class="bar-value">0.042</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site-added · Log-logistic</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:87.9%"></div></div>
+          <div class="bar-value">0.064</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">merged · Site + interaction · Exponential</div>
+          <div class="bar-track"><div class="bar-fill alt" style="width:87.0%"></div></div>
+          <div class="bar-value">0.063</div>
+        </div></div>
+
+            <div class="table-note">즉, threshold 0.15에서는 <strong>PNU short follow-up</strong>에서 모형에 따라 false-positive burden이 크게 벌어졌고, <strong>merged Year 2</strong>에서는 site-adjusted rows가 site-free row보다 적은 false positives로 더 높은 net benefit을 보여주었습니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Column guide</div>
+            <h3>표에서 자주 나오는 열을 먼저 풀어보면</h3>
+            <div class="table-legend">
+              <div><strong>Positive classification rate</strong>: 전체 대상 중 high-risk로 분류된 비율입니다. 클수록 더 많은 사람을 고위험으로 분류합니다.</div>
+              <div><strong>False positives per 100</strong>: 100명 중 실제로는 event가 아닌데 high-risk로 분류된 사람 수입니다. 작을수록 좋습니다.</div>
+              <div><strong>PPV</strong>: high-risk로 분류된 사람 중 실제 event가 있는 비율입니다. 클수록 “찍은 사람 중 맞춘 비율”이 높습니다.</div>
+              <div><strong>Sensitivity</strong>: 실제 event가 있는 사람을 high-risk로 잘 잡는 비율입니다. 클수록 놓침이 적습니다.</div>
+              <div><strong>Specificity</strong>: 실제 nonevent를 low-risk로 잘 남겨두는 비율입니다. 클수록 과경보가 적습니다.</div>
+              <div><strong>Net benefit</strong>: false-positive penalty를 포함한 threshold-based 순이득입니다. 클수록 좋고, treat-all/treat-none보다 높아야 의미가 있습니다.</div>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Representative comparison</div>
+            <h3>PNU · Base · Year 1 · threshold 0.15</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              Year 1은 PNU에서 직접 해석 가능한 구간입니다. 여기서는 threshold 0.15를 넘는 사람을 high-risk로 분류했을 때, 어떤 모형이 몇 명을 더 많이 고위험으로 찍고, 그에 따라 false positives per 100이 얼마나 늘어나는지 보시면 됩니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>Positive classification rate</th>
+      <th>False positives per 100</th>
+      <th>PPV</th>
+      <th>Sensitivity</th>
+      <th>Specificity</th>
+      <th>Net benefit</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>48.1%</td>
+      <td>32.6</td>
+      <td>23.9%</td>
+      <td>60.3%</td>
+      <td>60.7%</td>
+      <td>0.045</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>68.5%</td>
+      <td>44.5</td>
+      <td>25.4%</td>
+      <td>89.1%</td>
+      <td>46.4%</td>
+      <td>0.073</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>77.8%</td>
+      <td>53.4</td>
+      <td>22.1%</td>
+      <td>89.1%</td>
+      <td>35.7%</td>
+      <td>0.057</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>100.0%</td>
+      <td>83.0</td>
+      <td>17.0%</td>
+      <td>100.0%</td>
+      <td>0.0%</td>
+      <td>0.023</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>74.1%</td>
+      <td>50.4</td>
+      <td>23.1%</td>
+      <td>89.1%</td>
+      <td>39.3%</td>
+      <td>0.062</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, PNU Base Year 1에서는 <strong>Cox PH의 false positives per 100이 32.6</strong>이었지만, <strong>Log-normal은 83.0</strong>까지 올라갔습니다. 같은 15% threshold를 써도 모형 선택에 따라 “100명 중 몇 명을 불필요하게 고위험으로 보느냐”가 크게 달라진다는 뜻입니다.</div>
+
+            <div class="keyline"></div>
+
+            <h3 class="subtable-title">SNU · Base · Year 2 · threshold 0.15</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              SNU Year 2는 1차 해석 가능 구간입니다. PNU와 같은 threshold 0.15를 사용했을 때 얼마나 보수적으로 분류되는지, 그리고 false positives per 100이 어느 정도인지 보시면 됩니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Family</th>
+      <th>Positive classification rate</th>
+      <th>False positives per 100</th>
+      <th>PPV</th>
+      <th>Sensitivity</th>
+      <th>Specificity</th>
+      <th>Net benefit</th>
+      <th>Support tier</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Cox PH</td>
+      <td>1.0%</td>
+      <td>0.7</td>
+      <td>47.1%</td>
+      <td>4.8%</td>
+      <td>99.3%</td>
+      <td>0.005</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Exponential</td>
+      <td>0.0%</td>
+      <td>0.0</td>
+      <td>—</td>
+      <td>0.0%</td>
+      <td>100.0%</td>
+      <td>0.000</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-logistic</td>
+      <td>3.4%</td>
+      <td>1.3</td>
+      <td>57.6%</td>
+      <td>14.7%</td>
+      <td>98.5%</td>
+      <td>0.016</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Log-normal</td>
+      <td>2.9%</td>
+      <td>0.7</td>
+      <td>73.1%</td>
+      <td>14.7%</td>
+      <td>99.3%</td>
+      <td>0.017</td>
+      <td>1차 해석 가능</td>
+    </tr>
+    <tr>
+      <td>Weibull</td>
+      <td>0.5%</td>
+      <td>0.0</td>
+      <td>100.0%</td>
+      <td>4.8%</td>
+      <td>100.0%</td>
+      <td>0.006</td>
+      <td>1차 해석 가능</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, SNU Base Year 2에서는 대부분의 모형이 <strong>매우 적은 사람만 high-risk로 분류</strong>했습니다. false positives per 100이 0–1.3 수준이어서, 같은 threshold라도 cohort와 follow-up 구조에 따라 분류 부담이 크게 다를 수 있음을 보여줍니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Representative comparison</div>
+            <h3>merged · Year 2 · threshold 0.15</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              첫 표는 merged Year 2에서 net benefit이 높은 순서대로 상위 row를 보여드립니다. <strong>Net benefit은 클수록 좋고</strong>, <strong>False positives per 100은 작을수록 좋습니다</strong>. 둘째 표는 threshold 전체 그리드에서 best site-free row와 best site-adjusted row를 나란히 보여드려, site adjustment가 어디에서 차이를 키우는지 정리한 것입니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Formula</th>
+      <th>Family</th>
+      <th>Net benefit</th>
+      <th>False positives per 100</th>
+      <th>Positive classification rate</th>
+      <th>PPV</th>
+      <th>Sensitivity</th>
+      <th>Specificity</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Site-added</td>
+      <td>Log-logistic</td>
+      <td>0.064</td>
+      <td>5.0</td>
+      <td>26.3%</td>
+      <td>59.2%</td>
+      <td>47.5%</td>
+      <td>94.1%</td>
+    </tr>
+    <tr>
+      <td>Site-added</td>
+      <td>Weibull</td>
+      <td>0.064</td>
+      <td>5.0</td>
+      <td>26.3%</td>
+      <td>59.2%</td>
+      <td>47.5%</td>
+      <td>94.1%</td>
+    </tr>
+    <tr>
+      <td>Site + interaction</td>
+      <td>Exponential</td>
+      <td>0.063</td>
+      <td>2.5</td>
+      <td>23.3%</td>
+      <td>73.0%</td>
+      <td>44.2%</td>
+      <td>97.0%</td>
+    </tr>
+    <tr>
+      <td>Site-added</td>
+      <td>Cox PH</td>
+      <td>0.062</td>
+      <td>3.1</td>
+      <td>24.4%</td>
+      <td>68.4%</td>
+      <td>44.2%</td>
+      <td>96.3%</td>
+    </tr>
+    <tr>
+      <td>Site + interaction</td>
+      <td>Cox PH</td>
+      <td>0.059</td>
+      <td>5.0</td>
+      <td>25.6%</td>
+      <td>57.5%</td>
+      <td>44.2%</td>
+      <td>94.1%</td>
+    </tr>
+    <tr>
+      <td>Site + interaction</td>
+      <td>Log-logistic</td>
+      <td>0.059</td>
+      <td>5.0</td>
+      <td>25.6%</td>
+      <td>57.5%</td>
+      <td>44.2%</td>
+      <td>94.1%</td>
+    </tr>
+    <tr>
+      <td>Site + interaction</td>
+      <td>Weibull</td>
+      <td>0.059</td>
+      <td>5.0</td>
+      <td>25.6%</td>
+      <td>57.5%</td>
+      <td>44.2%</td>
+      <td>94.1%</td>
+    </tr>
+    <tr>
+      <td>Site-added</td>
+      <td>Exponential</td>
+      <td>0.050</td>
+      <td>1.3</td>
+      <td>21.4%</td>
+      <td>80.7%</td>
+      <td>34.3%</td>
+      <td>98.5%</td>
+    </tr>
+    <tr>
+      <td>Site-added</td>
+      <td>Log-normal</td>
+      <td>0.048</td>
+      <td>5.6</td>
+      <td>26.0%</td>
+      <td>50.5%</td>
+      <td>37.6%</td>
+      <td>93.3%</td>
+    </tr>
+    <tr>
+      <td>Base</td>
+      <td>Weibull</td>
+      <td>0.042</td>
+      <td>30.7</td>
+      <td>44.3%</td>
+      <td>23.9%</td>
+      <td>62.8%</td>
+      <td>63.7%</td>
+    </tr>
+  </tbody>
+</table></div>
+
+            <h3 class="subtable-title">merged · Year 2에서 best site-free vs best site-adjusted</h3>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Threshold</th>
+      <th>Best site-free row</th>
+      <th>Site-free NB</th>
+      <th>Site-free FP100</th>
+      <th>Best site-adjusted row</th>
+      <th>Site-adjusted NB</th>
+      <th>Site-adjusted FP100</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0.05</td>
+      <td>Base / Cox PH</td>
+      <td>0.109</td>
+      <td>84.6</td>
+      <td>Site-added / Cox PH</td>
+      <td>0.109</td>
+      <td>84.6</td>
+    </tr>
+    <tr>
+      <td>0.10</td>
+      <td>Interaction / Exponential</td>
+      <td>0.066</td>
+      <td>50.8</td>
+      <td>Site-added / Exponential</td>
+      <td>0.073</td>
+      <td>33.9</td>
+    </tr>
+    <tr>
+      <td>0.15</td>
+      <td>Base / Weibull</td>
+      <td>0.042</td>
+      <td>30.7</td>
+      <td>Site-added / Log-logistic</td>
+      <td>0.064</td>
+      <td>5.0</td>
+    </tr>
+    <tr>
+      <td>0.20</td>
+      <td>Interaction / Log-logistic</td>
+      <td>0.023</td>
+      <td>4.4</td>
+      <td>Site + interaction / Cox PH</td>
+      <td>0.065</td>
+      <td>1.3</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, threshold 0.15에서는 <strong>best site-free row가 NB 0.042 / FP100 30.7</strong>이었던 반면, <strong>best site-adjusted row는 NB 0.064 / FP100 5.0</strong>이었습니다. threshold 0.10과 0.20에서도 best site-adjusted row가 더 높은 net benefit을 보였고, threshold 0.05에서는 거의 treat-all과 비슷해 정보량이 작았습니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Interpretation</div>
+            <h3>해석</h3>
+            <p>Stage 5에서 가장 직관적인 차이는 분류 부담에서 드러났습니다. PNU short follow-up에서는 모형에 따라 high-risk labeling이 크게 달라졌고, SNU Year 2에서는 같은 threshold에서도 매우 보수적인 분류가 나왔습니다. merged에서는 <strong>site-adjusted structure가 적은 false positives로 더 높은 net benefit</strong>을 보여주었기 때문에, 이후 Stage 5 comparator를 해석할 때는 site-free row만 보는 것보다 site-adjusted row를 함께 보는 편이 훨씬 정보량이 큽니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="result-4">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Result 4</div>
+            <h2 class="panel-title">calibration과 장기 해석 경계는 어디까지인가</h2>
+            <p class="panel-sub">보정 요약은 예측위험의 크기를 읽을 때 중요하지만, late horizon에서는 지원 범위와 경계 문제를 같이 보셔야 합니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow purple">Question</div>
+            <h3>이 결과가 답하는 질문</h3>
+            <p>여기서는 <strong>예측위험의 크기가 관찰위험과 얼마나 맞는지</strong>, 그리고 <strong>그 판단을 어디까지 직접 할 수 있는지</strong>를 봅니다. mean calibration difference는 평균적으로 예측위험이 관찰위험보다 얼마나 높거나 낮은지 보여주고, calibration slope는 위험 분포의 퍼짐이 얼마나 맞는지 요약합니다. 다만 grouped calibration은 bin-level case와 nonevent가 함께 뒷받침되어야만 그릴 수 있으므로, late horizon에서는 표 자체보다 <strong>support 여부</strong>가 더 중요해집니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Key numbers</div>
+            <h3>핵심 수치 4개</h3>
+            <div class="stat-grid">
+              
+      <div class="stat-card">
+        <div class="stat-label">Calibration-supported rows</div>
+        <div class="stat-value">280</div>
+        <div class="stat-note">model × horizon 기준입니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">Successful calibration fits</div>
+        <div class="stat-value">275</div>
+        <div class="stat-note">supported row의 대부분에서 fit이 성공했습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">Boundary failures</div>
+        <div class="stat-value">5</div>
+        <div class="stat-note">모두 SNU Base Year 9 slope에서 나왔습니다.</div>
+      </div>
+              
+      <div class="stat-card">
+        <div class="stat-label">PNU grouped calibration export</div>
+        <div class="stat-value">Year 1 only</div>
+        <div class="stat-note">Year 2는 supported bins minimum을 충족하지 못했습니다.</div>
+      </div>
+            </div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow">Support snapshot</div>
+            <h3>직접 읽을 수 있는 관찰 기반 정보가 horizon에 따라 어떻게 줄어드는지</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              <strong>Known n</strong>은 해당 horizon에서 binary outcome이 알려져 있는 사람 수이고, 작아질수록 직접 관찰 정보가 줄어든다는 뜻입니다. <strong>Observed IPCW risk</strong>는 horizon-specific 관찰 기반 위험 요약입니다. 값이 있더라도, Stage의 claim restriction이 projection이면 primary claim으로 쓰지 않습니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Dataset</th>
+      <th>Year 1 known n</th>
+      <th>Year 1 observed IPCW risk</th>
+      <th>Year 2 known n</th>
+      <th>Year 2 observed IPCW risk</th>
+      <th>Year 5 known n</th>
+      <th>Year 5 observed IPCW risk</th>
+      <th>Year 10 known n</th>
+      <th>Year 10 observed IPCW risk</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PNU</td>
+      <td>36</td>
+      <td>17.0%</td>
+      <td>13</td>
+      <td>29.9%</td>
+      <td>12</td>
+      <td>—</td>
+      <td>12</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>177</td>
+      <td>7.3%</td>
+      <td>156</td>
+      <td>12.2%</td>
+      <td>98</td>
+      <td>21.1%</td>
+      <td>39</td>
+      <td>32.7%</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>213</td>
+      <td>9.2%</td>
+      <td>169</td>
+      <td>15.3%</td>
+      <td>110</td>
+      <td>24.0%</td>
+      <td>51</td>
+      <td>35.1%</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, PNU는 Year 1에서 36명이 알려져 있었지만 Year 2에는 13명으로 줄고, Year 3 이후에는 이 export에서 observed IPCW risk가 비어 있습니다. SNU와 merged는 Year 10에도 IPCW 요약이 남아 있지만, 이번 Stage 규칙상 <strong>Year 6 이후는 projection 중심</strong>으로 읽어야 합니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Calibration support</div>
+            <h3>dataset별 calibration support와 fit 상태</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              <strong>Calibration-supported model×horizon rows</strong>는 bin-level support가 있어 calibration regression을 시도할 수 있었던 row 수입니다. <strong>Successful calibration fits</strong>는 실제로 regression fit이 끝난 row 수이고, <strong>Boundary failures</strong>는 계수가 경계에 걸려 slope가 안정적으로 계산되지 않은 경우입니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Dataset</th>
+      <th>Calibration-supported model×horizon rows</th>
+      <th>Successful calibration fits</th>
+      <th>Boundary failures</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PNU</td>
+      <td>10</td>
+      <td>10</td>
+      <td>0</td>
+      <td>Year 1 only</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>90</td>
+      <td>85</td>
+      <td>5</td>
+      <td>SNU Base Year 9 slope caution</td>
+    </tr>
+    <tr>
+      <td>merged</td>
+      <td>180</td>
+      <td>180</td>
+      <td>0</td>
+      <td>No boundary failure in supplied rows</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, calibration은 전반적으로 잘 돌아갔지만, <strong>SNU에서만 5개의 boundary failure</strong>가 있었고, 이 실패는 전부 <strong>Base Year 9 slope</strong>에 집중되어 있습니다.</div>
+
+            <div class="keyline"></div>
+
+            <h3 class="subtable-title">대표 supported block의 calibration range</h3>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Representative block</th>
+      <th>Mean calibration diff range</th>
+      <th>Calibration slope range</th>
+      <th>Interpretation</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>PNU · Base · Year 1</td>
+      <td>-0.053 to -0.001</td>
+      <td>0.923 to 1.192</td>
+      <td>mean calibration difference는 작았고, slope는 1 전후였습니다.</td>
+    </tr>
+    <tr>
+      <td>SNU · Base · Year 2</td>
+      <td>-0.011 to 0.023</td>
+      <td>4.634 to 7.452</td>
+      <td>absolute difference는 작았지만 slope는 크게 나왔습니다.</td>
+    </tr>
+    <tr>
+      <td>merged · Site-added · Year 2</td>
+      <td>-0.015 to -0.001</td>
+      <td>2.544 to 3.900</td>
+      <td>mean difference는 작았고, slope는 1보다 컸습니다.</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, supported horizon에서는 mean calibration difference가 대체로 작았습니다. 다만 SNU Year 2처럼 absolute difference는 작아도 slope가 크게 나올 수 있으므로, slope를 단독 verdict처럼 쓰기보다는 AUC·Brier·threshold 결과와 함께 읽는 편이 안전합니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Failure rows</div>
+            <h3>실제로 fit이 걸린 곳은 어디였는가</h3>
+            <div class="table-guide">
+              <strong>이 표를 어떻게 읽는지</strong><br>
+              이 표는 calibration support는 있었지만 slope fit이 경계에 걸려 실패한 row만 따로 보여드립니다. <strong>Supported bin count</strong>가 매우 작을 때 이런 문제가 생기기 쉽고, 이번 Stage에서는 모두 동일한 dataset·formula·horizon 조합에 모여 있습니다.
+            </div>
+            <div class="table-wrap"><table class="dataframe report-table">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Dataset</th>
+      <th>Formula</th>
+      <th>Family</th>
+      <th>Horizon</th>
+      <th>Supported bin count</th>
+      <th>Failure reason</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>Cox PH</td>
+      <td>Year 9</td>
+      <td>3</td>
+      <td>slope_boundary</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>Exponential</td>
+      <td>Year 9</td>
+      <td>2</td>
+      <td>slope_boundary</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>Log-logistic</td>
+      <td>Year 9</td>
+      <td>2</td>
+      <td>slope_boundary</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>Log-normal</td>
+      <td>Year 9</td>
+      <td>2</td>
+      <td>slope_boundary</td>
+    </tr>
+    <tr>
+      <td>SNU</td>
+      <td>Base</td>
+      <td>Weibull</td>
+      <td>Year 9</td>
+      <td>2</td>
+      <td>slope_boundary</td>
+    </tr>
+  </tbody>
+</table></div>
+            <div class="table-note">즉, late horizon 전체가 망가진 것이 아니라, <strong>SNU Base Year 9</strong>의 slope regression만 경계 문제를 보였습니다. 이 block만 조심해서 읽으시면 됩니다.</div>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Interpretation</div>
+            <h3>해석</h3>
+            <p>이번 Stage의 calibration 결과는 두 층으로 읽으시면 좋습니다. 첫째, <strong>supported horizon에서는 mean calibration difference가 대체로 작고</strong>, 모형 간 차이도 비교적 제한적입니다. 둘째, late horizon으로 갈수록 calibration 수치가 남아 있어도 그것이 곧 “직접 관찰로 강하게 지지된다”는 뜻은 아닙니다. 특히 SNU Base Year 9의 slope boundary failure처럼, tail에서는 row가 존재하더라도 regression-based calibration이 불안정할 수 있습니다. 따라서 Stage 5의 calibration은 <strong>지원구간에서는 보조 근거</strong>로, <strong>장기 구간에서는 해석 강도를 낮추는 신호</strong>로 읽는 것이 가장 안전합니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="synthesis">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">Synthesis</div>
+            <h2 class="panel-title">앞 결과를 묶어서 이 Stage의 결론을 정리하면</h2>
+            <p class="panel-sub">개별 숫자를 넘어, 이번 Stage에서 실제로 무엇이 보였는지를 짧고 직접적으로 정리합니다.</p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <article class="card full">
+            <div class="eyebrow">Conclusion</div>
+            <h3>최종 결론</h3>
+            <p>Stage 5는 해석 가능한 <strong>비치유(non-cure) baseline comparator</strong>를 충분히 구축했습니다. 총 40개 모델이 수렴했고, 환자×horizon 예측위험 export도 완전했습니다. 지원구간에서는 모형 간 discrimination 차이가 아주 크지 않은 경우가 많았지만, <strong>absolute risk scaling과 threshold-based classification burden은 모형과 formula structure에 따라 꽤 달라졌습니다</strong>. 특히 merged에서는 <strong>site-adjusted structure</strong>가 site-free structure보다 더 높은 AUC와 더 낮은 false-positive burden을 보였습니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow green">Directly readable range</div>
+            <h3>직접 읽을 수 있는 부분</h3>
+            <p>PNU는 Year 1, SNU와 merged는 Year 1–2가 가장 직접적으로 읽을 수 있는 구간입니다. 이 구간에서 PNU Base Year 1은 AUC는 같지만 predicted risk scale이 17.1%–22.3%로 벌어졌고, SNU Base Year 2는 false positives per 100이 0–1.3으로 매우 낮았습니다. merged Year 2에서는 site-adjusted rows가 site-free rows보다 더 높은 순효익을 보였고, 이 차이는 threshold 0.15에서 특히 분명했습니다.</p>
+          </article>
+
+          <article class="card full">
+            <div class="eyebrow amber">Cautious interpretation</div>
+            <h3>조심해서 읽어야 하는 부분</h3>
+            <p>Year 3 이후 PNU, Year 6 이후 SNU와 merged는 이번 Stage 규칙상 투영 중심입니다. calibration row가 남아 있더라도 late horizon의 slope는 불안정할 수 있으며, 실제로 SNU Base Year 9에서 경계 문제가 있었습니다. 또한 이번 export에는 coefficient-level p-value·신뢰구간과 bootstrap 반복 수가 없으므로, 이번 보고서는 어디까지나 <strong>예측 성능·분류 부담·support-aware interpretation</strong>에 초점을 둡니다. merged의 site term도 <strong>causal treatment effect</strong>로 쓰지 않고 structural context proxy로만 읽어야 합니다.</p>
+          </article>
+        </div>
+
+        <div class="callout"><strong>한 문장으로 정리하면</strong> 이번 Stage는 “치유를 허용하지 않는 모델만으로도 지원구간에서는 꽤 안정적인 baseline을 만들 수 있지만, 그 안에서도 site adjustment와 모형 선택에 따라 고위험 분류 부담이 크게 달라진다”는 점을 보여주었습니다.</div>
+      </div>
+    </section>
+    
+    
+    <section class="panel" data-panel="references">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div>
+            <div class="panel-kicker">References</div>
+            <h2 class="panel-title">사용한 참고문헌</h2>
+            <p class="panel-sub">이번 Stage의 방법 설명과 해석 범위를 정리할 때 사용한 프로젝트 source와 방법론 참고문헌입니다.</p>
+          </div>
+        </div>
+
+        <ol class="ref-list">
+          <li>Integrated Modeling Master Specification (English, Revised v5). Project master specification.</li>
+          <li>Stage 1 Backbone lock. Project backbone code specification.</li>
+          <li>Gelman A. Scaling regression inputs by dividing by two standard deviations. <em>Statistics in Medicine</em>. 2008.</li>
+          <li>Heagerty PJ, Lumley T, Pepe MS. Time-dependent ROC curves for censored survival data and a diagnostic marker. <em>Biometrics</em>. 2000.</li>
+          <li>Park SY, Park JE, Kim H, Park SH. Review of statistical methods for evaluating the performance of survival or other time-to-event prediction models. <em>Korean Journal of Radiology</em>. 2021.</li>
+          <li>McLernon DJ, Giardiello D, Van Calster B, et al. Assessing performance and clinical usefulness in prediction models with survival outcomes. <em>Annals of Internal Medicine</em>. 2023.</li>
+          <li>Beyene KM, Chen D-G. Evaluating predictive accuracy of prognostic models for censored time-to-event data analysis in clinical trials. Book chapter.</li>
+          <li>Vickers AJ, Elkin EB. Decision curve analysis: a novel method for evaluating prediction models. <em>Medical Decision Making</em>. 2006.</li>
+          <li>Vickers AJ, Cronin AM, Elkin EB, Gonen M. Extensions to decision curve analysis, a novel method for evaluating diagnostic tests, prediction models and molecular markers. <em>BMC Medical Informatics and Decision Making</em>. 2008.</li>
+          <li>Bullement A, et al. Evaluation of survival extrapolation in immuno-oncology models. <em>BMC Medical Research Methodology</em>. 2020.</li>
+          <li>Kearns B, et al. How uncertain is the survival extrapolation? 2020.</li>
+        </ol>
+      </div>
+    </section>
+    
+
+    <div class="footer-note">Stage independent HTML template • dark header • Stage 5 completed report</div>
+  </div>
+
+<script>
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+</script>
+</body>
+</html>

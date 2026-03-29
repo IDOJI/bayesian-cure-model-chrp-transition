@@ -1800,10 +1800,24 @@ stage2_followup_table <- purrr::map_dfr(
 assert_nonempty_table(stage2_followup_table, 'stage2_followup_table')
 
 ## 🟠 Build: stage-four timing block ===============================
-stage4_timing_table <- purrr::map_dfr(
+stage4_timing_paths <- unique(c(
   collect_category_paths(stage_scans$Stage4, 'timing'),
+  list.files(
+    stage_paths$stage4,
+    pattern = '(supported_short_horizon_contrast|intermediate_horizon_contrast|tail_diagnostic_contrast|piecewise_site_effect)\\.(csv|txt)$',
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+))
+
+stage4_timing_table <- purrr::map_dfr(
+  stage4_timing_paths,
   ~ standardize_timing_table(read_table_any(.x), .x)
 ) %>%
+  filter(
+    (!is.na(contrast_direction) & nzchar(trimws(contrast_direction))) |
+      trim_lower(result_type) %in% c('hazard_ratio', 'hr', 'odds_ratio')
+  ) %>%
   distinct()
 assert_nonempty_table(stage4_timing_table, 'stage4_timing_table')
 
@@ -1920,8 +1934,21 @@ stage8_anchor_delta_table <- purrr::map_dfr(
     delta_NB_anchor_minus_neutral = numeric()
   ))
 
-stage8_incidence_update_table <- purrr::map_dfr(
+stage8_incidence_update_paths <- unique(c(
   collect_category_paths(stage_scans$Stage8, 'incidence_update'),
+  unlist(lapply(
+    normalize_existing_path(as.character(stage_paths$stage8)),
+    function(one_dir) list.files(
+      one_dir,
+      pattern = '(incidence_anchor_update|prior_posterior).+\\.(csv|txt)$',
+      full.names = TRUE,
+      ignore.case = TRUE
+    )
+  ))
+))
+
+stage8_incidence_update_table <- purrr::map_dfr(
+  stage8_incidence_update_paths,
   ~ standardize_incidence_update_table(read_table_any(.x), .x)
 ) %>%
   distinct() %>%
