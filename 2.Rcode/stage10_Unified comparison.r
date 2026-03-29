@@ -6,12 +6,15 @@ stage_paths <- list(
   stage1 = file.path(data_path, 'stage1_Backbone lock'),
   stage2 = file.path(data_path, 'stage2_Follow-up maturity'),
   stage3 = file.path(data_path, 'stage3_KM benchmark classifier'),
-  stage4 = file.path(data_path, 'stage4_Timing difference'),
-  stage5 = file.path(data_path, 'stage5_Noncure block'),
-  stage6 = file.path(data_path, 'stage6_Cure appropriateness screening'),
+  stage4 = file.path(data_path, 'stage4_Timing-difference separation'),
+  stage5 = file.path(data_path, 'stage5_Individualized no-cure comparator'),
+  stage6 = file.path(data_path, 'stage6_Cure-appropriateness screening'),
   stage7 = file.path(data_path, 'stage7_Frequentist cure block'),
-  stage8 = file.path(data_path, 'stage8_Bayesian cure block'),
-  stage9 = file.path(data_path, 'stage9_Remission sensitivity')
+  stage8 = c(
+    stage8a = file.path(data_path, 'stage8A_Bayesian transition-only cure'),
+    stage8b = file.path(data_path, 'stage8B_Bayesian remission-sensitive competing-risk extension')
+  ),
+  stage9 = file.path(data_path, 'Stage9_Remission sensitivity')
 )
 
 file_overrides <- list(
@@ -50,9 +53,9 @@ read_table_any <- function(path) {
     stop(sprintf('Table path does not exist: %s', path), call. = FALSE)
   }
   
-  ext <- tolower(tools::file_ext(path))
+  path_low <- tolower(path)
   
-  if (ext %in% c('csv', 'txt')) {
+  if (grepl('\\.(csv|txt)(\\.gz)?$', path_low)) {
     return(
       readr::read_csv(
         file = path,
@@ -62,6 +65,8 @@ read_table_any <- function(path) {
       )
     )
   }
+  
+  ext <- tolower(tools::file_ext(path))
   
   if (ext == 'rds') {
     obj <- readRDS(path)
@@ -90,6 +95,93 @@ safe_csv_header <- function(path) {
   )
 }
 
+read_manifest_file <- function(stage_dir, manifest_candidates) {
+  candidates <- file.path(stage_dir, manifest_candidates)
+  hit <- candidates[file.exists(candidates)]
+  if (length(hit) == 0L) {
+    return(NULL)
+  }
+  read_table_any(hit[[1L]])
+}
+
+manifest_to_file_names <- function(manifest_tbl) {
+  if (is.null(manifest_tbl) || !inherits(manifest_tbl, 'data.frame') || nrow(manifest_tbl) == 0L) {
+    return(character(0))
+  }
+  
+  if ('file_name' %in% names(manifest_tbl)) {
+    vals <- as.character(manifest_tbl$file_name)
+    vals <- vals[!is.na(vals) & nzchar(trimws(vals))]
+    return(unique(vals))
+  }
+  
+  if ('file_path' %in% names(manifest_tbl)) {
+    vals <- basename(as.character(manifest_tbl$file_path))
+    vals <- vals[!is.na(vals) & nzchar(trimws(vals))]
+    return(unique(vals))
+  }
+  
+  character(0)
+}
+
+validate_stage_manifest <- function(stage_label, stage_dir, manifest_candidates) {
+  manifest_tbl <- read_manifest_file(stage_dir, manifest_candidates)
+  
+  if (is.null(manifest_tbl)) {
+    stop(
+      sprintf(
+        'Stage 10 should not run yet: %s manifest not found in `%s` (looked for %s).',
+        stage_label,
+        stage_dir,
+        paste(manifest_candidates, collapse = ', ')
+      ),
+      call. = FALSE
+    )
+  }
+  
+  expected_files <- manifest_to_file_names(manifest_tbl)
+  if (length(expected_files) == 0L) {
+    stop(sprintf('Stage 10 should not run yet: %s manifest does not expose `file_name`/`file_path` entries.', stage_label), call. = FALSE)
+  }
+  
+  missing_files <- expected_files[!file.exists(file.path(stage_dir, expected_files))]
+  if (length(missing_files) > 0L) {
+    stop(
+      sprintf(
+        'Stage 10 should not run yet: %s outputs are incomplete. Missing files: %s',
+        stage_label,
+        paste(missing_files, collapse = ', ')
+      ),
+      call. = FALSE
+    )
+  }
+  
+  invisible(expected_files)
+}
+
+validate_required_stage_files <- function(stage_label, stage_dir, required_files) {
+  missing_files <- required_files[!file.exists(file.path(stage_dir, required_files))]
+  if (length(missing_files) > 0L) {
+    stop(
+      sprintf(
+        'Stage 10 should not run yet: %s required files are missing: %s',
+        stage_label,
+        paste(missing_files, collapse = ', ')
+      ),
+      call. = FALSE
+    )
+  }
+  
+  invisible(required_files)
+}
+
+assert_nonempty_table <- function(df, label) {
+  if (nrow(df) == 0L) {
+    stop(sprintf('Stage 10 should not run yet: `%s` is empty, indicating upstream outputs are incomplete for this comparison layer.', label), call. = FALSE)
+  }
+  invisible(df)
+}
+
 coerce_numeric_text <- function(x) {
   suppressWarnings(as.numeric(as.character(x)))
 }
@@ -104,11 +196,28 @@ coalesce_cols <- function(df, candidates, default = NA) {
   out <- df[[found[1L]]]
   if (length(found) >= 2L) {
     for (nm in found[-1L]) {
-      out <- dplyr::coalesce(out, df[[nm]])
+      fill_idx <- is.na(out)
+      if (any(fill_idx)) {
+        out[fill_idx] <- df[[nm]][fill_idx]
+      }
     }
   }
   
   out
+}
+
+extract_long_metric_numeric <- function(df, metric_candidates, summary_candidates = c('value', 'mean')) {
+  metric_names <- trim_lower(coalesce_cols(df, c('metric_name', 'metric'), default = NA_character_))
+  metric_values <- coerce_numeric_text(coalesce_cols(df, c('metric_value', 'value'), default = NA))
+  
+  if (!'summary_stat' %in% names(df)) {
+    return(ifelse(metric_names %in% trim_lower(metric_candidates), metric_values, NA_real_))
+  }
+  
+  summary_names <- trim_lower(df[['summary_stat']])
+  summary_ok <- is.na(summary_names) | !nzchar(summary_names) | summary_names %in% trim_lower(summary_candidates)
+  
+  ifelse(metric_names %in% trim_lower(metric_candidates) & summary_ok, metric_values, NA_real_)
 }
 
 first_non_missing_scalar <- function(x) {
@@ -141,7 +250,8 @@ header_has_any <- function(headers, candidates) {
 }
 
 name_has_any <- function(file_name, patterns) {
-  any(vapply(patterns, function(ptn) stringr::str_detect(file_name, regex(ptn, ignore_case = TRUE)), logical(1)))
+  fn <- as.character(file_name)
+  any(vapply(patterns, function(ptn) any(stringr::str_detect(fn, regex(ptn, ignore_case = TRUE)), na.rm = TRUE), logical(1)))
 }
 
 dataset_sort_num <- function(x, order_vec) {
@@ -481,7 +591,7 @@ categorize_csv <- function(file_name, headers) {
   fn <- tolower(basename(file_name))
   hd <- tolower(headers)
   
-  if (header_has_any(hd, c('delta_risk_anchor_minus_neutral', 'delta_cure_fraction_anchor_minus_neutral', 'delta_fp100_anchor_minus_neutral'))) {
+  if (header_has_any(hd, c('delta_risk_anchor_minus_neutral', 'delta_cure_fraction_anchor_minus_neutral', 'delta_fp100_anchor_minus_neutral', 'delta_anchor_minus_neutral'))) {
     return('anchor_delta')
   }
   
@@ -489,7 +599,7 @@ categorize_csv <- function(file_name, headers) {
     return('incidence_update')
   }
   
-  if (header_has_any(hd, c('delta_risk_8b_minus_8a', 'delta_cure_fraction_8b_minus_8a', 'delta_fp100_8b_minus_8a'))) {
+  if (header_has_any(hd, c('delta_risk_8b_minus_8a', 'delta_cure_fraction_8b_minus_8a', 'delta_fp100_8b_minus_8a', 'risk_change_absolute', 'false_positive_burden_change', 'net_benefit_change'))) {
     return('remission_delta')
   }
   
@@ -511,8 +621,12 @@ categorize_csv <- function(file_name, headers) {
   }
   
   if (header_has_any(hd, c('supported_short_horizon_contrast', 'intermediate_horizon_contrast', 'tail_diagnostic_contrast')) ||
+      (name_has_any(fn, c('supported_short_horizon_contrast', 'intermediate_horizon_contrast', 'tail_diagnostic_contrast', 'piecewise_site_effect')) &&
+       header_has_any(hd, c('output_label', 'interval_label', 'support_tier', 'horizon_evidence_class')) &&
+       header_has_any(hd, c('estimate', 'conf_low', 'conf_high', 'estimate_hr', 'conf_low_hr', 'conf_high_hr', 'estimable_flag'))) ||
       (name_has_any(fn, c('timing', 'contrast', 'restricted', 'interval')) &&
-       header_has_any(hd, c('estimate', 'p_value', 'lower_ci', 'upper_ci', 'hazard_ratio')))) {
+       header_has_any(hd, c('estimate', 'p_value', 'lower_ci', 'upper_ci', 'hazard_ratio', 'conf_low', 'conf_high', 'estimate_hr', 'conf_low_hr', 'conf_high_hr')) &&
+       header_has_any(hd, c('output_label', 'interval_label', 'support_tier', 'horizon_evidence_class', 'claim_restriction_flag', 'estimable_flag')))) {
     return('timing')
   }
   
@@ -521,19 +635,24 @@ categorize_csv <- function(file_name, headers) {
     return('diagnostics')
   }
   
-  if (header_has_any(hd, c('net_benefit', 'net_reduction_in_unnecessary_intervention', 'net_reduction'))) {
+  if (header_has_any(hd, c('net_benefit', 'nb_mean', 'net_reduction_in_unnecessary_intervention', 'net_reduction', 'net_reduction_unnecessary_per_100'))) {
     return('decision')
   }
   
-  if (header_has_any(hd, c('positive_classification_rate', 'false_positive_count', 'false_positive_burden', 'false_positives_per100', 'fp100', 'ppv', 'tpr'))) {
+  if (header_has_any(hd, c('positive_classification_rate', 'positive_rate_mean', 'false_positive_count', 'false_positive_count_mean', 'false_positive_burden', 'false_positive_burden_mean', 'false_positive_per_100', 'false_positives_per100', 'fp100', 'fp100_mean', 'ppv', 'ppv_mean', 'tpr', 'tpr_mean'))) {
     return('classification')
   }
   
-  if (header_has_any(hd, c('auc_td', 'auc_t', 'auc', 'brier', 'ibs', 'calibration_slope', 'calibration_intercept', 'oe_ratio', 'c_index', 'uno_c', 'harrell_c'))) {
+  if (header_has_any(hd, c('auc_td', 'auc_t', 'auc', 'time_dependent_auc', 'discrimination_auc', 'auc_transition_horizon', 'brier', 'brier_score', 'brier_ipcw_mean', 'ibs', 'ibs_discrete_upto_horizon', 'integrated_brier_score', 'calibration_slope', 'calibration_intercept', 'calibration_intercept_free', 'oe_ratio', 'calibration_oe_ratio', 'c_index', 'uno_c', 'harrell_c'))) {
     return('performance')
   }
   
-  if (header_has_any(hd, c('predicted_risk', 'pred_risk', 'risk', 'predicted_survival', 'pred_survival', 'survival', 'transition_cif')) &&
+  if (name_has_any(fn, c('risk_summary', 'cohort_yearly')) &&
+      header_has_any(hd, c('horizon_year', 'horizon', 'year', 'horizon_id'))) {
+    return('performance')
+  }
+  
+  if (header_has_any(hd, c('predicted_risk', 'pred_risk', 'risk', 'risk_pred', 'risk_mean', 'mean_predicted_risk', 'predicted_transition_risk', 'km_risk', 'predicted_survival', 'pred_survival', 'survival', 'survival_pred', 'survival_mean', 'km_survival', 's_pop_mean', 'transition_cif', 'transition_cif_mean', 'all_event_free_mean')) &&
       header_has_any(hd, c('horizon_year', 'horizon', 'year', 'horizon_id'))) {
     return('prediction')
   }
@@ -556,11 +675,17 @@ categorize_csv <- function(file_name, headers) {
 }
 
 scan_stage_directory <- function(stage_dir, override_list = NULL) {
-  if (!dir.exists(stage_dir)) {
-    stop(sprintf('Stage directory does not exist: %s', stage_dir), call. = FALSE)
+  stage_dirs <- unique(normalize_existing_path(as.character(stage_dir)))
+  missing_dirs <- stage_dirs[!dir.exists(stage_dirs)]
+  
+  if (length(missing_dirs) > 0L) {
+    stop(sprintf('Stage directory does not exist: %s', paste(missing_dirs, collapse = ', ')), call. = FALSE)
   }
   
-  csv_files <- list.files(stage_dir, pattern = '\\.(csv|txt)$', full.names = TRUE, ignore.case = TRUE)
+  csv_files <- unique(unlist(lapply(
+    stage_dirs,
+    function(one_dir) list.files(one_dir, pattern = '\\.(csv(\\.gz)?|txt)$', full.names = TRUE, ignore.case = TRUE)
+  )))
   
   if (length(csv_files) == 0L) {
     scanned <- tibble::tibble(
@@ -678,7 +803,7 @@ standardize_base_fields <- function(df, stage_name, source_file) {
     ),
     prior_branch = normalize_prior_branch(coalesce_cols(df, c('prior_branch', 'prior_sensitivity_branch', 'anchor_branch'), default = NA_character_)),
     site_prior_family = normalize_site_prior_family(coalesce_cols(df, c('site_prior_family', 'site_prior', 'prior_family_site'), default = NA_character_)),
-    retained_fit_id = as.character(coalesce_cols(df, c('retained_fit_id', 'fit_id', 'model_id', 'analysis_id', 'family_id'), default = NA_character_)),
+    retained_fit_id = as.character(coalesce_cols(df, c('retained_fit_id', 'fit_id', 'model_id', 'analysis_id', 'family_id', 'benchmark_id', 'comparison_id', 'variant_id', 'benchmark_core_id', 'structural_model_id'), default = NA_character_)),
     support_tier = as.character(coalesce_cols(df, c('support_tier', 'support_tier_standard'), default = NA_character_)),
     horizon_evidence_class = as.character(coalesce_cols(df, c('horizon_evidence_class'), default = NA_character_)),
     claim_restriction_flag = as.character(coalesce_cols(df, c('claim_restriction_flag'), default = NA_character_)),
@@ -706,6 +831,12 @@ standardize_base_fields <- function(df, stage_name, source_file) {
 ## 🟠 Define: table-specific standardizers ===============================
 standardize_prediction_table <- function(df, stage_name, source_file, horizon_registry) {
   base <- standardize_base_fields(df, stage_name, source_file)
+  metric_mean_risk <- extract_long_metric_numeric(df, c('predicted_transition_risk', 'transition_cif', 'transition_risk', 'risk', 'risk_pred', 'km_risk', 'mean_predicted_risk'), summary_candidates = c('value', 'mean'))
+  metric_mean_survival <- extract_long_metric_numeric(df, c('predicted_eventfree_prob', 'all_event_free', 'eventfree_prob', 'survival', 's_pop', 'km_survival'), summary_candidates = c('value', 'mean'))
+  metric_low_risk <- extract_long_metric_numeric(df, c('predicted_transition_risk', 'transition_cif', 'transition_risk', 'risk'), summary_candidates = c('q025'))
+  metric_high_risk <- extract_long_metric_numeric(df, c('predicted_transition_risk', 'transition_cif', 'transition_risk', 'risk'), summary_candidates = c('q975'))
+  metric_low_survival <- extract_long_metric_numeric(df, c('predicted_eventfree_prob', 'all_event_free', 'eventfree_prob', 'survival', 's_pop'), summary_candidates = c('q025'))
+  metric_high_survival <- extract_long_metric_numeric(df, c('predicted_eventfree_prob', 'all_event_free', 'eventfree_prob', 'survival', 's_pop'), summary_candidates = c('q975'))
   
   id_raw <- as.character(coalesce_cols(df, c('person_id', 'unique_person_id', 'subject_id', 'id', 'uid'), default = NA_character_))
   site_raw <- as.character(coalesce_cols(df, c('site'), default = NA_character_))
@@ -719,13 +850,30 @@ standardize_prediction_table <- function(df, stage_name, source_file, horizon_re
     base,
     tibble::tibble(
       person_id = person_id,
-      predicted_survival = coerce_numeric_text(coalesce_cols(df, c('predicted_survival', 'pred_survival', 'survival', 'posterior_survival'), default = NA)),
-      predicted_risk = coerce_numeric_text(coalesce_cols(df, c('predicted_risk', 'pred_risk', 'risk', 'posterior_risk', 'km_risk'), default = NA)),
-      transition_cif = coerce_numeric_text(coalesce_cols(df, c('transition_cif', 'cif', 'predicted_cif', 'posterior_cif'), default = NA)),
-      lower_interval = coerce_numeric_text(coalesce_cols(df, c('lower_ci', 'lower_cl', 'ci_lower', 'lower_cri', 'credible_lower'), default = NA)),
-      upper_interval = coerce_numeric_text(coalesce_cols(df, c('upper_ci', 'upper_cl', 'ci_upper', 'upper_cri', 'credible_upper'), default = NA)),
+      predicted_survival = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('predicted_survival', 'pred_survival', 'survival', 'posterior_survival', 'predicted_eventfree_prob', 'survival_pred', 'km_survival', 'survival_mean', 's_pop_mean', 'all_event_free_mean', 'predicted_survival_overall', 'mean_survival_overall'), default = NA)),
+        metric_mean_survival
+      ),
+      predicted_risk = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('predicted_risk', 'pred_risk', 'risk', 'posterior_risk', 'km_risk', 'risk_pred', 'risk_mean', 'mean_predicted_risk', 'predicted_transition_risk', 'predicted_risk_overall', 'mean_risk_overall'), default = NA)),
+        metric_mean_risk
+      ),
+      transition_cif = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('transition_cif', 'cif', 'predicted_cif', 'posterior_cif', 'predicted_transition_risk', 'transition_cif_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('predicted_transition_risk', 'transition_cif', 'transition_risk'), summary_candidates = c('value', 'mean'))
+      ),
+      lower_interval = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('lower_ci', 'lower_cl', 'ci_lower', 'lower_cri', 'credible_lower', 'risk_q025', 'transition_cif_q025', 'survival_q025', 's_pop_q025', 'all_event_free_q025'), default = NA)),
+        metric_low_risk,
+        metric_low_survival
+      ),
+      upper_interval = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('upper_ci', 'upper_cl', 'ci_upper', 'upper_cri', 'credible_upper', 'risk_q975', 'transition_cif_q975', 'survival_q975', 's_pop_q975', 'all_event_free_q975'), default = NA)),
+        metric_high_risk,
+        metric_high_survival
+      ),
       interval_type = as.character(coalesce_cols(df, c('interval_type', 'ci_type'), default = NA_character_)),
-      risk_set_size = coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk'), default = NA)),
+      risk_set_size = coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk', 'n_subjects', 'n_total', 'cohort_n'), default = NA)),
       instability_marker = as.character(coalesce_cols(df, c('instability_marker', 'late_horizon_instability_flag', 'tail_instability_flag'), default = NA_character_))
     )
   ) %>%
@@ -765,13 +913,34 @@ standardize_classification_table <- function(df, stage_name, source_file, horizo
   bind_cols(
     base,
     tibble::tibble(
-      positive_classification_rate = coerce_numeric_text(coalesce_cols(df, c('positive_classification_rate', 'positive_rate', 'pos_rate'), default = NA)),
-      false_positive_count = coerce_numeric_text(coalesce_cols(df, c('false_positive_count', 'fp_count'), default = NA)),
-      false_positive_burden = coerce_numeric_text(coalesce_cols(df, c('false_positive_burden', 'fp_burden'), default = NA)),
-      false_positives_per100 = coerce_numeric_text(coalesce_cols(df, c('false_positives_per100', 'fp100'), default = NA)),
-      ppv = coerce_numeric_text(coalesce_cols(df, c('ppv', 'positive_predictive_value'), default = NA)),
-      tpr = coerce_numeric_text(coalesce_cols(df, c('tpr', 'sensitivity'), default = NA)),
-      risk_set_size = coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk'), default = NA)),
+      positive_classification_rate = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('positive_classification_rate', 'positive_rate', 'pos_rate', 'positive_rate_mean', 'km_positive_classification_rate'), default = NA)),
+        extract_long_metric_numeric(df, c('positive_classification_rate', 'positive_rate'), summary_candidates = c('value', 'mean'))
+      ),
+      false_positive_count = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('false_positive_count', 'fp_count', 'false_positive_count_mean', 'false_positive_count_ipcw'), default = NA)),
+        extract_long_metric_numeric(df, c('false_positive_count', 'false_positive_count_ipcw'), summary_candidates = c('value', 'mean'))
+      ),
+      false_positive_burden = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('false_positive_burden', 'fp_burden', 'false_positive_burden_mean', 'false_positive_burden_known_nonevent', 'false_positive_burden_non_event', 'false_positive_burden_nonevents', 'false_positive_burden_primary', 'false_positive_burden_all'), default = NA)),
+        extract_long_metric_numeric(df, c('false_positive_burden', 'false_positive_burden_known_nonevent', 'false_positive_burden_non_event', 'false_positive_burden_nonevents', 'false_positive_burden_primary', 'false_positive_burden_all'), summary_candidates = c('value', 'mean'))
+      ),
+      false_positives_per100 = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('false_positives_per100', 'fp100', 'fp100_mean', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), default = NA)),
+        extract_long_metric_numeric(df, c('false_positives_per100', 'fp100', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), summary_candidates = c('value', 'mean'))
+      ),
+      ppv = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('ppv', 'positive_predictive_value', 'PPV_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('ppv'), summary_candidates = c('value', 'mean'))
+      ),
+      tpr = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('tpr', 'sensitivity', 'TPR_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('tpr', 'sensitivity'), summary_candidates = c('value', 'mean'))
+      ),
+      risk_set_size = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk', 'n_subjects', 'n_total', 'cohort_n'), default = NA)),
+        extract_long_metric_numeric(df, c('cohort_n', 'n_total'), summary_candidates = c('value', 'mean'))
+      ),
       instability_marker = as.character(coalesce_cols(df, c('instability_marker', 'late_horizon_instability_flag', 'tail_instability_flag'), default = NA_character_))
     )
   ) %>%
@@ -784,10 +953,22 @@ standardize_decision_table <- function(df, stage_name, source_file, horizon_regi
   bind_cols(
     base,
     tibble::tibble(
-      net_benefit = coerce_numeric_text(coalesce_cols(df, c('net_benefit', 'nb'), default = NA)),
-      net_reduction_in_unnecessary_intervention = coerce_numeric_text(coalesce_cols(df, c('net_reduction_in_unnecessary_intervention', 'net_reduction'), default = NA)),
-      positive_classification_rate = coerce_numeric_text(coalesce_cols(df, c('positive_classification_rate', 'positive_rate', 'pos_rate'), default = NA)),
-      risk_set_size = coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk'), default = NA)),
+      net_benefit = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('net_benefit', 'nb', 'NB_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('net_benefit', 'nb'), summary_candidates = c('value', 'mean'))
+      ),
+      net_reduction_in_unnecessary_intervention = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('net_reduction_in_unnecessary_intervention', 'net_reduction', 'net_reduction_unnecessary_per_100'), default = NA)),
+        extract_long_metric_numeric(df, c('net_reduction_in_unnecessary_intervention', 'net_reduction_unnecessary_per_100'), summary_candidates = c('value', 'mean'))
+      ),
+      positive_classification_rate = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('positive_classification_rate', 'positive_rate', 'pos_rate', 'positive_rate_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('positive_classification_rate', 'positive_rate'), summary_candidates = c('value', 'mean'))
+      ),
+      risk_set_size = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk', 'n_subjects', 'n_total', 'cohort_n'), default = NA)),
+        extract_long_metric_numeric(df, c('cohort_n', 'n_total'), summary_candidates = c('value', 'mean'))
+      ),
       instability_marker = as.character(coalesce_cols(df, c('instability_marker', 'late_horizon_instability_flag', 'tail_instability_flag'), default = NA_character_))
     )
   ) %>%
@@ -800,19 +981,52 @@ standardize_performance_table <- function(df, stage_name, source_file, horizon_r
   bind_cols(
     base,
     tibble::tibble(
-      predicted_survival = coerce_numeric_text(coalesce_cols(df, c('predicted_survival', 'survival'), default = NA)),
-      predicted_risk = coerce_numeric_text(coalesce_cols(df, c('predicted_risk', 'risk', 'km_risk'), default = NA)),
-      transition_cif = coerce_numeric_text(coalesce_cols(df, c('transition_cif', 'cif'), default = NA)),
-      auc_td = coerce_numeric_text(coalesce_cols(df, c('auc_td', 'auc_t', 'auc'), default = NA)),
-      c_index = coerce_numeric_text(coalesce_cols(df, c('c_index', 'uno_c', 'harrell_c'), default = NA)),
-      calibration_intercept = coerce_numeric_text(coalesce_cols(df, c('calibration_intercept'), default = NA)),
-      calibration_slope = coerce_numeric_text(coalesce_cols(df, c('calibration_slope'), default = NA)),
-      oe_ratio = coerce_numeric_text(coalesce_cols(df, c('oe_ratio', 'o_e'), default = NA)),
-      brier = coerce_numeric_text(coalesce_cols(df, c('brier', 'brier_score'), default = NA)),
-      ibs = coerce_numeric_text(coalesce_cols(df, c('ibs', 'integrated_brier_score'), default = NA)),
+      predicted_survival = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('predicted_survival', 'survival', 'survival_pred', 'km_survival', 'survival_mean', 's_pop_mean', 'all_event_free_mean', 'predicted_survival_overall', 'predicted_eventfree_prob', 'mean_sensitivity_eventfree_prob', 'mean_survival_overall'), default = NA)),
+        extract_long_metric_numeric(df, c('survival', 'predicted_eventfree_prob', 'all_event_free'), summary_candidates = c('value', 'mean'))
+      ),
+      predicted_risk = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('predicted_risk', 'risk', 'km_risk', 'risk_pred', 'risk_mean', 'mean_predicted_risk', 'predicted_transition_risk', 'mean_main_transition_risk', 'mean_sensitivity_transition_risk', 'predicted_risk_overall', 'mean_risk_overall'), default = NA)),
+        extract_long_metric_numeric(df, c('mean_predicted_risk', 'predicted_transition_risk', 'risk', 'risk_pred', 'km_risk'), summary_candidates = c('value', 'mean'))
+      ),
+      transition_cif = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('transition_cif', 'cif', 'predicted_transition_risk', 'transition_cif_mean', 'mean_main_transition_risk', 'mean_sensitivity_transition_risk'), default = NA)),
+        extract_long_metric_numeric(df, c('predicted_transition_risk', 'transition_cif', 'transition_risk'), summary_candidates = c('value', 'mean'))
+      ),
+      auc_td = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('auc_td', 'auc_t', 'auc', 'time_dependent_auc', 'discrimination_AUC', 'auc_transition_horizon'), default = NA)),
+        extract_long_metric_numeric(df, c('time_dependent_auc', 'auc_transition_horizon', 'discrimination_auc'), summary_candidates = c('value', 'mean'))
+      ),
+      c_index = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('c_index', 'uno_c', 'harrell_c'), default = NA)),
+        extract_long_metric_numeric(df, c('uno_c', 'harrell_c'), summary_candidates = c('value', 'mean'))
+      ),
+      calibration_intercept = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('calibration_intercept', 'calibration_intercept_free', 'calibration_intercept_offset'), default = NA)),
+        extract_long_metric_numeric(df, c('calibration_intercept_free', 'calibration_intercept_offset', 'calibration_intercept'), summary_candidates = c('value', 'mean'))
+      ),
+      calibration_slope = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('calibration_slope'), default = NA)),
+        extract_long_metric_numeric(df, c('calibration_slope'), summary_candidates = c('value', 'mean'))
+      ),
+      oe_ratio = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('oe_ratio', 'o_e', 'calibration_oe_ratio'), default = NA)),
+        extract_long_metric_numeric(df, c('oe_ratio', 'calibration_oe_ratio'), summary_candidates = c('value', 'mean'))
+      ),
+      brier = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('brier', 'brier_score', 'brier_ipcw_mean'), default = NA)),
+        extract_long_metric_numeric(df, c('brier', 'brier_score', 'brier_ipcw_mean'), summary_candidates = c('value', 'mean'))
+      ),
+      ibs = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('ibs', 'integrated_brier_score', 'IBS', 'ibs_discrete_upto_horizon'), default = NA)),
+        extract_long_metric_numeric(df, c('ibs', 'integrated_brier_score', 'ibs_discrete_upto_horizon'), summary_candidates = c('value', 'mean'))
+      ),
       lower_interval = coerce_numeric_text(coalesce_cols(df, c('lower_ci', 'lower_cri'), default = NA)),
       upper_interval = coerce_numeric_text(coalesce_cols(df, c('upper_ci', 'upper_cri'), default = NA)),
-      risk_set_size = coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk'), default = NA)),
+      risk_set_size = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('risk_set_size', 'n_risk', 'n_subjects', 'n_total', 'cohort_n', 'n_observed_at_or_beyond_horizon'), default = NA)),
+        extract_long_metric_numeric(df, c('cohort_n', 'n_total', 'known_count'), summary_candidates = c('value', 'mean'))
+      ),
       instability_marker = as.character(coalesce_cols(df, c('instability_marker', 'late_horizon_instability_flag', 'tail_instability_flag'), default = NA_character_))
     )
   ) %>%
@@ -840,23 +1054,38 @@ standardize_followup_table <- function(df, source_file, horizon_registry) {
 
 standardize_timing_table <- function(df, source_file) {
   base <- standardize_base_fields(df, 'Stage4', source_file)
-  ratio_scale_flag <- header_has_any(names(df), c('hazard_ratio', 'hr', 'odds_ratio'))
+  result_type <- trim_lower(as.character(coalesce_cols(df, c('result_type', 'effect_scale', 'metric_scale'), default = NA_character_)))
+  contrast_direction <- as.character(coalesce_cols(df, c('contrast_direction', 'comparison_direction'), default = NA_character_))
+  ratio_scale_flag <- result_type %in% c('hazard_ratio', 'hr', 'odds_ratio') |
+    !is.na(coerce_numeric_text(coalesce_cols(df, c('estimate_hr', 'raw_estimate_hr', 'conf_low_hr', 'conf_high_hr', 'raw_conf_low_hr', 'raw_conf_high_hr'), default = NA)))
+  estimable_flag <- normalize_flag(coalesce_cols(df, c('estimable_flag'), default = NA))
+  suppressed_flag <- normalize_flag(coalesce_cols(df, c('reported_estimate_suppressed_flag'), default = NA))
+  contrast_like_row <- (!is.na(contrast_direction) & nzchar(trimws(contrast_direction))) | ratio_scale_flag
   
   bind_cols(
     base,
     tibble::tibble(
       contrast_label = as.character(coalesce_cols(df, c('contrast_label', 'output_label', 'analysis_label', 'window_label', 'interval_label', 'contrast_type'), default = NA_character_)),
-      estimate = coerce_numeric_text(coalesce_cols(df, c('estimate', 'difference', 'delta', 'beta', 'log_hr', 'hazard_ratio'), default = NA)),
-      p_value = coerce_numeric_text(coalesce_cols(df, c('p_value', 'pvalue', 'p'), default = NA)),
-      lower_ci = coerce_numeric_text(coalesce_cols(df, c('lower_ci', 'ci_lower', 'lcl'), default = NA)),
-      upper_ci = coerce_numeric_text(coalesce_cols(df, c('upper_ci', 'ci_upper', 'ucl'), default = NA)),
+      contrast_direction = contrast_direction,
+      result_type = result_type,
+      estimate = coerce_numeric_text(coalesce_cols(df, c('estimate', 'estimate_hr', 'difference', 'delta', 'beta', 'log_hr', 'hazard_ratio', 'raw_estimate_hr', 'raw_estimate_log_hr'), default = NA)),
+      p_value = coerce_numeric_text(coalesce_cols(df, c('p_value', 'pvalue', 'p', 'raw_p_value'), default = NA)),
+      lower_ci = coerce_numeric_text(coalesce_cols(df, c('lower_ci', 'ci_lower', 'lcl', 'conf_low', 'conf_low_hr', 'raw_conf_low_hr'), default = NA)),
+      upper_ci = coerce_numeric_text(coalesce_cols(df, c('upper_ci', 'ci_upper', 'ucl', 'conf_high', 'conf_high_hr', 'raw_conf_high_hr'), default = NA)),
+      estimable_flag = estimable_flag,
+      reported_estimate_suppressed_flag = suppressed_flag,
       significance_flag = normalize_flag(coalesce_cols(df, c('significance_flag', 'is_significant'), default = NA))
     )
   ) %>%
     mutate(
       significance_flag = ifelse(
-        is.na(significance_flag),
-        mapply(infer_significance_flag, estimate, p_value, lower_ci, upper_ci, MoreArgs = list(ratio_scale = ratio_scale_flag)),
+        is.na(significance_flag) & contrast_like_row,
+        ifelse(
+          (!is.na(estimable_flag) & estimable_flag == FALSE) |
+            (!is.na(reported_estimate_suppressed_flag) & reported_estimate_suppressed_flag == TRUE),
+          FALSE,
+          mapply(infer_significance_flag, estimate, p_value, lower_ci, upper_ci, ratio_scale_flag, USE.NAMES = FALSE)
+        ),
         significance_flag
       )
     )
@@ -899,7 +1128,7 @@ standardize_decomposition_table <- function(df, stage_name, source_file, horizon
   extra_tbl <- if (length(extra_cols) > 0L) {
     tibble::as_tibble(df[, extra_cols, drop = FALSE])
   } else {
-    tibble::tibble()
+    tibble::as_tibble(df[, character(0), drop = FALSE])
   }
   
   bind_cols(
@@ -907,11 +1136,11 @@ standardize_decomposition_table <- function(df, stage_name, source_file, horizon
     tibble::tibble(
       incidence_coefficients = as.character(coalesce_cols(df, c('incidence_coefficients', 'incidence_coefs'), default = NA_character_)),
       latency_coefficients = as.character(coalesce_cols(df, c('latency_coefficients', 'latency_coefs'), default = NA_character_)),
-      cure_fraction = coerce_numeric_text(coalesce_cols(df, c('cure_fraction', 'posterior_cure_fraction'), default = NA)),
-      susceptible_fraction = coerce_numeric_text(coalesce_cols(df, c('susceptible_fraction'), default = NA)),
+      cure_fraction = coerce_numeric_text(coalesce_cols(df, c('cure_fraction', 'posterior_cure_fraction', 'cure_fraction_mean'), default = NA)),
+      susceptible_fraction = coerce_numeric_text(coalesce_cols(df, c('susceptible_fraction', 'susceptible_fraction_mean'), default = NA)),
       uncured_mean_support_flag = normalize_flag(coalesce_cols(df, c('uncured_mean_support_flag'), default = NA)),
-      MSTu = coerce_numeric_text(coalesce_cols(df, c('MSTu', 'mstu'), default = NA)),
-      merged_site_placement_label = as.character(coalesce_cols(df, c('merged_site_placement_label', 'site_placement_label', 'site_structure_label'), default = NA_character_)),
+      MSTu = coerce_numeric_text(coalesce_cols(df, c('MSTu', 'mstu', 'MSTu_mean'), default = NA)),
+      merged_site_placement_label = as.character(coalesce_cols(df, c('merged_site_placement_label', 'site_placement_label', 'site_placement', 'site_structure_label'), default = NA_character_)),
       hazard_target = as.character(coalesce_cols(df, c('hazard_target'), default = NA_character_)),
       hazard_1y = coerce_numeric_text(coalesce_cols(df, c('hazard_1y'), default = NA)),
       hazard_2y = coerce_numeric_text(coalesce_cols(df, c('hazard_2y'), default = NA)),
@@ -960,17 +1189,41 @@ standardize_fit_contrast_table <- function(df, source_file) {
 
 standardize_anchor_delta_table <- function(df, source_file, horizon_registry) {
   base <- standardize_base_fields(df, 'Stage8', source_file)
+  delta_field <- trim_lower(coalesce_cols(df, c('delta_field'), default = NA_character_))
+  metric_label <- trim_lower(coalesce_cols(df, c('metric'), default = NA_character_))
+  delta_value <- coerce_numeric_text(coalesce_cols(df, c('delta_anchor_minus_neutral'), default = NA))
   
   bind_cols(
     base,
     tibble::tibble(
-      delta_risk_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_risk_anchor_minus_neutral'), default = NA)),
-      delta_cure_fraction_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_cure_fraction_anchor_minus_neutral'), default = NA)),
-      delta_false_positive_burden_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_false_positive_burden_anchor_minus_neutral'), default = NA)),
-      delta_FP100_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_FP100_anchor_minus_neutral'), default = NA)),
-      delta_NB_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_NB_anchor_minus_neutral'), default = NA)),
-      delta_PPV_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_PPV_anchor_minus_neutral'), default = NA)),
-      delta_TPR_anchor_minus_neutral = coerce_numeric_text(coalesce_cols(df, c('delta_TPR_anchor_minus_neutral'), default = NA))
+      delta_risk_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_risk_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_risk_anchor_minus_neutral' | metric_label %in% c('risk', 'transition_risk', 'transition_cif'), delta_value, NA_real_)
+      ),
+      delta_cure_fraction_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_cure_fraction_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_cure_fraction_anchor_minus_neutral' | metric_label == 'cure_fraction', delta_value, NA_real_)
+      ),
+      delta_false_positive_burden_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_false_positive_burden_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_false_positive_burden_anchor_minus_neutral' | metric_label %in% c('false_positive_burden', 'fp_burden'), delta_value, NA_real_)
+      ),
+      delta_FP100_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_FP100_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_fp100_anchor_minus_neutral' | metric_label == 'fp100', delta_value, NA_real_)
+      ),
+      delta_NB_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_NB_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_nb_anchor_minus_neutral' | metric_label == 'nb', delta_value, NA_real_)
+      ),
+      delta_PPV_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_PPV_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_ppv_anchor_minus_neutral' | metric_label == 'ppv', delta_value, NA_real_)
+      ),
+      delta_TPR_anchor_minus_neutral = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_TPR_anchor_minus_neutral'), default = NA)),
+        ifelse(delta_field == 'delta_tpr_anchor_minus_neutral' | metric_label == 'tpr', delta_value, NA_real_)
+      )
     )
   ) %>%
     add_support_metadata(horizon_registry)
@@ -1000,17 +1253,41 @@ standardize_incidence_update_table <- function(df, source_file) {
 
 standardize_remission_delta_table <- function(df, source_file, horizon_registry) {
   base <- standardize_base_fields(df, 'Stage8', source_file)
+  delta_field <- trim_lower(coalesce_cols(df, c('delta_field'), default = NA_character_))
+  metric_label <- trim_lower(coalesce_cols(df, c('metric'), default = NA_character_))
+  delta_value <- coerce_numeric_text(coalesce_cols(df, c('delta_8B_minus_8A', 'delta_8b_minus_8a'), default = NA))
   
   bind_cols(
     base,
     tibble::tibble(
-      delta_risk_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_risk_8B_minus_8A'), default = NA)),
-      delta_cure_fraction_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_cure_fraction_8B_minus_8A'), default = NA)),
-      delta_false_positive_burden_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_false_positive_burden_8B_minus_8A'), default = NA)),
-      delta_FP100_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_FP100_8B_minus_8A'), default = NA)),
-      delta_NB_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_NB_8B_minus_8A'), default = NA)),
-      delta_PPV_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_PPV_8B_minus_8A'), default = NA)),
-      delta_TPR_8B_minus_8A = coerce_numeric_text(coalesce_cols(df, c('delta_TPR_8B_minus_8A'), default = NA))
+      delta_risk_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_risk_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_risk_8b_minus_8a' | metric_label %in% c('risk', 'transition_risk', 'transition_cif'), delta_value, NA_real_)
+      ),
+      delta_cure_fraction_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_cure_fraction_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_cure_fraction_8b_minus_8a' | metric_label == 'cure_fraction', delta_value, NA_real_)
+      ),
+      delta_false_positive_burden_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_false_positive_burden_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_false_positive_burden_8b_minus_8a' | metric_label %in% c('false_positive_burden', 'fp_burden'), delta_value, NA_real_)
+      ),
+      delta_FP100_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_FP100_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_fp100_8b_minus_8a' | metric_label == 'fp100', delta_value, NA_real_)
+      ),
+      delta_NB_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_NB_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_nb_8b_minus_8a' | metric_label == 'nb', delta_value, NA_real_)
+      ),
+      delta_PPV_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_PPV_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_ppv_8b_minus_8a' | metric_label == 'ppv', delta_value, NA_real_)
+      ),
+      delta_TPR_8B_minus_8A = dplyr::coalesce(
+        coerce_numeric_text(coalesce_cols(df, c('delta_TPR_8B_minus_8A'), default = NA)),
+        ifelse(delta_field == 'delta_tpr_8b_minus_8a' | metric_label == 'tpr', delta_value, NA_real_)
+      )
     )
   ) %>%
     add_support_metadata(horizon_registry)
@@ -1037,9 +1314,9 @@ standardize_stage9_delta_from_main <- function(df, source_file, horizon_registry
   bind_cols(
     base,
     tibble::tibble(
-      delta_risk_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('absolute_difference_from_main_risk', 'delta_risk_9_minus_main'), default = NA)),
-      delta_false_positive_burden_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('change_false_positive_burden', 'delta_false_positive_burden_9_minus_main'), default = NA)),
-      delta_NB_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('change_net_benefit', 'delta_NB_9_minus_main'), default = NA))
+      delta_risk_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('absolute_difference_from_main_risk', 'delta_risk_9_minus_main', 'risk_change_absolute', 'mean_risk_difference_from_main_absolute', 'risk_difference_from_main_absolute'), default = NA)),
+      delta_false_positive_burden_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('change_false_positive_burden', 'delta_false_positive_burden_9_minus_main', 'false_positive_burden_change'), default = NA)),
+      delta_NB_9_minus_main = coerce_numeric_text(coalesce_cols(df, c('change_net_benefit', 'delta_NB_9_minus_main', 'net_benefit_change'), default = NA))
     )
   ) %>%
     add_support_metadata(horizon_registry)
@@ -1135,6 +1412,21 @@ assemble_metric_stage <- function(stage_name, scan_tbl, horizon_registry) {
   }
   
   prediction_source_paths <- if (length(pred_paths) > 0L) unique(pred_paths) else metric_paths
+  summary_prediction_paths <- unique(c(
+    metric_paths[name_has_any(basename(metric_paths), c('risk_summary', 'cohort_yearly', 'performance_classification'))],
+    pred_paths[name_has_any(basename(pred_paths), c('group_risk', 'cohort_risk'))]
+  ))
+  
+  if (length(summary_prediction_paths) > 0L) {
+    prediction_source_paths <- unique(c(
+      summary_prediction_paths,
+      prediction_source_paths[!name_has_any(basename(prediction_source_paths), c('subject_horizon', 'subject_prediction', 'subject_predictions', 'prediction_long'))]
+    ))
+  }
+  
+  classification_source_paths <- unique(c(class_paths, perf_paths, dec_paths))
+  performance_source_paths <- unique(c(perf_paths, class_paths))
+  decision_source_paths <- unique(c(dec_paths, class_paths, perf_paths))
   
   pred_tbl <- purrr::map_dfr(
     prediction_source_paths,
@@ -1145,21 +1437,21 @@ assemble_metric_stage <- function(stage_name, scan_tbl, horizon_registry) {
   pred_horizon_tbl <- summarise_prediction_to_horizon(pred_tbl)
   
   class_tbl <- purrr::map_dfr(
-    metric_paths,
+    classification_source_paths,
     ~ standardize_classification_table(read_table_any(.x), stage_name, .x, horizon_registry)
   ) %>%
     filter_metric_rows(c('positive_classification_rate', 'false_positive_count', 'false_positive_burden', 'false_positives_per100', 'ppv', 'tpr')) %>%
     ensure_threshold_col()
   
   perf_tbl <- purrr::map_dfr(
-    metric_paths,
+    performance_source_paths,
     ~ standardize_performance_table(read_table_any(.x), stage_name, .x, horizon_registry)
   ) %>%
     filter_metric_rows(c('predicted_survival', 'predicted_risk', 'transition_cif', 'auc_td', 'c_index', 'calibration_intercept', 'calibration_slope', 'oe_ratio', 'brier', 'ibs')) %>%
     ensure_threshold_col()
   
   dec_tbl <- purrr::map_dfr(
-    metric_paths,
+    decision_source_paths,
     ~ standardize_decision_table(read_table_any(.x), stage_name, .x, horizon_registry)
   ) %>%
     filter_metric_rows(c('net_benefit', 'net_reduction_in_unnecessary_intervention', 'positive_classification_rate')) %>%
@@ -1461,6 +1753,30 @@ if (is.na(main_risk_scale) || !nzchar(main_risk_scale)) main_risk_scale <- 'tran
 supplementary_risk_scale <- first_non_missing_scalar(metadata_registry_stage1 %>% filter(metadata_name == 'supplementary_risk_scale') %>% pull(metadata_value))
 if (is.na(supplementary_risk_scale) || !nzchar(supplementary_risk_scale)) supplementary_risk_scale <- 'transition_cif_competing'
 
+# 🔴 Validate: upstream completion before stage-ten assembly ===============================
+## 🟠 Check: manifest-backed stages ===============================
+validate_stage_manifest('Stage2', stage_paths$stage2, c('stage2_export_manifest.csv'))
+validate_stage_manifest('Stage3', stage_paths$stage3, c('stage3_export_manifest.csv'))
+validate_stage_manifest('Stage4', stage_paths$stage4, c('stage4_export_manifest.csv'))
+validate_stage_manifest('Stage5', stage_paths$stage5, c('stage5_export_manifest.csv'))
+validate_stage_manifest('Stage6', stage_paths$stage6, c('stage6_export_manifest.csv'))
+validate_stage_manifest('Stage7', stage_paths$stage7, c('stage7_output_manifest.csv'))
+validate_stage_manifest('Stage8B', stage_paths$stage8[['stage8b']], c('bayes_stage8b_export_manifest.csv'))
+validate_stage_manifest('Stage9', stage_paths$stage9, c('stage9_export_manifest.csv'))
+
+## 🟠 Check: stage-eight-A required core files ===============================
+validate_required_stage_files(
+  'Stage8A',
+  stage_paths$stage8[['stage8a']],
+  c(
+    'bayes_stage8a_prediction_long.csv.gz',
+    'bayes_stage8a_performance_classification_long.csv',
+    'bayes_stage8a_anchor_vs_neutral_delta_panel.csv',
+    'bayes_stage8a_incidence_anchor_update_panel.csv',
+    'bayes_stage8a_uncured_only_decomposition_panel.csv'
+  )
+)
+
 # 🔴 Scan: stage directories for CSV outputs ===============================
 ## 🟠 Discover: available files ===============================
 stage_scans <- list(
@@ -1481,6 +1797,7 @@ stage2_followup_table <- purrr::map_dfr(
   ~ standardize_followup_table(read_table_any(.x), .x, horizon_registry)
 ) %>%
   distinct()
+assert_nonempty_table(stage2_followup_table, 'stage2_followup_table')
 
 ## 🟠 Build: stage-four timing block ===============================
 stage4_timing_table <- purrr::map_dfr(
@@ -1488,6 +1805,7 @@ stage4_timing_table <- purrr::map_dfr(
   ~ standardize_timing_table(read_table_any(.x), .x)
 ) %>%
   distinct()
+assert_nonempty_table(stage4_timing_table, 'stage4_timing_table')
 
 ## 🟠 Build: stage-six carry-forward flags ===============================
 stage6_carryforward_table <- purrr::map_dfr(
@@ -1541,6 +1859,7 @@ stage7_decomposition_table <- purrr::map_dfr(
     horizon_year = integer(),
     risk_scale = character(),
     fit_key = character(),
+    admissibility_flag = logical(),
     uncured_mean_support_flag = logical(),
     cure_fraction = numeric(),
     susceptible_fraction = numeric()
@@ -1557,6 +1876,8 @@ stage7_fit_contrast_table <- purrr::map_dfr(
     delta_AIC_cure_minus_noncure = numeric(),
     same_family_fit_gain_signal = character()
   ))
+assert_nonempty_table(stage7_decomposition_table, 'stage7_decomposition_table')
+assert_nonempty_table(stage7_fit_contrast_table, 'stage7_fit_contrast_table')
 
 stage8_decomposition_table <- purrr::map_dfr(
   collect_category_paths(stage_scans$Stage8, 'decomposition'),
@@ -1573,6 +1894,7 @@ stage8_decomposition_table <- purrr::map_dfr(
     horizon_year = integer(),
     risk_scale = character(),
     fit_key = character(),
+    admissibility_flag = logical(),
     uncured_mean_support_flag = logical(),
     cure_fraction = numeric(),
     susceptible_fraction = numeric()
@@ -1591,6 +1913,7 @@ stage8_anchor_delta_table <- purrr::map_dfr(
     horizon_year = integer(),
     threshold = numeric(),
     fit_key = character(),
+    admissibility_flag = logical(),
     delta_risk_anchor_minus_neutral = numeric(),
     delta_false_positive_burden_anchor_minus_neutral = numeric(),
     delta_FP100_anchor_minus_neutral = numeric(),
@@ -1608,6 +1931,7 @@ stage8_incidence_update_table <- purrr::map_dfr(
     branch = character(),
     prior_branch = character(),
     fit_key = character(),
+    admissibility_flag = logical(),
     age_sex_anchor_cell = character(),
     posterior_minus_prior_risk = numeric()
   ))
@@ -1625,6 +1949,7 @@ stage8_remission_delta_table <- purrr::map_dfr(
     horizon_year = integer(),
     threshold = numeric(),
     fit_key = character(),
+    admissibility_flag = logical(),
     delta_risk_8B_minus_8A = numeric(),
     delta_false_positive_burden_8B_minus_8A = numeric(),
     delta_FP100_8B_minus_8A = numeric(),
@@ -1643,6 +1968,10 @@ stage8_diagnostics_table <- purrr::map_dfr(
     posterior_predictive_check_flag = logical(),
     prior_sensitivity_ok_flag = logical()
   ))
+assert_nonempty_table(stage8_decomposition_table, 'stage8_decomposition_table')
+assert_nonempty_table(stage8_anchor_delta_table, 'stage8_anchor_delta_table')
+assert_nonempty_table(stage8_incidence_update_table, 'stage8_incidence_update_table')
+assert_nonempty_table(stage8_remission_delta_table, 'stage8_remission_delta_table')
 
 ## 🟠 Apply: stage-eight admissibility enrichment ===============================
 stage8_bundle$prediction_table <- apply_stage8_diagnostics(stage8_bundle$prediction_table, stage8_diagnostics_table)
@@ -1662,6 +1991,7 @@ stage8_remission_delta_table <- stage8_remission_delta_table %>% filter(is.na(ad
 ## 🟠 Build: stage-nine remission-versus-main deltas ===============================
 stage9_delta_from_main_table <- purrr::map_dfr(
   unique(c(
+    collect_category_paths(stage_scans$Stage9, 'remission_delta'),
     collect_category_paths(stage_scans$Stage9, 'classification'),
     collect_category_paths(stage_scans$Stage9, 'decision'),
     collect_category_paths(stage_scans$Stage9, 'performance')
@@ -1681,6 +2011,7 @@ stage9_delta_from_main_table <- purrr::map_dfr(
     delta_false_positive_burden_9_minus_main = numeric(),
     delta_NB_9_minus_main = numeric()
   ))
+assert_nonempty_table(stage9_delta_from_main_table, 'stage9_delta_from_main_table')
 
 # 🔴 Construct: unified long-format source tables ===============================
 ## 🟠 Combine: prediction source-of-truth table ===============================
@@ -1859,35 +2190,37 @@ heterogeneity_scope_tbl <- tibble::tibble(
 heterogeneity_triangulation_table <- heterogeneity_scope_tbl %>%
   rowwise() %>%
   mutate(
+    this_dataset_key = dataset_key,
+    this_dataset_parent = dataset_parent,
     timing_signal = {
-      this_dataset <- dataset_key
+      this_dataset <- this_dataset_key
       if (this_dataset %in% c('merged', 'merged__site_free', 'merged__site_adjusted', 'overall_project')) {
         derive_timing_signal(stage4_timing_table)
       } else {
         'single_site_no_within_dataset_site_contrast'
       }
     },
-    followup_signal = derive_followup_signal(dataset_key, stage2_followup_table, horizon_registry),
+    followup_signal = derive_followup_signal(this_dataset_key, stage2_followup_table, horizon_registry),
     screening_signal = {
       picked <- stage6_carryforward_table %>%
-        filter(dataset_key == !!dataset_key | dataset_parent == !!dataset_parent) %>%
+        filter(dataset_key == this_dataset_key | dataset_parent == this_dataset_parent) %>%
         arrange(dataset_sort_num(dataset_key, dataset_order))
       if (nrow(picked) == 0L) 'screening_unavailable' else first_non_missing_scalar(picked$cure_model_eligibility_flag)
     },
     latency_family_signal = derive_latency_family_signal(
-      main_common_scale_comparison_table %>% filter(as.character(dataset_key) == !!dataset_key | dataset_parent == !!dataset_parent)
+      main_common_scale_comparison_table %>% filter(as.character(dataset_key) == this_dataset_key | dataset_parent == this_dataset_parent)
     ),
     remission_signal = derive_remission_distortion_signal(
-      remission_aware_delta_table %>% filter(as.character(dataset_key) == !!dataset_key | dataset_parent == !!dataset_parent)
+      remission_aware_delta_table %>% filter(as.character(dataset_key) == this_dataset_key | dataset_parent == this_dataset_parent)
     ),
     anchor_dependence_signal = derive_anchor_dependence_signal(
-      external_anchor_value_table %>% filter(as.character(dataset_key) == !!dataset_key | dataset_parent == !!dataset_parent)
+      external_anchor_value_table %>% filter(as.character(dataset_key) == this_dataset_key | dataset_parent == this_dataset_parent)
     ),
     same_family_fit_gain_signal = derive_same_family_fit_gain_signal(
-      stage7_fit_contrast_table %>% filter(as.character(dataset_key) == !!dataset_key | dataset_parent == !!dataset_parent)
+      stage7_fit_contrast_table %>% filter(as.character(dataset_key) == this_dataset_key | dataset_parent == this_dataset_parent)
     ),
     uncured_only_support_signal = derive_uncured_only_support_signal(
-      cure_model_only_supporting_decomposition_table %>% filter(as.character(dataset_key) == !!dataset_key | dataset_parent == !!dataset_parent)
+      cure_model_only_supporting_decomposition_table %>% filter(as.character(dataset_key) == this_dataset_key | dataset_parent == this_dataset_parent)
     ),
     axis_timing_difference = dplyr::case_when(
       timing_signal %in% c('early_supported_difference', 'late_only_difference', 'weak_or_absent_early_difference') ~ timing_signal,
@@ -1910,6 +2243,7 @@ heterogeneity_triangulation_table <- heterogeneity_scope_tbl %>%
     future_cure_modeling_recommendation_flag = derive_future_recommendation_flag(axis_cure_support, latency_family_signal, same_family_fit_gain_signal, axis_remission_distortion)
   ) %>%
   ungroup() %>%
+  select(-this_dataset_key, -this_dataset_parent) %>%
   arrange(dataset_sort_num(dataset_key, dataset_order))
 
 # 🔴 Assemble: mandatory figure-ready source tables ===============================

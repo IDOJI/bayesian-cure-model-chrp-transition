@@ -529,6 +529,40 @@ load_stage8a_outputs <- function(model_registry_csv, performance_csv) {
   out
 }
 
+map_stage8a_to_stage8b_structural_id <- function(structural_model_id, dataset_key = NA_character_) {
+  structural_model_id <- as.character(structural_model_id %||% NA_character_)
+  dataset_key <- as.character(dataset_key %||% NA_character_)
+
+  vapply(seq_along(structural_model_id), function(ii) {
+    id_now <- structural_model_id[[ii]]
+    ds_now <- dataset_key[[ii]]
+
+    if (!nzchar(id_now) || is.na(id_now)) return(id_now)
+
+    if (grepl("^(PNU|SNU)-L[01]$", id_now)) {
+      latency_branch <- sub("^(PNU|SNU)-(L[01])$", "\\2", id_now)
+      remission_branch <- sub("^L", "R", latency_branch)
+      return(paste0(sub("-(L[01])$", "", id_now), "-", latency_branch, remission_branch))
+    }
+
+    if (grepl("^MERGED-I[01]-L[01]S[01]$", id_now)) {
+      incidence_tag <- sub("^MERGED-(I[01])-L[01]S[01]$", "\\1", id_now)
+      latency_branch <- sub("^MERGED-I[01]-(L[01]S[01])$", "\\1", id_now)
+      remission_branch <- sub("^L", "R", latency_branch)
+      prefix <- if (identical(incidence_tag, "I1")) "MERGED-I1" else "MERGED"
+      return(paste(prefix, latency_branch, remission_branch, sep = "-"))
+    }
+
+    if (identical(ds_now, "merged") && grepl("^MERGED-L[01]S[01]$", id_now)) {
+      latency_branch <- sub("^MERGED-(L[01]S[01])$", "\\1", id_now)
+      remission_branch <- sub("^L", "R", latency_branch)
+      return(paste("MERGED", latency_branch, remission_branch, sep = "-"))
+    }
+
+    id_now
+  }, character(1))
+}
+
 build_stage8a_delta_keys <- function(stage8a_outputs) {
   perf <- tibble::as_tibble(stage8a_outputs$performance_classification_long)
   out <- list(
@@ -547,14 +581,19 @@ build_stage8a_delta_keys <- function(stage8a_outputs) {
   perf_cure_col <- first_existing_name(perf, c("cure_fraction_mean", "cohort_mean_cure_fraction_mean"))
 
   has_model_keys <- all(c("structural_model_id", "formula_anchor", "family_code") %in% names(perf))
-  if (!has_model_keys || is.null(perf_dataset_col) || is.null(perf_horizon_col)) {
+  has_branch_keys <- all(c("prior_branch", "site_prior_family") %in% names(perf))
+  if (!has_model_keys || !has_branch_keys || is.null(perf_dataset_col) || is.null(perf_horizon_col)) {
     return(out)
   }
 
   perf_base <- perf %>%
     mutate(
       dataset_key = as.character(.data[[perf_dataset_col]]),
-      horizon = as.integer(safe_numeric(.data[[perf_horizon_col]]))
+      horizon = as.integer(safe_numeric(.data[[perf_horizon_col]])),
+      structural_model_id = map_stage8a_to_stage8b_structural_id(
+        structural_model_id = as.character(structural_model_id),
+        dataset_key = dataset_key
+      )
     )
 
   if (!is.null(perf_transition_col) || !is.null(perf_cure_col)) {
@@ -564,6 +603,8 @@ build_stage8a_delta_keys <- function(stage8a_outputs) {
         structural_model_id = as.character(structural_model_id),
         formula_anchor = as.character(formula_anchor),
         family_code = as.character(family_code),
+        prior_branch = as.character(prior_branch),
+        site_prior_family = as.character(site_prior_family),
         horizon = horizon,
         stage8a_transition_risk = if (!is.null(perf_transition_col)) safe_numeric(.data[[perf_transition_col]]) else NA_real_,
         stage8a_cure_fraction = if (!is.null(perf_cure_col)) safe_numeric(.data[[perf_cure_col]]) else NA_real_
@@ -579,6 +620,8 @@ build_stage8a_delta_keys <- function(stage8a_outputs) {
         structural_model_id = as.character(structural_model_id),
         formula_anchor = as.character(formula_anchor),
         family_code = as.character(family_code),
+        prior_branch = as.character(prior_branch),
+        site_prior_family = as.character(site_prior_family),
         horizon = horizon,
         threshold = as.numeric(safe_numeric(.data[[perf_threshold_col]])),
         stage8a_false_positive_burden = safe_numeric(false_positive_burden_mean),
@@ -2047,7 +2090,7 @@ safe_generate_stage8b_visuals <- function(posterior_cohort_yearly, posterior_cla
       ggplot(aes(x = horizon, y = posterior_mean_transition_cif, color = model_id)) +
       geom_errorbar(aes(ymin = posterior_q025_transition_cif, ymax = posterior_q975_transition_cif), width = 0.12, alpha = 0.6) +
       geom_line(linewidth = 0.6) +
-      geom_point(linewidth = 0.6) +
+      geom_point(size = 1.6) +
       geom_point(aes(y = observed_transition_cif), shape = 4, size = 2.0, stroke = 0.9, color = "black") +
       facet_wrap(~ dataset_key, scales = "free_y") +
       labs(title = "Stage 8B posterior predictive checks vs observed transition CIF", x = "Horizon (years)", y = "Transition CIF") +
@@ -3197,45 +3240,45 @@ stage8a_cohort_key <- tibble::as_tibble(stage8a_delta_keys$cohort_key)
 stage8a_class_key <- tibble::as_tibble(stage8a_delta_keys$class_key)
 
 stage8a_has_cohort_key <- nrow_or_zero(stage8a_cohort_key) > 0L &&
-  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "stage8a_transition_risk", "stage8a_cure_fraction") %in% names(stage8a_cohort_key))
+  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "stage8a_transition_risk", "stage8a_cure_fraction") %in% names(stage8a_cohort_key))
 
 stage8a_has_class_key <- nrow_or_zero(stage8a_class_key) > 0L &&
-  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold", "stage8a_false_positive_burden", "stage8a_FP100", "stage8a_NB", "stage8a_PPV", "stage8a_TPR") %in% names(stage8a_class_key))
+  all(c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold", "stage8a_false_positive_burden", "stage8a_FP100", "stage8a_NB", "stage8a_PPV", "stage8a_TPR") %in% names(stage8a_class_key))
 
 delta_vs_stage8a_parts <- list(
   if (stage8a_has_cohort_key) {
     posterior_cohort_yearly %>%
-      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
+      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "transition_cif", delta_field = metric_to_stage8a_delta_field("transition_cif"), stage8b_estimate = transition_cif_mean, stage8a_estimate = stage8a_transition_risk, delta_8B_minus_8A = transition_cif_mean - stage8a_transition_risk)
   },
   if (stage8a_has_cohort_key) {
     posterior_cohort_yearly %>%
-      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
+      left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "cure_fraction", delta_field = metric_to_stage8a_delta_field("cure_fraction"), stage8b_estimate = cohort_mean_cure_fraction_mean, stage8a_estimate = stage8a_cure_fraction, delta_8B_minus_8A = cohort_mean_cure_fraction_mean - stage8a_cure_fraction)
   },
   if (stage8a_has_class_key) {
     posterior_classification_raw %>%
-      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "false_positive_burden", delta_field = metric_to_stage8a_delta_field("false_positive_burden"), stage8b_estimate = false_positive_burden_mean, stage8a_estimate = stage8a_false_positive_burden, delta_8B_minus_8A = false_positive_burden_mean - stage8a_false_positive_burden)
   },
   if (stage8a_has_class_key) {
     posterior_classification_raw %>%
-      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "FP100", delta_field = metric_to_stage8a_delta_field("FP100"), stage8b_estimate = FP100_mean, stage8a_estimate = stage8a_FP100, delta_8B_minus_8A = FP100_mean - stage8a_FP100)
   },
   if (stage8a_has_class_key) {
     posterior_classification_raw %>%
-      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "NB", delta_field = metric_to_stage8a_delta_field("NB"), stage8b_estimate = NB_mean, stage8a_estimate = stage8a_NB, delta_8B_minus_8A = NB_mean - stage8a_NB)
   },
   if (stage8a_has_class_key) {
     posterior_classification_raw %>%
-      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "PPV", delta_field = metric_to_stage8a_delta_field("PPV"), stage8b_estimate = PPV_mean, stage8a_estimate = stage8a_PPV, delta_8B_minus_8A = PPV_mean - stage8a_PPV)
   },
   if (stage8a_has_class_key) {
     posterior_classification_raw %>%
-      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
+      left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "prior_branch", "site_prior_family", "horizon", "threshold")) %>%
       transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "TPR", delta_field = metric_to_stage8a_delta_field("TPR"), stage8b_estimate = TPR_mean, stage8a_estimate = stage8a_TPR, delta_8B_minus_8A = TPR_mean - stage8a_TPR)
   }
 )
@@ -3264,9 +3307,10 @@ horizon_performance_tbl <- posterior_subject_yearly_eval %>%
     dataset_now <- as.character(.y$dataset_key[[1]])
     horizon_now <- as.integer(.y$horizon[[1]])
     horizon_ref <- ipcw_registry[[dataset_now]] %>% filter(horizon_year == horizon_now)
-    cal_tbl <- compute_calibration_simple(.x, observed_transition_cif = horizon_ref$observed_transition_cif[[1]])
-    disc_tbl <- compute_discrimination_simple(.x)
-    brier_tbl <- compute_brier_ipcw_simple(.x)
+    x_eval <- .x %>% mutate(horizon = horizon_now)
+    cal_tbl <- compute_calibration_simple(x_eval, observed_transition_cif = horizon_ref$observed_transition_cif[[1]])
+    disc_tbl <- compute_discrimination_simple(x_eval)
+    brier_tbl <- compute_brier_ipcw_simple(x_eval)
     bind_cols(
       tibble(
         observed_transition_cif = horizon_ref$observed_transition_cif[[1]],
@@ -3290,7 +3334,8 @@ horizon_performance_tbl <- posterior_subject_yearly_eval %>%
   ungroup() %>%
   left_join_replacing_columns(horizon_annotation, by = c("dataset_key", "horizon")) %>%
   left_join_replacing_columns(risk_set_support_tbl, by = c("dataset_key", "horizon")) %>%
-  left_join_replacing_columns(model_annotation, by = c("model_id", "retained_fit_id"))
+  left_join_replacing_columns(model_annotation, by = c("model_id", "retained_fit_id")) %>%
+  apply_prior_tail_sensitive(has_threshold = FALSE)
 
 cohort_metrics_for_join <- posterior_cohort_yearly %>%
   select(
@@ -3450,8 +3495,8 @@ anchor_vs_neutral_delta_panel <- anchor_vs_neutral_delta %>%
 
 stage8a_vs_stage8b_delta_panel <- delta_vs_stage8a %>%
   select(
-    dataset_key, branch, risk_scale, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family,
-    horizon, threshold, support_tier, claim_restriction_flag, delta_field, delta_8B_minus_8A
+    dataset_key, model_id, branch, risk_scale, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family,
+    horizon, threshold, support_tier, horizon_evidence_class, claim_restriction_flag, interpretation_note, delta_field, delta_8B_minus_8A
   ) %>%
   tidyr::pivot_wider(names_from = delta_field, values_from = delta_8B_minus_8A)
 
@@ -3467,6 +3512,106 @@ figure_source_tables <- bind_rows(
 ) %>%
   relocate(panel_name)
 
+admissible_models_export <- model_registry %>%
+  filter(admissibility_flag %in% TRUE) %>%
+  arrange(factor(dataset_key, levels = c("PNU", "SNU", "merged")), structural_model_id, family_code, prior_branch, site_prior_family)
+
+n_total_models_stage8b <- nrow(model_registry)
+n_admissible_models_stage8b <- nrow(admissible_models_export)
+n_inadmissible_models_stage8b <- n_total_models_stage8b - n_admissible_models_stage8b
+
+admissibility_summary_export <- bind_rows(
+  tibble(
+    summary_dimension = "overall",
+    summary_level = "admissible_models",
+    n_models = n_admissible_models_stage8b
+  ),
+  admissible_models_export %>%
+    dplyr::count(dataset_key, name = "n_models") %>%
+    transmute(summary_dimension = "dataset_key", summary_level = dataset_key, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(family_code, name = "n_models") %>%
+    transmute(summary_dimension = "family_code", summary_level = family_code, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(prior_branch, name = "n_models") %>%
+    transmute(summary_dimension = "prior_branch", summary_level = prior_branch, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(site_prior_family, name = "n_models") %>%
+    transmute(summary_dimension = "site_prior_family", summary_level = site_prior_family, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(formula_anchor, name = "n_models") %>%
+    transmute(summary_dimension = "formula_anchor", summary_level = formula_anchor, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(structural_model_id, name = "n_models") %>%
+    transmute(summary_dimension = "structural_model_id", summary_level = structural_model_id, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(site_placement_label, name = "n_models") %>%
+    transmute(summary_dimension = "site_placement_label", summary_level = site_placement_label, n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(dataset_key, family_code, name = "n_models") %>%
+    transmute(summary_dimension = "dataset_key__family_code", summary_level = paste(dataset_key, family_code, sep = "/"), n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(dataset_key, prior_branch, name = "n_models") %>%
+    transmute(summary_dimension = "dataset_key__prior_branch", summary_level = paste(dataset_key, prior_branch, sep = "/"), n_models = n_models),
+  admissible_models_export %>%
+    dplyr::count(family_code, prior_branch, name = "n_models") %>%
+    transmute(summary_dimension = "family_code__prior_branch", summary_level = paste(family_code, prior_branch, sep = "/"), n_models = n_models)
+) %>%
+  mutate(
+    n_total_models = n_total_models_stage8b,
+    n_admissible_models = n_admissible_models_stage8b,
+    share_of_all_models = ifelse(n_total_models > 0L, n_models / n_total_models, NA_real_),
+    share_of_admissible_models = ifelse(n_admissible_models > 0L, n_models / n_admissible_models, NA_real_)
+  ) %>%
+  arrange(summary_dimension, desc(n_models), summary_level)
+
+inadmissible_models_export <- model_registry %>%
+  filter(!(admissibility_flag %in% TRUE)) %>%
+  mutate(
+    inadmissibility_reason = ifelse(trimws(admissibility_reasons) == "", "unspecified", as.character(admissibility_reasons))
+  ) %>%
+  arrange(desc(inadmissibility_reason), factor(dataset_key, levels = c("PNU", "SNU", "merged")), structural_model_id, family_code, prior_branch, site_prior_family)
+
+inadmissibility_summary_export <- bind_rows(
+  tibble(
+    summary_dimension = "overall",
+    summary_level = "inadmissible_models",
+    n_models = n_inadmissible_models_stage8b
+  ),
+  inadmissible_models_export %>%
+    dplyr::count(inadmissibility_reason, name = "n_models") %>%
+    transmute(summary_dimension = "inadmissibility_reason", summary_level = inadmissibility_reason, n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(dataset_key, name = "n_models") %>%
+    transmute(summary_dimension = "dataset_key", summary_level = dataset_key, n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(family_code, name = "n_models") %>%
+    transmute(summary_dimension = "family_code", summary_level = family_code, n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(prior_branch, name = "n_models") %>%
+    transmute(summary_dimension = "prior_branch", summary_level = prior_branch, n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(site_placement_label, name = "n_models") %>%
+    transmute(summary_dimension = "site_placement_label", summary_level = site_placement_label, n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(dataset_key, inadmissibility_reason, name = "n_models") %>%
+    transmute(summary_dimension = "dataset_key__inadmissibility_reason", summary_level = paste(dataset_key, inadmissibility_reason, sep = "/"), n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(family_code, inadmissibility_reason, name = "n_models") %>%
+    transmute(summary_dimension = "family_code__inadmissibility_reason", summary_level = paste(family_code, inadmissibility_reason, sep = "/"), n_models = n_models),
+  inadmissible_models_export %>%
+    dplyr::count(prior_branch, inadmissibility_reason, name = "n_models") %>%
+    transmute(summary_dimension = "prior_branch__inadmissibility_reason", summary_level = paste(prior_branch, inadmissibility_reason, sep = "/"), n_models = n_models)
+) %>%
+  mutate(
+    n_total_models = n_total_models_stage8b,
+    n_admissible_models = n_admissible_models_stage8b,
+    n_inadmissible_models = n_inadmissible_models_stage8b,
+    share_of_all_models = ifelse(n_total_models > 0L, n_models / n_total_models, NA_real_),
+    share_of_inadmissible_models = ifelse(n_inadmissible_models > 0L, n_models / n_inadmissible_models, NA_real_)
+  ) %>%
+  arrange(summary_dimension, desc(n_models), summary_level)
+
 # 🔴 Check: output audit and visualization products ===============================
 output_audit <- bind_rows(
   tibble(check_name = "model_registry_row_count", status = ifelse(nrow(model_registry) == nrow(model_grid), "pass", "fail"), observed_value = as.character(nrow(model_registry)), expected_value = as.character(nrow(model_grid)), detail = "One model-registry row should exist per Stage 8B model."),
@@ -3476,6 +3621,9 @@ output_audit <- bind_rows(
   tibble(check_name = "performance_long_nonempty", status = ifelse(nrow(performance_long) > 0L, "pass", "fail"), observed_value = as.character(nrow(performance_long)), expected_value = ">0", detail = "Long-format performance table should be populated."),
   tibble(check_name = "figure_source_tables_nonempty", status = ifelse(nrow(figure_source_tables) > 0L, "pass", "fail"), observed_value = as.character(nrow(figure_source_tables)), expected_value = ">0", detail = "Combined figure-source tables should be populated."),
   tibble(check_name = "coherence_check_nonempty", status = ifelse(nrow(stage8b_coherence_check) > 0L, "pass", "fail"), observed_value = as.character(nrow(stage8b_coherence_check)), expected_value = ">0", detail = "Stage 8B coherence-check table should be populated."),
+  tibble(check_name = "admissible_models_export_nonempty", status = ifelse(nrow(admissible_models_export) > 0L, "pass", "warn"), observed_value = as.character(nrow(admissible_models_export)), expected_value = ">0", detail = "Admissible-model export should be populated whenever any Stage 8B model passes admissibility."),
+  tibble(check_name = "admissibility_summary_export_nonempty", status = ifelse(nrow(admissibility_summary_export) > 0L, "pass", "warn"), observed_value = as.character(nrow(admissibility_summary_export)), expected_value = ">0", detail = "Admissibility summary export should be populated whenever Stage 8B model registry exists."),
+  tibble(check_name = "inadmissibility_summary_export_nonempty", status = ifelse(nrow(inadmissibility_summary_export) > 0L, "pass", "warn"), observed_value = as.character(nrow(inadmissibility_summary_export)), expected_value = ">0", detail = "Inadmissibility summary export should be populated whenever any Stage 8B model fails admissibility."),
   tibble(check_name = "anchor_vs_neutral_delta_nonempty", status = ifelse(nrow(anchor_vs_neutral_delta) > 0L, "pass", "warn"), observed_value = as.character(nrow(anchor_vs_neutral_delta)), expected_value = ">0", detail = "Anchor-versus-neutral delta table should be populated when both prior branches were fitted."),
   tibble(check_name = "delta_vs_stage8a_nonempty", status = ifelse(nrow(delta_vs_stage8a) > 0L, "pass", "warn"), observed_value = as.character(nrow(delta_vs_stage8a)), expected_value = ">0", detail = "Stage 8B-versus-Stage 8A delta table is populated only when matching Stage 8A outputs were found.")
 )
@@ -3543,6 +3691,9 @@ metadata_registry <- tibble::tribble(
 export_manifest <- tibble(
   file_name = c(
     "bayes_stage8b_model_registry.csv",
+    "bayes_stage8b_admissible_models.csv",
+    "bayes_stage8b_admissibility_summary.csv",
+    "bayes_stage8b_inadmissibility_summary.csv",
     "bayes_stage8b_coefficient_summary.csv",
     "bayes_stage8b_diagnostics_parameter_level.csv",
     "bayes_stage8b_posterior_prediction_long.csv.gz",
@@ -3565,6 +3716,9 @@ export_manifest <- tibble(
   ),
   object_name = c(
     "model_registry",
+    "admissible_models_export",
+    "admissibility_summary_export",
+    "inadmissibility_summary_export",
     "coefficient_summary",
     "diagnostics_parameter_level",
     "prediction_long",
@@ -3587,6 +3741,9 @@ export_manifest <- tibble(
   ),
   description = c(
     "Stage 8B model-level registry with admissibility, diagnostics, and Stage 6 carry-forward fields",
+    "Row-level export of Stage 8B models that passed admissibility",
+    "Admissible-model count summary across dataset, family, prior, formula, and structure dimensions",
+    "Inadmissible-model count summary across failure reasons and key design dimensions",
     "Parameter posterior summaries for all Stage 8B fits",
     "Parameter-level convergence diagnostics for Stage 8B fits",
     "Mandatory long-format posterior prediction table as source of truth",
@@ -3609,6 +3766,9 @@ export_manifest <- tibble(
   ),
   file_path = file.path(export_path, c(
     "bayes_stage8b_model_registry.csv",
+    "bayes_stage8b_admissible_models.csv",
+    "bayes_stage8b_admissibility_summary.csv",
+    "bayes_stage8b_inadmissibility_summary.csv",
     "bayes_stage8b_coefficient_summary.csv",
     "bayes_stage8b_diagnostics_parameter_level.csv",
     "bayes_stage8b_posterior_prediction_long.csv.gz",
@@ -3633,6 +3793,9 @@ export_manifest <- tibble(
 
 # 🔴 Export: final Stage 8B deliverables ===============================
 write_csv_preserve_schema(model_registry, file.path(export_path, "bayes_stage8b_model_registry.csv"))
+write_csv_preserve_schema(admissible_models_export, file.path(export_path, "bayes_stage8b_admissible_models.csv"))
+write_csv_preserve_schema(admissibility_summary_export, file.path(export_path, "bayes_stage8b_admissibility_summary.csv"))
+write_csv_preserve_schema(inadmissibility_summary_export, file.path(export_path, "bayes_stage8b_inadmissibility_summary.csv"))
 write_csv_preserve_schema(coefficient_summary, file.path(export_path, "bayes_stage8b_coefficient_summary.csv"))
 write_csv_preserve_schema(diagnostics_parameter_level, file.path(export_path, "bayes_stage8b_diagnostics_parameter_level.csv"))
 write_csv_preserve_schema(prediction_long, file.path(export_path, "bayes_stage8b_posterior_prediction_long.csv.gz"))
@@ -3675,6 +3838,9 @@ saveRDS(
     ),
     outputs = list(
       model_registry = model_registry,
+      admissible_models_export = admissible_models_export,
+      admissibility_summary_export = admissibility_summary_export,
+      inadmissibility_summary_export = inadmissibility_summary_export,
       coefficient_summary = coefficient_summary,
       diagnostics_parameter_level = diagnostics_parameter_level,
       prediction_long = prediction_long,

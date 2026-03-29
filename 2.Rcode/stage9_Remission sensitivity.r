@@ -1,6 +1,6 @@
 # 🔴 Configure: paths and stage-9 controls ===============================
 stage1_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage1_Backbone lock'
-export_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/Stage9_Remission sensitivity'
+export_path <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage9_Remission sensitivity'
 
 stage1_bundle_file <- file.path(stage1_path, "stage1_backbone_bundle.rds")
 stage1_datasets_file <- file.path(stage1_path, "stage1_analysis_datasets.rds")
@@ -17,7 +17,13 @@ run_subdistribution_models <- TRUE
 save_fit_objects <- TRUE
 make_plot_pdf <- TRUE
 make_plot_png <- TRUE
-reuse_existing_valid_outputs <- TRUE
+reuse_existing_valid_outputs_default <- TRUE
+reuse_existing_valid_outputs <- tolower(
+  trimws(Sys.getenv(
+    "STAGE9_REUSE_EXISTING_VALID_OUTPUTS",
+    if (isTRUE(reuse_existing_valid_outputs_default)) "TRUE" else "FALSE"
+  ))
+) %in% c("true", "1", "yes", "y")
 overwrite_existing_plots <- TRUE
 
 minimum_transition_events <- 5L
@@ -227,11 +233,8 @@ derive_claim_restriction_flag <- function(horizon_evidence_class, support_tier) 
 
 derive_legacy_interpretation_tier <- function(support_tier) {
   dplyr::case_when(
-    support_tier == "primary_supported" ~ "primary_supported",
-    support_tier == "secondary" ~ "secondary",
-    support_tier == "sensitivity" ~ "sensitivity",
-    support_tier == "projection" ~ "projection",
-    TRUE ~ "secondary"
+    support_tier == "primary_supported" ~ "primary-supported",
+    TRUE ~ as.character(support_tier)
   )
 }
 
@@ -1308,7 +1311,8 @@ build_benchmark_outputs <- function(df, dataset_name, horizons_tbl, allow_site_a
             risk_difference_signed,
             risk_difference_absolute
           ),
-        by = c("assignment_value")
+        by = c("assignment_value"),
+        relationship = "many-to-many"
       )
 
     prediction_main <- subject_joined %>%
@@ -1889,8 +1893,11 @@ fit_main_transition_cox <- function(df, formula_row) {
 
 fit_remission_cox <- function(df, formula_row) {
   remission_events <- sum(df$status_num == 2L)
+  if (remission_events == 0L) {
+    return(list(ok = FALSE, reason = "no_remission_events", fit = NULL, n_events = remission_events))
+  }
   if (remission_events < minimum_remission_events) {
-    return(list(ok = FALSE, reason = "too_few_remission_events", fit = NULL))
+    return(list(ok = FALSE, reason = "too_few_remission_events", fit = NULL, n_events = remission_events))
   }
 
   fit <- tryCatch(
@@ -1906,10 +1913,10 @@ fit_remission_cox <- function(df, formula_row) {
   )
 
   if (inherits(fit, "error")) {
-    return(list(ok = FALSE, reason = conditionMessage(fit), fit = NULL))
+    return(list(ok = FALSE, reason = conditionMessage(fit), fit = NULL, n_events = remission_events))
   }
 
-  list(ok = TRUE, reason = NA_character_, fit = fit)
+  list(ok = TRUE, reason = NA_character_, fit = fit, n_events = remission_events)
 }
 
 baseline_hazard_table <- function(cox_fit) {
@@ -1917,7 +1924,14 @@ baseline_hazard_table <- function(cox_fit) {
     return(tibble(time = numeric(0), cumhaz = numeric(0), jump = numeric(0)))
   }
 
-  bh <- survival::basehaz(cox_fit, centered = FALSE)
+  bh <- withCallingHandlers(
+    survival::basehaz(cox_fit, centered = FALSE),
+    warning = function(w) {
+      if (grepl("model contains interactions", conditionMessage(w), fixed = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
   bh <- tibble(
     time = as.numeric(bh$time),
     cumhaz = as.numeric(bh$hazard)
@@ -2335,13 +2349,22 @@ run_cause_specific_block_for_dataset <- function(df, dataset_name, formula_regis
 
     remission_fit_info <- fit_remission_cox(df, formula_row)
     if (!isTRUE(remission_fit_info$ok)) {
-      log_step(
-        "Remission Cox fit unavailable for dataset=", dataset_name,
-        ", formula_id=", formula_row$formula_id[[1]],
-        " :: ", remission_fit_info$reason,
-        ". Transition CIF will be generated with remission hazard fixed at zero.",
-        level = "WARN"
-      )
+      if (identical(remission_fit_info$reason, "no_remission_events")) {
+        log_step(
+          "No remission events observed for dataset=", dataset_name,
+          ", formula_id=", formula_row$formula_id[[1]],
+          " (n_remission_events=0). Transition CIF will be generated with remission hazard fixed at zero by design.",
+          level = "INFO"
+        )
+      } else {
+        log_step(
+          "Remission Cox fit unavailable for dataset=", dataset_name,
+          ", formula_id=", formula_row$formula_id[[1]],
+          " :: ", remission_fit_info$reason,
+          " (n_remission_events=", if (is.null(remission_fit_info$n_events)) NA_integer_ else remission_fit_info$n_events, "). Transition CIF will be generated with remission hazard fixed at zero.",
+          level = "WARN"
+        )
+      }
     }
 
     cs_pred <- predict_cause_specific_cif(

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pre-analysis descriptive data summary report</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --surface:#ffffff;
+      --surface-2:#fbfbfd;
+      --border:#e5e7eb;
+      --text:#111827;
+      --text-soft:#6b7280;
+      --accent:#2563eb;
+      --accent-soft:#eff6ff;
+      --accent-strong:#1d4ed8;
+      --green:#16a34a;
+      --green-soft:#f0fdf4;
+      --amber:#d97706;
+      --amber-soft:#fffbeb;
+      --red:#dc2626;
+      --red-soft:#fef2f2;
+      --purple:#7c3aed;
+      --purple-soft:#f5f3ff;
+      --dark-1:#0b1220;
+      --dark-2:#111827;
+      --dark-3:#1f2937;
+      --shadow:0 20px 60px rgba(15,23,42,.08);
+      --card-shadow:0 12px 28px rgba(15,23,42,.05);
+      --radius-xl:28px;
+      --radius-lg:20px;
+      --radius-md:14px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{
+      font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+        var(--bg);
+      color:var(--text);
+      line-height:1.75;
+      font-size:15px;
+    }
+    .container{max-width:1040px;margin:0 auto;padding:28px 22px 76px;}
+    .hero{
+      position:relative;overflow:hidden;
+      background:linear-gradient(135deg,var(--dark-1) 0%, var(--dark-2) 55%, var(--dark-3) 100%);
+      color:#fff;border:1px solid rgba(255,255,255,.06);
+      border-radius:var(--radius-xl);box-shadow:var(--shadow);
+      padding:34px 34px 28px;margin-bottom:20px;
+    }
+    .hero::before,.hero::after{content:"";position:absolute;border-radius:999px;pointer-events:none;}
+    .hero::before{width:280px;height:280px;right:-80px;top:-90px;background:radial-gradient(circle, rgba(37,99,235,.35) 0%, rgba(37,99,235,0) 70%);}
+    .hero::after{width:220px;height:220px;left:-70px;bottom:-90px;background:radial-gradient(circle, rgba(124,58,237,.25) 0%, rgba(124,58,237,0) 70%);}
+    .hero-top{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:#dbeafe;}
+    .hero h1{position:relative;z-index:1;font-size:34px;line-height:1.24;letter-spacing:-.03em;margin-bottom:10px;max-width:760px;}
+    .hero-sub{position:relative;z-index:1;color:rgba(255,255,255,.76);font-size:17px;max-width:820px;margin-bottom:18px;}
+    .tabs{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 22px;}
+    .tab-btn{appearance:none;border:none;cursor:pointer;padding:12px 18px;border-radius:999px;background:#e5e7eb;color:#334155;font-weight:800;font-size:14px;transition:all .18s ease;box-shadow:0 1px 0 rgba(255,255,255,.8) inset;}
+    .tab-btn:hover{transform:translateY(-1px)}
+    .tab-btn.active{background:var(--accent-soft);color:var(--accent-strong);border:1px solid #bfdbfe;}
+    .panel{display:none}
+    .panel.active{display:block}
+    .panel-card{background:rgba(255,255,255,.84);backdrop-filter:blur(10px);border:1px solid rgba(229,231,235,.95);border-radius:var(--radius-xl);box-shadow:var(--shadow);padding:28px;}
+    .panel-head{display:flex;flex-direction:column;gap:10px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+    .panel-kicker{display:inline-flex;width:max-content;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;background:var(--accent-soft);color:var(--accent-strong);}
+    .panel-title{font-size:28px;line-height:1.28;letter-spacing:-.03em;}
+    .panel-sub{color:var(--text-soft);font-size:16px;max-width:860px;}
+    .stack{display:flex;flex-direction:column;gap:18px}
+    .summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:6px 0 4px;}
+    .mini-stat{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px 18px 16px;box-shadow:var(--card-shadow);}
+    .mini-label{font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--text-soft);margin-bottom:8px;}
+    .mini-value{font-size:24px;font-weight:800;line-height:1.1;letter-spacing:-.03em;margin-bottom:6px;}
+    .mini-note{color:var(--text-soft);font-size:13px;line-height:1.6;}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--card-shadow);padding:24px;}
+    .card h3{font-size:22px;line-height:1.35;letter-spacing:-.02em;margin-bottom:10px;}
+    .card p{margin-bottom:10px;color:#374151}
+    .card p:last-child{margin-bottom:0}
+    .section-label{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;margin-bottom:14px;}
+    .blue{background:var(--accent-soft);color:var(--accent-strong)}
+    .green{background:var(--green-soft);color:var(--green)}
+    .amber{background:var(--amber-soft);color:var(--amber)}
+    .purple{background:var(--purple-soft);color:var(--purple)}
+    .red{background:var(--red-soft);color:var(--red)}
+    .callout{padding:16px 18px;border-radius:16px;font-size:14px;line-height:1.7;border:1px solid var(--border);background:var(--surface-2);}
+    .callout strong{font-weight:800}
+    .callout.blue{border-color:#bfdbfe}
+    .callout.amber{border-color:#fde68a}
+    .callout.green{border-color:#bbf7d0}
+    .callout.purple{border-color:#ddd6fe}
+    .bullet-list{padding-left:18px;color:#374151}
+    .bullet-list li{margin:8px 0}
+    .data-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;overflow:hidden;border:1px solid var(--border);border-radius:16px;background:#fff;}
+    .data-table thead th{background:#eef2ff;color:#334155;font-weight:800;font-size:13px;padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);}
+    .data-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top;color:#374151;}
+    .data-table tbody tr:last-child td{border-bottom:none}
+    .table-note{margin-bottom:12px;color:var(--text-soft);font-size:14px;}
+    .bar-group{display:flex;flex-direction:column;gap:12px}
+    .bar-row{display:grid;grid-template-columns:170px 1fr 110px;gap:14px;align-items:center}
+    .bar-label{font-weight:700;color:#374151;font-size:14px}
+    .bar-track{height:12px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+    .bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#60a5fa,#2563eb)}
+    .bar-fill.green{background:linear-gradient(90deg,#86efac,#16a34a)}
+    .bar-fill.purple{background:linear-gradient(90deg,#c4b5fd,#7c3aed)}
+    .bar-fill.amber{background:linear-gradient(90deg,#fcd34d,#d97706)}
+    .bar-fill.red{background:linear-gradient(90deg,#fca5a5,#dc2626)}
+    .bar-value{font-weight:800;color:#1f2937;text-align:right;font-size:13px}
+    .draft-box{background:#0f172a;color:#e5e7eb;border-radius:18px;padding:22px;font-size:14px;line-height:1.85;white-space:pre-wrap;font-family:'Noto Sans KR',sans-serif;border:1px solid rgba(255,255,255,.08);}
+    .mono{font-family:'JetBrains Mono',monospace;font-size:13px;color:#475569}
+    .divider{height:1px;background:var(--border);margin:14px 0}
+    .footnote{font-size:12.5px;color:var(--text-soft)}
+    @media (max-width: 980px){
+      .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .hero h1{font-size:30px}
+      .panel-title{font-size:25px}
+    }
+    @media (max-width: 720px){
+      .container{padding:18px 14px 56px}
+      .hero{padding:24px 20px 22px;border-radius:22px}
+      .panel-card{padding:18px}
+      .summary-grid{grid-template-columns:1fr}
+      .bar-row{grid-template-columns:1fr;gap:8px}
+      .bar-value{text-align:left}
+      .hero h1{font-size:26px}
+      .panel-title{font-size:22px}
+      .tab-btn{width:100%;text-align:left}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-top">
+        <div class="eyebrow">Data Summary Report</div>
+      </div>
+      <h1>Pre-analysis 데이터 summary 보고서</h1>
+      <p class="hero-sub">모델 적합 이전 단계에서 데이터 무결성, 표본 구조, 나이·성별 분포, 관찰 추적기간, 종료상태 구성을 정리한 독립 HTML 보고서</p>
+    </header>
+
+    <nav class="tabs" aria-label="Data summary tabs">
+      <button class="tab-btn active" type="button" data-target="summary">핵심 요약</button>
+      <button class="tab-btn" type="button" data-target="qc">데이터 QC</button>
+      <button class="tab-btn" type="button" data-target="cohort">코호트 특성</button>
+      <button class="tab-btn" type="button" data-target="followup">추적·종료상태</button>
+      <button class="tab-btn" type="button" data-target="interpretation">해석</button>
+      <button class="tab-btn" type="button" data-target="manuscript">논문 문장</button>
+    </nav>
+
+    <section class="panel active" data-panel="summary">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Summary</div>
+          <h2 class="panel-title">이번 데이터 summary에서 먼저 보이는 구조</h2>
+          <p class="panel-sub">이 보고서는 모델 적합 이전의 pre-analysis descriptive summary입니다. 따라서 곡선 적합이나 예측 성능이 아니라, 데이터가 어떤 모양으로 쌓여 있는지부터 차분히 확인하는 데 초점을 둡니다.</p>
+        </div>
+
+        <div class="summary-grid">
+          <div class="mini-stat">
+            <div class="mini-label">Total sample</div>
+            <div class="mini-value">262</div>
+            <div class="mini-note">PNU 54명, SNU 208명으로 구성되어 있습니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">Merged profile</div>
+            <div class="mini-value">92 (35.1%)</div>
+            <div class="mini-note">merged에서는 여성 92 (35.1%), 남성 170 (64.9%)입니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">Median follow-up</div>
+            <div class="mini-value">2.07년</div>
+            <div class="mini-note">merged의 중앙값[IQR]은 2.07 [0.92, 5.00]입니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">QC status</div>
+            <div class="mini-value">문제 없음</div>
+            <div class="mini-note">중복 extra row 0, 핵심 변수 missingness 0, invalid value flag 0으로 확인되었습니다.</div>
+          </div>
+        </div>
+
+        <div class="stack" style="margin-top:18px">
+          <article class="card">
+            <div class="section-label blue">핵심 메시지</div>
+            <h3>merged는 편의상 하나로 묶여 있지만, 실제로는 site 차이가 뚜렷한 통합 코호트입니다</h3>
+            <p>전체 통합 표본은 262명이며, 이 중 SNU가 208명으로 약 79.4%를 차지합니다. 총 관찰량도 SNU가 735.79 person-years로, merged 전체 790.50 person-years의 약 93.1%를 제공합니다.</p>
+            <p>즉, merged의 표본 규모와 follow-up 꼬리는 상당 부분 SNU가 이끌고 있습니다. 반면 PNU는 등록 시 나이가 더 높고(평균 24.87세 vs 21.21세), median follow-up이 훨씬 짧으며(1.11년 vs 3.80년), remission이 24.1% 관찰되는 반면 SNU에서는 관찰되지 않았습니다.</p>
+            <div class="callout amber"><strong>그래서 먼저 읽어야 할 점</strong> merged 수치만 보면 하나의 평균적인 코호트처럼 보일 수 있지만, 실제로는 나이, 성별, 관찰 길이, 종료상태 구성이 site마다 꽤 다릅니다. 후속 생존분석을 읽을 때도 이 차이를 먼저 염두에 두는 편이 안전합니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label purple">이 보고서의 범위</div>
+            <h3>무엇을 정리하고, 무엇을 일부러 넣지 않았는지</h3>
+            <p>이번 문서는 데이터 무결성, 표본 규모, 성별과 나이 분포, 추적기간, 종료상태 구성을 정리하는 summary 보고서입니다. 표와 문장은 모두 첨부된 summary result file의 수치에 맞추어 작성했습니다.</p>
+            <div class="callout blue"><strong>포함하지 않는 것</strong> Kaplan–Meier, reverse Kaplan–Meier, incidence model, cure model, calibration, discrimination, decision curve 같은 모델 적합 결과는 이번 보고서에 포함하지 않았습니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label green">Reader guide</div>
+            <h3>이 HTML을 읽는 순서</h3>
+            <ul class="bullet-list">
+              <li>먼저 전체 규모와 핵심 summary card를 보고, merged가 어떤 데이터 묶음인지 큰 그림을 잡으시면 됩니다.</li>
+              <li>그다음 데이터 QC에서 중복, 결측, 잘못된 값이 없는지 확인하시면 됩니다.</li>
+              <li>이후 코호트 특성과 추적·종료상태 표를 읽으면서, PNU와 SNU가 어느 점에서 다른지 보시면 됩니다.</li>
+              <li>마지막 해석과 논문 문장에서는 이 차이를 문장으로 어떻게 정리할지 바로 확인하실 수 있습니다.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="qc">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Data QC</div>
+          <h2 class="panel-title">데이터 무결성과 기본 QC</h2>
+          <p class="panel-sub">이 단계의 QC는 복잡한 모델 검증이 아니라, summary를 신뢰할 수 있는 최소 조건을 확인하는 작업입니다. 즉 같은 사람이 중복 집계되지 않았는지, 핵심 변수에 빈칸이 없는지, 기본 범위를 벗어난 값이 없는지를 먼저 봅니다.</p>
+        </div>
+
+        <div class="summary-grid">
+          <div class="mini-stat">
+            <div class="mini-label">Duplicated site+id</div>
+            <div class="mini-value">0</div>
+            <div class="mini-note">PNU, SNU, merged 모두 extra duplicated row가 0입니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">Core missingness</div>
+            <div class="mini-value">0</div>
+            <div class="mini-note">핵심 요약 변수 missing cell이 모든 dataset에서 0입니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">Invalid flags</div>
+            <div class="mini-value">0</div>
+            <div class="mini-note">음수 나이, 음수 follow-up, 잘못된 sex/status code가 확인되지 않았습니다.</div>
+          </div>
+          <div class="mini-stat">
+            <div class="mini-label">Observed person-years</div>
+            <div class="mini-value">790.50</div>
+            <div class="mini-note">merged 전체 관찰량은 288,731일, 790.50 person-years입니다.</div>
+          </div>
+        </div>
+
+        <article class="card" style="margin-top:18px">
+          <div class="section-label green">이 표를 어떻게 읽는지</div>
+          <p class="table-note">이 표는 PNU, SNU, merged 각각에서 기본 QC가 통과되는지 보여줍니다. N rows와 unique site+id가 같으면 같은 사람이 중복 집계되지 않았다는 뜻이고, missingness와 invalid value flag가 0이면 핵심 summary 숫자를 만드는 데 필요한 기본 변수에 구조적 결함이 없다는 뜻입니다. person-years는 사람별 관찰시간을 모두 더한 값이므로, 값이 클수록 그 dataset이 전체 관찰량을 더 많이 제공한다고 읽으시면 됩니다.</p>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>QC 항목</th>
+                <th>PNU</th>
+                <th>SNU</th>
+                <th>merged</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>N rows</td><td>54</td><td>208</td><td>262</td></tr>
+              <tr><td>Unique site+id</td><td>54</td><td>208</td><td>262</td></tr>
+              <tr><td>Duplicated site+id extra rows</td><td>0</td><td>0</td><td>0</td></tr>
+              <tr><td>Core variable missingness</td><td>0</td><td>0</td><td>0</td></tr>
+              <tr><td>Invalid value flags</td><td>0</td><td>0</td><td>0</td></tr>
+              <tr><td>Total observed follow-up (person-years)</td><td>54.71</td><td>735.79</td><td>790.50</td></tr>
+            </tbody>
+          </table>
+          <div class="callout blue" style="margin-top:14px"><strong>요점</strong> 이번 summary에서 가장 먼저 확인할 QC 포인트는 “데이터가 깨끗한가”입니다. 이 표에서는 세 dataset 모두 중복, missingness, invalid flag가 0이어서, 이후 기술통계는 기본 자료구조 문제 없이 해석할 수 있습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="section-label purple">Audited variables</div>
+          <h3>핵심 QC에 포함된 변수</h3>
+          <p>핵심 변수 missingness와 invalid value flag는 아래 변수들을 기준으로 점검되었습니다.</p>
+          <p class="mono">id, site, sex_num, status_num, date_entry, days_followup, age_exact_entry, age_exact_followup</p>
+          <p class="footnote">같은 기준이 PNU, SNU, merged에 동일하게 적용되어 site 간 기술통계를 같은 룰로 비교할 수 있습니다.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="cohort">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Cohort profile</div>
+          <h2 class="panel-title">규모·성별·나이 구조</h2>
+          <p class="panel-sub">여기서는 서로 다른 질문을 한 테이블에 섞지 않고, 표본 규모, 성별, 등록 시 나이, 추적 종료 시 나이를 각각 따로 정리합니다. 이렇게 나누어 보면 어떤 차이가 어디에서 생기는지 훨씬 읽기 쉬워집니다.</p>
+        </div>
+
+        <article class="card">
+          <div class="section-label blue">Quick visual</div>
+          <h3>먼저 보이는 site 차이</h3>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">Cohort size — PNU</div>
+      <div class="bar-track"><div class="bar-fill " style="width:20.6%"></div></div>
+      <div class="bar-value">54</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Cohort size — SNU</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:79.4%"></div></div>
+      <div class="bar-value">208</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Cohort size — merged</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:100.0%"></div></div>
+      <div class="bar-value">262</div>
+    </div>
+          </div>
+          <div class="divider"></div>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">Female proportion — PNU</div>
+      <div class="bar-track"><div class="bar-fill " style="width:48.1%"></div></div>
+      <div class="bar-value">48.1%</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Female proportion — SNU</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:31.7%"></div></div>
+      <div class="bar-value">31.7%</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Female proportion — merged</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:35.1%"></div></div>
+      <div class="bar-value">35.1%</div>
+    </div>
+          </div>
+          <div class="divider"></div>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">Mean age at entry — PNU</div>
+      <div class="bar-track"><div class="bar-fill " style="width:100.0%"></div></div>
+      <div class="bar-value">24.87세</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Mean age at entry — SNU</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:85.3%"></div></div>
+      <div class="bar-value">21.21세</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Mean age at entry — merged</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:88.3%"></div></div>
+      <div class="bar-value">21.96세</div>
+    </div>
+          </div>
+        </article>
+
+        <div class="stack">
+          <article class="card">
+            <div class="section-label blue">Cohort structure</div>
+            <p class="table-note">이 표는 각 dataset의 표본 규모와 고유한 관찰 단위를 보여줍니다. N rows는 전체 행 수이고, Unique site+id는 site와 id를 묶었을 때의 실제 고유 인원 수입니다. 이 두 값이 같을수록 중복 집계 문제가 없다고 읽을 수 있고, 어느 dataset이 전체 merged를 얼마나 차지하는지도 여기서 바로 보입니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Cohort — N rows</td><td>54</td><td>208</td><td>262</td></tr>
+                <tr><td>Cohort — Unique site+id</td><td>54</td><td>208</td><td>262</td></tr>
+              </tbody>
+            </table>
+            <div class="callout blue" style="margin-top:14px"><strong>즉</strong> merged 262명은 PNU 54명과 SNU 208명의 단순 합과 일치합니다. 또한 각 dataset에서 N rows와 unique site+id가 같아서, 이번 summary export 안에서는 한 사람당 한 행 구조로 보입니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label purple">Sex distribution</div>
+            <p class="table-note">이 표는 성별 구성을 보여줍니다. n(%)는 실제 인원수와 전체 내 비율을 함께 보여주므로, 규모 차이와 비율 차이를 동시에 읽을 수 있습니다. 특정 성별 비율이 더 크면 모집 구조가 다를 수 있다는 뜻이며, merged의 평균값은 site별 차이를 어느 정도 가릴 수 있다는 점도 함께 보시면 좋습니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Female, n (%)</td><td>26 (48.1%)</td><td>66 (31.7%)</td><td>92 (35.1%)</td></tr>
+                <tr><td>Male, n (%)</td><td>28 (51.9%)</td><td>142 (68.3%)</td><td>170 (64.9%)</td></tr>
+              </tbody>
+            </table>
+            <div class="callout purple" style="margin-top:14px"><strong>즉</strong> PNU는 여성 비율이 48.1%로 SNU의 31.7%보다 높습니다. merged에서는 여성 비율이 35.1%로 보이지만, 이것은 더 큰 SNU 표본이 많이 반영된 평균값이라는 점을 함께 읽어야 합니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label green">Age at entry</div>
+            <p class="table-note">이 표는 등록 시점 나이 분포를 비교합니다. 평균 ± 표준편차는 전체 중심과 퍼짐을, 중앙값[IQR]은 분포가 한쪽으로 치우쳐 있어도 비교적 안정적인 중심과 중간 50% 범위를 보여줍니다. 최소–최대는 실제 관찰 범위의 끝을 보여주므로, 어느 site가 더 넓은 연령대를 포함하는지도 확인할 수 있습니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Mean ± SD</td><td>24.87 ± 5.25</td><td>21.21 ± 4.13</td><td>21.96 ± 4.62</td></tr>
+                <tr><td>Median [Q1, Q3]</td><td>23.49 [20.63, 28.16]</td><td>19.95 [18.64, 23.30]</td><td>20.50 [19.08, 24.29]</td></tr>
+                <tr><td>Min to max</td><td>18.61 to 41.39</td><td>15.05 to 35.29</td><td>15.05 to 41.39</td></tr>
+              </tbody>
+            </table>
+            <div class="callout green" style="margin-top:14px"><strong>즉</strong> 등록 시 평균 나이는 PNU가 SNU보다 약 3.66세 높습니다. 중앙값도 PNU 23.49세, SNU 19.95세로 같은 방향을 보여서, 이 차이는 일부 극단값 때문이라기보다 분포 전반의 차이로 읽는 편이 자연스럽습니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label amber">Age at end of follow-up</div>
+            <p class="table-note">이 표는 관찰이 끝난 시점의 나이를 비교합니다. 시작 나이와 추적기간이 함께 반영된 값이므로, 등록 시 더 젊더라도 follow-up이 길면 종료 시점 나이가 높아질 수 있습니다. 따라서 이 표에서는 시작 나이 차이와 추적기간 차이가 함께 상쇄되거나 확대되는지를 먼저 보시면 됩니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Mean ± SD</td><td>25.88 ± 5.09</td><td>24.75 ± 4.68</td><td>24.98 ± 4.78</td></tr>
+                <tr><td>Median [Q1, Q3]</td><td>24.50 [21.86, 28.80]</td><td>24.14 [21.36, 26.78]</td><td>24.14 [21.48, 27.36]</td></tr>
+                <tr><td>Min to max</td><td>19.96 to 42.73</td><td>15.82 to 38.48</td><td>15.82 to 42.73</td></tr>
+              </tbody>
+            </table>
+            <div class="callout amber" style="margin-top:14px"><strong>즉</strong> 종료 시점 나이는 PNU 25.88세, SNU 24.75세로 등록 시 나이 차이만큼 크게 벌어지지 않습니다. 이는 PNU가 더 나이 많은 상태에서 시작했지만, SNU가 더 긴 추적기간을 가져 종료 시점 나이가 어느 정도 따라붙기 때문으로 읽을 수 있습니다.</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="followup">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Follow-up & outcomes</div>
+          <h2 class="panel-title">관찰 추적기간과 종료상태</h2>
+          <p class="panel-sub">이 탭에서는 개인별 관찰 길이의 분포와, 관찰이 어떤 상태에서 끝났는지를 함께 정리합니다. 여기서 보이는 시간 길이 차이는 나중 생존분석에서 어떤 site가 tail을 더 많이 결정하는지, 어떤 상태가 상대적으로 더 자주 기록되었는지를 이해하는 기본 재료가 됩니다.</p>
+        </div>
+
+        <article class="card">
+          <div class="section-label purple">Quick visual</div>
+          <h3>핵심 숫자 비교</h3>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">PNU median follow-up</div>
+      <div class="bar-track"><div class="bar-fill " style="width:29.3%"></div></div>
+      <div class="bar-value">1.11년</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">SNU median follow-up</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:100.0%"></div></div>
+      <div class="bar-value">3.80년</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">merged median follow-up</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:54.6%"></div></div>
+      <div class="bar-value">2.07년</div>
+    </div>
+          </div>
+          <div class="divider"></div>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">PNU observed person-years</div>
+      <div class="bar-track"><div class="bar-fill " style="width:6.9%"></div></div>
+      <div class="bar-value">54.71</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">SNU observed person-years</div>
+      <div class="bar-track"><div class="bar-fill green" style="width:93.1%"></div></div>
+      <div class="bar-value">735.79</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">merged observed person-years</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:100.0%"></div></div>
+      <div class="bar-value">790.50</div>
+    </div>
+          </div>
+          <div class="divider"></div>
+          <div class="bar-group">
+            <div class="bar-row">
+      <div class="bar-label">Right censoring (merged)</div>
+      <div class="bar-track"><div class="bar-fill amber" style="width:76.0%"></div></div>
+      <div class="bar-value">76.0%</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Transition (merged)</div>
+      <div class="bar-track"><div class="bar-fill " style="width:19.1%"></div></div>
+      <div class="bar-value">19.1%</div>
+    </div>
+            <div class="bar-row">
+      <div class="bar-label">Remission (merged)</div>
+      <div class="bar-track"><div class="bar-fill purple" style="width:5.0%"></div></div>
+      <div class="bar-value">5.0%</div>
+    </div>
+          </div>
+        </article>
+
+        <div class="stack">
+          <article class="card">
+            <div class="section-label blue">Follow-up duration</div>
+            <p class="table-note">이 표는 개인별 관찰 길이의 분포를 보여줍니다. 값이 길수록 관찰 꼬리가 더 길고, 같은 수의 사람이라도 더 많은 직접 관찰 시간이 축적되었다고 이해하시면 됩니다. days는 원자료의 시간 단위이고, years는 해석을 쉽게 하기 위해 같은 정보를 연 단위로 다시 적은 것입니다. site 간 차이가 크면 후속 생존분석에서도 직접 관찰 구간의 균형이 달라질 수 있습니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Follow-up duration (days) — Mean ± SD</td><td>370.1 ± 264.5</td><td>1,292.1 ± 932.5</td><td>1,102.0 ± 918.4</td></tr>
+                <tr><td>Follow-up duration (days) — Median [Q1, Q3]</td><td>406.0 [109.5, 585.2]</td><td>1,387.5 [434.0, 1,840.0]</td><td>757.5 [337.2, 1,826.0]</td></tr>
+                <tr><td>Follow-up duration (days) — Min to max</td><td>14.0 to 975.0</td><td>9.0 to 3,691.0</td><td>9.0 to 3,691.0</td></tr>
+                <tr><td>Follow-up duration (years) — Mean ± SD</td><td>1.01 ± 0.72</td><td>3.54 ± 2.55</td><td>3.02 ± 2.51</td></tr>
+                <tr><td>Follow-up duration (years) — Median [Q1, Q3]</td><td>1.11 [0.30, 1.60]</td><td>3.80 [1.19, 5.04]</td><td>2.07 [0.92, 5.00]</td></tr>
+                <tr><td>Follow-up duration (years) — Min to max</td><td>0.04 to 2.67</td><td>0.02 to 10.11</td><td>0.02 to 10.11</td></tr>
+              </tbody>
+            </table>
+            <div class="callout blue" style="margin-top:14px"><strong>즉</strong> median follow-up은 PNU 1.11년, SNU 3.80년, merged 2.07년입니다. 특히 PNU와 SNU 사이의 차이(2.69년)는 꽤 커서, merged의 시간 구조를 단순 평균으로 읽으면 site 간 관찰 성숙도 차이가 가려질 수 있습니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label green">Outcome status</div>
+            <p class="table-note">이 표는 각 dataset에서 관찰이 어떤 상태로 끝났는지를 보여줍니다. 값이 큰 status일수록 그 종료경로가 더 자주 기록되었다는 뜻입니다. 여기서 먼저 볼 포인트는 right censoring이 주된 종료상태인지, transition이 얼마나 직접 관찰되었는지, 그리고 remission이 site별로 대칭적으로 기록되어 있는지입니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Right censoring, n (%)</td><td>29 (53.7%)</td><td>170 (81.7%)</td><td>199 (76.0%)</td></tr>
+                <tr><td>Transition, n (%)</td><td>12 (22.2%)</td><td>38 (18.3%)</td><td>50 (19.1%)</td></tr>
+                <tr><td>Remission, n (%)</td><td>13 (24.1%)</td><td>0 (0.0%)</td><td>13 (5.0%)</td></tr>
+              </tbody>
+            </table>
+            <div class="callout green" style="margin-top:14px"><strong>열 설명</strong> right censoring은 관찰이 끝날 때까지 해당 사건이 확인되지 않은 경우입니다. transition은 관심 사건이 실제로 기록된 경우이고, remission은 transition과는 다른 종료상태로 기록된 경우입니다.</div>
+            <div class="callout amber" style="margin-top:14px"><strong>즉</strong> merged에서는 right censoring이 76.0%로 가장 많고, transition은 19.1%, remission은 5.0%입니다. 다만 remission은 PNU에서만 24.1% 관찰되고 SNU에서는 0이어서, remission 관련 비교는 site 간 대칭적인 비교가 아니라는 점을 먼저 기억하셔야 합니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label amber">Observed person-years</div>
+            <p class="table-note">이 표는 각 cohort가 실제로 제공한 누적 관찰량을 보여줍니다. 개인별 중앙값 follow-up이 분포의 중심을 보여준다면, person-years는 전체 코호트가 얼마만큼의 시간 정보를 제공했는지를 보여주는 총량 지표입니다. 값이 클수록 이후 시간 기반 분석의 tail 정보가 그 dataset에 더 많이 의존할 가능성이 큽니다.</p>
+            <table class="data-table">
+              <thead>
+                <tr><th>항목</th><th>PNU</th><th>SNU</th><th>merged</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Total observed person-years</td><td>54.71</td><td>735.79</td><td>790.50</td></tr>
+                <tr><td>Total observed follow-up (days)</td><td>19,984</td><td>268,747</td><td>288,731</td></tr>
+              </tbody>
+            </table>
+            <div class="callout amber" style="margin-top:14px"><strong>즉</strong> SNU는 인원수도 더 많지만, person-years로 보면 merged 전체의 약 93.1%를 담당합니다. 따라서 나중에 시간이 길어질수록 보이는 전체 패턴은 PNU보다 SNU의 관찰 구조 영향을 훨씬 더 크게 받을 수 있습니다.</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="interpretation">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Interpretation</div>
+          <h2 class="panel-title">서술형 해석</h2>
+          <p class="panel-sub">여기서는 표와 수치를 한 문장씩 연결해서 읽습니다. 숫자를 다시 반복하기보다, 이 데이터가 어떤 구조를 가진 통합 코호트인지와 후속 분석에서 무엇을 조심해야 하는지를 중심으로 적었습니다.</p>
+        </div>
+
+        <div class="stack">
+          <article class="card">
+            <div class="section-label blue">Merged cohort</div>
+            <h3>전체 통합 코호트에서 먼저 보이는 점</h3>
+            <p>merged 전체 코호트는 총 262명으로, 등록 시 나이는 평균 21.96 ± 4.62세, 중앙값 20.50세[IQR 19.08, 24.29]였습니다. 성별은 남성이 64.9%로 더 많았고, 전체 median follow-up은 2.07년이었습니다.</p>
+            <p>종료상태는 right censoring이 76.0%로 가장 많고, transition이 19.1%, remission이 5.0%였습니다. 즉 이 통합 코호트는 아직 사건 미발생 상태로 관찰이 종료된 사람이 다수이며, 직접 관찰된 transition은 약 5명 중 1명 수준, remission은 소수 경로로 기록된 구조라고 이해하시면 됩니다.</p>
+          </article>
+
+          <article class="card">
+            <div class="section-label purple">Site differences</div>
+            <h3>PNU와 SNU를 비교하면 무엇이 다른지</h3>
+            <p>PNU는 SNU보다 등록 시 나이가 더 높고, 성별 분포도 더 균형에 가깝습니다. 평균 등록 나이는 PNU 24.87세, SNU 21.21세였고, 여성 비율도 PNU 48.1%, SNU 31.7%로 차이가 있었습니다. 따라서 두 site는 시작점부터 같은 모집 구조라고 보기는 어렵습니다.</p>
+            <p>관찰 길이 차이는 더 크습니다. median follow-up은 PNU 1.11년, SNU 3.80년으로 벌어져 있고, 누적 person-years도 PNU 54.71에 비해 SNU 735.79가 훨씬 큽니다. 종료상태 구성도 다릅니다. PNU에서는 remission이 24.1% 기록되지만 SNU에서는 관찰되지 않았고, SNU는 right censoring 비율이 81.7%로 더 높습니다.</p>
+          </article>
+
+          <article class="card">
+            <div class="section-label amber">Why merged can mislead</div>
+            <h3>왜 merged를 하나의 완전히 동질한 코호트처럼 읽으면 안 되는지</h3>
+            <p>merged 수치는 분명 유용하지만, 그것만 보면 site 간 차이가 평균값 속에 묻힐 수 있습니다. 예를 들어 merged의 median follow-up 2.07년은 PNU의 짧은 관찰과 SNU의 긴 관찰이 섞인 결과이며, 실제 tail 정보의 대부분은 SNU가 제공합니다. 마찬가지로 merged의 remission 5.0%도 전체 평균처럼 보이지만, 실제 관측은 PNU에만 존재합니다.</p>
+            <p>따라서 merged는 “한 덩어리의 균질 cohort”라기보다, 서로 다른 모집 구조와 관찰 성숙도를 가진 두 site를 묶은 통합 데이터로 읽는 편이 적절합니다. 이 차이는 치료 효과나 인과효과처럼 해석할 대상이 아니라, 자료가 어떻게 들어왔고 어떻게 관찰되었는지에 관한 구조적 차이로 이해하는 편이 안전합니다.</p>
+          </article>
+
+          <article class="card">
+            <div class="section-label green">Practical reading note</div>
+            <h3>후속 생존분석을 읽을 때 조심할 점</h3>
+            <ul class="bullet-list">
+              <li>시간이 짧은 초기 구간에서는 두 site 모두 직접 관찰 정보가 있지만, 시간이 길어질수록 전체 패턴은 SNU의 더 긴 follow-up에 더 크게 좌우될 수 있습니다.</li>
+              <li>remission은 SNU에서 관찰되지 않았으므로, remission 관련 비교는 사실상 PNU 정보가 주도하는 보조 해석으로 보는 편이 자연스럽습니다.</li>
+              <li>status별 시간 구조도 다릅니다. PNU에서는 transition의 median follow-up이 133.5일, right censoring이 281.0일, remission이 529.0일로 remission이 가장 늦게 기록되었습니다. SNU에서는 transition median이 542.0일, right censoring이 1,574.5일로 censoring 쪽 관찰이 더 길었습니다.</li>
+              <li>따라서 이후 어떤 시간 기반 비교를 보더라도, 먼저 “site 구성”과 “follow-up 성숙도”가 얼마나 대칭적인지부터 함께 확인하는 것이 좋습니다.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="manuscript">
+      <div class="panel-card">
+        <div class="panel-head">
+          <div class="panel-kicker">Manuscript-ready text</div>
+          <h2 class="panel-title">논문용 초안 문장</h2>
+          <p class="panel-sub">본문이나 supplement에 바로 옮겨 적을 수 있도록, 과장 없이 담백한 문장으로 정리했습니다. 숫자는 이번 summary file의 범위 안에서만 사용했습니다.</p>
+        </div>
+
+        <div class="stack">
+          <article class="card">
+            <div class="section-label green">Korean draft</div>
+            <h3>한국어 서술 초안</h3>
+            <div class="draft-box">분석 전 기술통계 단계에서 통합 데이터는 총 262명으로 구성되었으며, PNU 54명과 SNU 208명을 포함했습니다. 각 dataset에서 N rows와 unique site+id는 일치했고, 핵심 변수 missingness와 invalid value flag는 모두 0이어서 기본 자료구조 문제는 확인되지 않았습니다. merged 기준 등록 시 나이는 평균 21.96 ± 4.62세였고, 여성은 92 (35.1%), 남성은 170 (64.9%)였습니다. 전체 median follow-up은 2.07년[IQR 0.92, 5.00]이었고, 총 관찰량은 790.50 person-years였습니다. 종료상태는 right censoring이 199 (76.0%)로 가장 많았고, transition은 50 (19.1%), remission은 13 (5.0%)였습니다. 다만 PNU와 SNU는 등록 시 나이, 성별 분포, 관찰 길이, remission 관찰 여부에서 차이를 보여, merged 결과는 하나의 완전히 동질한 단일 코호트라기보다 구조가 다른 두 site의 통합 자료로 해석하는 것이 적절했습니다.</div>
+          </article>
+
+          <article class="card">
+            <div class="section-label blue">English draft</div>
+            <h3>English draft paragraph</h3>
+            <div class="draft-box">In the pre-analysis descriptive summary, the integrated dataset comprised 262 individuals, including 54 from PNU and 208 from SNU. In all dataset variants, the number of rows matched the number of unique site+id values, and no missing values in the audited core variables or invalid value flags were identified. In the merged cohort, age at entry was 21.96 ± 4.62 years, with 92 (35.1%) female and 170 (64.9%) male participants. The median follow-up was 2.07 years [IQR, 0.92 to 5.00], yielding a total of 790.50 observed person-years. Outcome status was dominated by right censoring (199 (76.0%)), followed by transition (50 (19.1%)) and remission (13 (5.0%)). However, PNU and SNU differed in age at entry, sex composition, follow-up maturity, and the observation of remission, indicating that the merged cohort should be interpreted as an integrated dataset with site-level structural heterogeneity rather than as a fully homogeneous single cohort.</div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('.panel');
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.target;
+        tabButtons.forEach(b => b.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>
