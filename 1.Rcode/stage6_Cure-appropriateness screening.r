@@ -1,3 +1,4 @@
+
 # 🔴 Configure: paths, reuse policy, and spec guards ===============================
 run_root_dir <- '/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage6_Cure-appropriateness screening'
 # If the completed Stage 6 run already lives in the folder you want to export into,
@@ -32,7 +33,8 @@ receus_pi_equivocal <- 0.010
 receus_r_equivocal <- 0.10
 
 refresh_stage6_exports <- TRUE
-refresh_bootstrap_exports <- TRUE
+refresh_bootstrap_exports <- FALSE
+reuse_existing_bootstrap_exports_if_present <- TRUE
 rebuild_visual_summary_pdf <- TRUE
 save_fit_objects <- TRUE
 reuse_existing_completed_run_only <- TRUE
@@ -157,6 +159,16 @@ safe_save_plot <- function(plot_object, path, width, height, dpi = plot_dpi, bg 
     stop(sprintf("Failed to write plot atomically: %s", path), call. = FALSE)
   }
   invisible(path)
+}
+
+safe_read_csv_if_exists <- function(path) {
+  if (!file.exists(path)) {
+    return(NULL)
+  }
+  tryCatch(
+    readr::read_csv(path, show_col_types = FALSE, progress = FALSE),
+    error = function(e) NULL
+  )
 }
 
 normalize_existing_path <- function(path) {
@@ -751,12 +763,6 @@ patch_screening_method_results <- function(df) {
     out[[nm]] <- NA
   }
 
-  contradiction_from_xie <- if ("xie_centered_bootstrap_p_value" %in% names(out)) {
-    to_logical_column(as_numeric_or_na(out$xie_centered_bootstrap_p_value) < alpha_screening)
-  } else {
-    rep(NA, nrow(out))
-  }
-
   out <- out %>%
     mutate(
       dataset_key = as.character(dataset_key),
@@ -822,6 +828,7 @@ patch_carry_forward_flag_table <- function(df, stage1_inputs, variant_registry, 
 
   required_columns <- c(
     "dataset_key", "source_dataset", "source_description", "analysis_variant", "screening_context",
+    "decision_rule_version",
     "primary_gate_method", "primary_gate_flag", "receus_aic_flag", "cure_model_eligibility_flag",
     "final_decision_flag", "receus_primary_class", "presence_modifier_flag", "cure_presence_support_flag",
     "presence_support_flag", "followup_contradiction_flag", "followup_not_contradicted_flag",
@@ -846,6 +853,7 @@ patch_carry_forward_flag_table <- function(df, stage1_inputs, variant_registry, 
       source_description = as.character(source_description),
       analysis_variant = as.character(analysis_variant),
       screening_context = coalesce(as.character(screening_context), .env$screening_context),
+      decision_rule_version = .env$decision_rule_version,
       primary_gate_method = coalesce(as.character(primary_gate_method), "RECeUS-AIC"),
       primary_gate_flag = normalize_flag_chr(coalesce(as.character(primary_gate_flag), as.character(receus_aic_flag))),
       cure_model_eligibility_flag = normalize_flag_chr(coalesce(as.character(cure_model_eligibility_flag), as.character(final_decision_flag))),
@@ -860,13 +868,10 @@ patch_carry_forward_flag_table <- function(df, stage1_inputs, variant_registry, 
       screening_note = as.character(screening_note),
       common_horizon_vector = coalesce(as.character(common_horizon_vector), paste(sort(unique(as.integer(stage1_inputs$horizon_registry$horizon_year))), collapse = "|")),
       common_threshold_vector = coalesce(as.character(common_threshold_vector), paste(format(sort(unique(as.numeric(stage1_inputs$threshold_registry$threshold))), trim = TRUE, scientific = FALSE), collapse = "|")),
-      stage6_final_class = coalesce(as.character(stage6_final_class), as.character(cure_model_eligibility_flag)),
-      carry_forward_stage8 = coalesce(to_logical_column(carry_forward_stage8), cure_model_eligibility_flag != "unsupportive")
+      final_decision_flag = cure_model_eligibility_flag,
+      stage6_final_class = cure_model_eligibility_flag,
+      carry_forward_stage8 = cure_model_eligibility_flag != "unsupportive"
     )
-
-  if (!"final_decision_flag" %in% names(out)) {
-    out$final_decision_flag <- out$cure_model_eligibility_flag
-  }
 
   if (!"presence_support_flag" %in% names(out)) {
     out$presence_support_flag <- out$cure_presence_support_flag
@@ -988,7 +993,7 @@ patch_screening_summary <- function(df, carry_forward_flag_table, screening_meth
       source_description = as.character(source_description),
       analysis_variant = as.character(analysis_variant),
       screening_context = coalesce(as.character(screening_context), .env$screening_context),
-      decision_rule_version = coalesce(as.character(decision_rule_version), .env$decision_rule_version)
+      decision_rule_version = .env$decision_rule_version
     ) %>%
     arrange(match(dataset_key, dataset_order_full))
 }
@@ -1025,7 +1030,9 @@ patch_stage6_metadata_registry <- function(df, stage1_inputs, reuse_completed_ru
     "screening", "primary_gate_method", "RECeUS-AIC",
     "screening", "screening_context", screening_context,
     "screening", "reuse_existing_completed_run_only", as.character(reuse_completed_run),
+    "screening", "reuse_existing_bootstrap_exports_if_present", as.character(reuse_existing_bootstrap_exports_if_present),
     "screening", "results_reuse_rule", "Reuse existing completed-run Stage 6 artifacts when compatible with the current Stage 1 backbone and revised Stage 6 specification; do not rerun heavy screening calculations unless compatibility fails.",
+    "screening", "bootstrap_export_reuse_rule", "If refresh_bootstrap_exports = FALSE and existing bootstrap CSV/PDF exports are already present in export_path, reuse them and skip bootstrap reconstruction/regeneration.",
     "screening", "bootstrap_histogram_png_rule", "Each bootstrap histogram page is additionally saved as a standalone PNG that does not count toward the export file-number limit.",
     "outputs", "save_folder_rule", "Write all outputs into the single user-specified run_root_dir without creating extra subfolders.",
     "inputs", "data_path", normalize_existing_path(data_path),
@@ -1948,13 +1955,39 @@ visual_plot_data <- bind_rows(
   carry_forward_plot_bundle$data %>% mutate(plot_name = "carry_forward_flag_table")
 )
 
-bootstrap_results <- build_bootstrap_distribution_table(
-  shards_dir = stage6_objects$shards_dir,
-  observed_dir = stage6_objects$observed_dir,
-  alpha_screening = alpha_screening,
-  candidate_hsu_families = candidate_hsu_families
-)
-bootstrap_plot_index <- build_bootstrap_plot_index(bootstrap_results)
+existing_bootstrap_results_file <- file.path(export_path, "stage6_bootstrap_results.csv")
+existing_bootstrap_plot_index_file <- file.path(export_path, "stage6_bootstrap_plot_index.csv")
+existing_bootstrap_histograms_pdf_file <- file.path(export_path, "stage6_bootstrap_histograms.pdf")
+
+reuse_existing_bootstrap_tables <- FALSE
+reuse_existing_bootstrap_histograms <- FALSE
+
+if (isTRUE(reuse_existing_bootstrap_exports_if_present) && !isTRUE(refresh_bootstrap_exports)) {
+  bootstrap_results_existing <- safe_read_csv_if_exists(existing_bootstrap_results_file)
+  bootstrap_plot_index_existing <- safe_read_csv_if_exists(existing_bootstrap_plot_index_file)
+
+  if (!is.null(bootstrap_results_existing) && !is.null(bootstrap_plot_index_existing)) {
+    bootstrap_results <- tibble::as_tibble(bootstrap_results_existing)
+    bootstrap_plot_index <- tibble::as_tibble(bootstrap_plot_index_existing)
+    reuse_existing_bootstrap_tables <- TRUE
+    message("Reusing existing bootstrap CSV exports from export_path: ", export_path)
+  }
+}
+
+if (!isTRUE(reuse_existing_bootstrap_tables)) {
+  bootstrap_results <- build_bootstrap_distribution_table(
+    shards_dir = stage6_objects$shards_dir,
+    observed_dir = stage6_objects$observed_dir,
+    alpha_screening = alpha_screening,
+    candidate_hsu_families = candidate_hsu_families
+  )
+  bootstrap_plot_index <- build_bootstrap_plot_index(bootstrap_results)
+}
+
+reuse_existing_bootstrap_histograms <- isTRUE(reuse_existing_bootstrap_tables) &&
+  isTRUE(reuse_existing_bootstrap_exports_if_present) &&
+  !isTRUE(refresh_bootstrap_exports) &&
+  file.exists(existing_bootstrap_histograms_pdf_file)
 
 if (nrow(bootstrap_results) == 0L) {
   warning(
@@ -1996,8 +2029,13 @@ safe_write_csv_atomic(screening_summary, file_variants$stage6_screening_summary)
 safe_write_csv_atomic(carry_forward_flag_table, file_variants$stage6_carry_forward_flag_table)
 safe_write_csv_atomic(stage6_shard_registry, file_variants$stage6_shard_registry)
 safe_write_csv_atomic(visual_plot_data, file_variants$stage6_visual_plot_data)
-safe_write_csv_atomic(bootstrap_results, file_variants$stage6_bootstrap_results)
-safe_write_csv_atomic(bootstrap_plot_index, file_variants$stage6_bootstrap_plot_index)
+
+if (!isTRUE(reuse_existing_bootstrap_tables) || !file.exists(file_variants$stage6_bootstrap_results)) {
+  safe_write_csv_atomic(bootstrap_results, file_variants$stage6_bootstrap_results)
+}
+if (!isTRUE(reuse_existing_bootstrap_tables) || !file.exists(file_variants$stage6_bootstrap_plot_index)) {
+  safe_write_csv_atomic(bootstrap_plot_index, file_variants$stage6_bootstrap_plot_index)
+}
 
 screening_bundle_revised <- list(
   stage = "Stage 6",
@@ -2014,7 +2052,9 @@ screening_bundle_revised <- list(
     hsu_family_set_name = hsu_family_set_name,
     decision_rule_version = decision_rule_version,
     screening_context = screening_context,
-    reuse_existing_completed_run_only = reuse_existing_completed_run_only
+    reuse_existing_completed_run_only = reuse_existing_completed_run_only,
+    refresh_bootstrap_exports = refresh_bootstrap_exports,
+    reuse_existing_bootstrap_exports_if_present = reuse_existing_bootstrap_exports_if_present
   ),
   source_lookup = stage1_inputs$backbone_bundle$source_lookup,
   registries = list(
@@ -2082,8 +2122,10 @@ if (isTRUE(rebuild_visual_summary_pdf)) {
   )
 }
 
-if (isTRUE(refresh_bootstrap_exports) || !file.exists(file_variants$stage6_bootstrap_histograms_pdf)) {
+if (!isTRUE(reuse_existing_bootstrap_histograms) || !file.exists(file_variants$stage6_bootstrap_histograms_pdf)) {
   generate_bootstrap_histograms(bootstrap_results, bootstrap_plot_index, file_variants$stage6_bootstrap_histograms_pdf)
+} else {
+  message("Reusing existing bootstrap histogram PDF and standalone PNG files from export_path: ", export_path)
 }
 
 export_manifest <- tibble::tibble(
@@ -2131,12 +2173,12 @@ export_manifest <- tibble::tibble(
     "Carry-forward eligibility flag table with canonical Stage 7/8 fields patched under the revised specification.",
     "Shard registry tracking completed shard tasks.",
     "Unified source-of-truth table used to draw the main Stage 6 summary plots.",
-    "Long-format bootstrap source-of-truth table reconstructed from completed Stage 6 shard files.",
-    "Index of bootstrap histogram groups and their standalone PNG filenames.",
+    "Long-format bootstrap source-of-truth table reconstructed from completed Stage 6 shard files or reused from an existing export when present.",
+    "Index of bootstrap histogram groups and their standalone PNG filenames, reused when existing export files are present and refresh_bootstrap_exports = FALSE.",
     "Reusable Stage 6 bundle with patched tables and bootstrap source-of-truth objects.",
     if (isTRUE(save_fit_objects) && !is.null(fit_objects_final)) "Observed objects and reduced bootstrap/fitted-object bundle reused from the completed Stage 6 run." else NA_character_,
     "Multi-page PDF containing the four main Stage 6 summary figures.",
-    "Multi-page PDF of bootstrap histograms, with standalone PNGs exported for each page."
+    "Multi-page PDF of bootstrap histograms, with standalone PNGs exported for each page unless existing histogram exports are reused."
   ),
   file_path = c(
     file_variants$stage6_variant_registry,
@@ -2164,6 +2206,6 @@ message("Stage 6 revised exports refreshed from the compatible completed run:")
 message("  - ", file_variants$stage6_variant_registry)
 message("  - ", file_variants$stage6_screening_method_results)
 message("  - ", file_variants$stage6_carry_forward_flag_table)
-message("  - ", file_variants$stage6_bootstrap_results)
-message("  - ", file_variants$stage6_bootstrap_histograms_pdf)
-message("  - individual PNG files for every main figure and bootstrap histogram page were also written to export_path")
+message("  - ", file_variants$stage6_bootstrap_results, if (isTRUE(reuse_existing_bootstrap_tables)) " (reused existing CSV)" else " (refreshed from shard files)")
+message("  - ", file_variants$stage6_bootstrap_histograms_pdf, if (isTRUE(reuse_existing_bootstrap_histograms)) " (reused existing PDF/PNG set)" else " (refreshed)")
+message("  - individual PNG files for every main figure and bootstrap histogram page were also written to export_path unless existing bootstrap histogram exports were reused")

@@ -1,5 +1,6 @@
-# 🔴 Configure: Stage8B paths, controls, and fixed grids ===============================
-# 🟧 Configure: OS-aware root path ===============================
+
+# Stage8B patched full script
+
 sys_name <- Sys.info()[["sysname"]]
 
 project_root <- switch(
@@ -9,15 +10,10 @@ project_root <- switch(
   stop("Unsupported OS: ", sys_name)
 )
 
-
-# 🟧 Configure: Stage8B paths ===============================
 stage1_export_path  <- file.path(project_root, "stage1_Backbone lock")
 export_path         <- file.path(project_root, "stage8B_Bayesian remission-sensitive competing-risk extension")
 stage6_export_path  <- file.path(project_root, "stage6_Cure-appropriateness screening")
 stage8a_export_path <- file.path(project_root, "stage8A_Bayesian transition-only cure")
-
-
-
 
 stage1_bundle_file <- file.path(stage1_export_path, "stage1_backbone_bundle.rds")
 stage1_analysis_datasets_file <- file.path(stage1_export_path, "stage1_analysis_datasets.rds")
@@ -79,7 +75,6 @@ prior_materiality_nb <- 0.01
 horizons_year <- NULL
 risk_thresholds <- NULL
 
-# 🔴 Initialize: packages, options, and safe defaults ===============================
 core_packages <- c(
   "readr", "dplyr", "tibble", "tidyr", "ggplot2", "survival", "matrixStats", "purrr"
 )
@@ -112,8 +107,6 @@ dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
-# 🔴 Define: backbone-safe I/O and scalar helpers ===============================
-## 🟠 Define: path, coercion, and join utilities ===============================
 assert_existing_file <- function(path, label = "File") {
   if (!file.exists(path)) {
     stop(sprintf("%s not found: %s", label, path), call. = FALSE)
@@ -121,36 +114,24 @@ assert_existing_file <- function(path, label = "File") {
   invisible(path)
 }
 
-safe_numeric <- function(x) {
-  suppressWarnings(as.numeric(as.character(x)))
-}
+safe_numeric <- function(x) suppressWarnings(as.numeric(as.character(x)))
 
 read_delimited_or_rds <- function(path) {
-  if (is.null(path) || !nzchar(path)) {
-    return(NULL)
-  }
-  if (!file.exists(path)) {
-    stop(sprintf("Input file does not exist: %s", path), call. = FALSE)
-  }
+  if (is.null(path) || !nzchar(path)) return(NULL)
+  if (!file.exists(path)) stop(sprintf("Input file does not exist: %s", path), call. = FALSE)
   ext <- tolower(tools::file_ext(path))
   path_low <- tolower(path)
   if (grepl("\\.(csv|txt)(\\.gz)?$", path_low)) {
     return(readr::read_csv(path, show_col_types = FALSE, progress = FALSE))
   }
-  if (ext == "rds") {
-    return(readRDS(path))
-  }
+  if (ext == "rds") return(readRDS(path))
   stop(sprintf("Unsupported file extension for `%s`.", path), call. = FALSE)
 }
 
 make_temp_output_path <- function(path, tag = "tmp") {
   dir <- dirname(path)
   base <- basename(path)
-  stamp <- paste0(
-    format(Sys.time(), "%Y%m%d%H%M%S"),
-    "_",
-    sprintf("%08d", sample.int(99999999, 1))
-  )
+  stamp <- paste0(format(Sys.time(), "%Y%m%d%H%M%S"), "_", sprintf("%08d", sample.int(99999999, 1)))
   if (grepl("\\.csv\\.gz$", base, ignore.case = TRUE)) {
     base <- sub("\\.csv\\.gz$", paste0("_", tag, "_", stamp, ".csv.gz"), base, ignore.case = TRUE)
   } else if (grepl("\\.csv$", base, ignore.case = TRUE)) {
@@ -166,20 +147,14 @@ make_temp_output_path <- function(path, tag = "tmp") {
 }
 
 safe_promote_file <- function(tmp_path, final_path) {
-  if (!file.exists(tmp_path)) {
-    stop(sprintf("Temporary file does not exist: %s", tmp_path), call. = FALSE)
-  }
+  if (!file.exists(tmp_path)) stop(sprintf("Temporary file does not exist: %s", tmp_path), call. = FALSE)
   dir.create(dirname(final_path), recursive = TRUE, showWarnings = FALSE)
-  if (file.exists(final_path)) {
-    unlink(final_path)
-  }
+  if (file.exists(final_path)) unlink(final_path)
   ok <- file.rename(tmp_path, final_path)
   if (!isTRUE(ok)) {
     ok_copy <- file.copy(tmp_path, final_path, overwrite = TRUE)
     unlink(tmp_path)
-    if (!isTRUE(ok_copy)) {
-      stop(sprintf("Failed to replace file: %s", final_path), call. = FALSE)
-    }
+    if (!isTRUE(ok_copy)) stop(sprintf("Failed to replace file: %s", final_path), call. = FALSE)
   }
   invisible(TRUE)
 }
@@ -193,70 +168,48 @@ write_csv_preserve_schema <- function(df, path) {
 }
 
 pdf_file_is_usable <- function(path) {
-  if (!file.exists(path)) {
-    return(FALSE)
-  }
+  if (!file.exists(path)) return(FALSE)
   info <- file.info(path)
   isTRUE(!is.na(info$size[[1]]) && info$size[[1]] > 0L)
 }
 
 nrow_or_zero <- function(df) {
-  if (is.null(df) || !inherits(df, "data.frame")) {
-    return(0L)
-  }
+  if (is.null(df) || !inherits(df, "data.frame")) return(0L)
   nrow(df)
 }
 
 bind_rows_safe <- function(x) {
   x <- x[!vapply(x, is.null, logical(1))]
-  if (length(x) == 0L) {
-    return(tibble())
-  }
+  if (length(x) == 0L) return(tibble())
   bind_rows(x)
 }
 
 drop_existing_columns <- function(df, cols) {
-  if (is.null(df) || !inherits(df, "data.frame") || length(cols) == 0L) {
-    return(df)
-  }
+  if (is.null(df) || !inherits(df, "data.frame") || length(cols) == 0L) return(df)
   dplyr::select(df, -any_of(cols))
 }
 
 left_join_replacing_columns <- function(x, y, by) {
-  if (is.null(x) || !inherits(x, "data.frame")) {
-    return(x)
-  }
-  if (is.null(y) || !inherits(y, "data.frame") || nrow(y) == 0L) {
-    return(x)
-  }
+  if (is.null(x) || !inherits(x, "data.frame")) return(x)
+  if (is.null(y) || !inherits(y, "data.frame") || nrow(y) == 0L) return(x)
   by_cols <- unname(by)
-  if (any(!by_cols %in% names(x)) || any(!by_cols %in% names(y))) {
-    return(x)
-  }
+  if (any(!by_cols %in% names(x)) || any(!by_cols %in% names(y))) return(x)
   join_cols <- setdiff(names(y), by_cols)
-  x %>%
-    drop_existing_columns(join_cols) %>%
-    left_join(y, by = by)
+  x %>% drop_existing_columns(join_cols) %>% left_join(y, by = by)
 }
 
 first_existing_name <- function(df, candidates) {
   hit <- intersect(candidates, names(df))
-  if (length(hit) == 0L) {
-    return(NULL)
-  }
+  if (length(hit) == 0L) return(NULL)
   hit[[1L]]
 }
 
 format_number <- function(x, digits = 3L) {
-  if (length(x) == 0L || is.na(x) || !is.finite(x)) {
-    return("NA")
-  }
+  if (length(x) == 0L || is.na(x) || !is.finite(x)) return("NA")
   formatC(as.numeric(x), format = "f", digits = digits)
 }
 
-elapsed_seconds <- function(start_time) {
-  as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-}
+elapsed_seconds <- function(start_time) as.numeric(difftime(Sys.time(), start_time, units = "secs"))
 
 emit_progress <- function(done, total, model_id, detail) {
   pct <- if (total <= 0L) 100 else 100 * done / total
@@ -267,8 +220,6 @@ is_localhost_connection_warning <- function(w) {
   grepl("closing unused connection .*<-localhost:", conditionMessage(w))
 }
 
-# 🔴 Define: Stage1 import and governance helpers ===============================
-## 🟠 Define: Stage1 bundle readers and horizon governance ===============================
 empty_stage1_bundle <- function() {
   list(
     datasets = NULL,
@@ -283,16 +234,9 @@ empty_stage1_bundle <- function() {
   )
 }
 
-load_stage1_backbone <- function(
-    bundle_file,
-    datasets_file,
-    dataset_registry_file,
-    horizon_registry_file,
-    threshold_registry_file,
-    scaling_registry_file
-) {
+load_stage1_backbone <- function(bundle_file, datasets_file, dataset_registry_file, horizon_registry_file, threshold_registry_file, scaling_registry_file) {
   out <- empty_stage1_bundle()
-  
+
   if (file.exists(bundle_file)) {
     obj <- readRDS(bundle_file)
     if (is.list(obj)) {
@@ -306,98 +250,28 @@ load_stage1_backbone <- function(
       out$registries$metadata_registry <- tibble::as_tibble(regs$metadata_registry %||% tibble())
     }
   }
-  
-  if (is.null(out$datasets) && file.exists(datasets_file)) {
-    out$datasets <- readRDS(datasets_file)
-  }
-  
-  if (nrow_or_zero(out$registries$dataset_registry) == 0L && file.exists(dataset_registry_file)) {
-    out$registries$dataset_registry <- read_delimited_or_rds(dataset_registry_file)
-  }
-  if (nrow_or_zero(out$registries$horizon_registry) == 0L && file.exists(horizon_registry_file)) {
-    out$registries$horizon_registry <- read_delimited_or_rds(horizon_registry_file)
-  }
-  if (nrow_or_zero(out$registries$threshold_registry) == 0L && file.exists(threshold_registry_file)) {
-    out$registries$threshold_registry <- read_delimited_or_rds(threshold_registry_file)
-  }
-  if (nrow_or_zero(out$registries$scaling_registry) == 0L && file.exists(scaling_registry_file)) {
-    out$registries$scaling_registry <- read_delimited_or_rds(scaling_registry_file)
-  }
-  
+
+  if (is.null(out$datasets) && file.exists(datasets_file)) out$datasets <- readRDS(datasets_file)
+  if (nrow_or_zero(out$registries$dataset_registry) == 0L && file.exists(dataset_registry_file)) out$registries$dataset_registry <- read_delimited_or_rds(dataset_registry_file)
+  if (nrow_or_zero(out$registries$horizon_registry) == 0L && file.exists(horizon_registry_file)) out$registries$horizon_registry <- read_delimited_or_rds(horizon_registry_file)
+  if (nrow_or_zero(out$registries$threshold_registry) == 0L && file.exists(threshold_registry_file)) out$registries$threshold_registry <- read_delimited_or_rds(threshold_registry_file)
+  if (nrow_or_zero(out$registries$scaling_registry) == 0L && file.exists(scaling_registry_file)) out$registries$scaling_registry <- read_delimited_or_rds(scaling_registry_file)
+
   if (is.null(out$datasets) || !is.list(out$datasets) || length(out$datasets) == 0L) {
     stop("Stage 1 datasets could not be loaded from `stage1_backbone_bundle.rds` or `stage1_analysis_datasets.rds`.", call. = FALSE)
   }
-  
+
   req_datasets <- c("PNU", "SNU", "merged")
   if (any(!req_datasets %in% names(out$datasets))) {
     stop("Stage 1 datasets must contain `PNU`, `SNU`, and `merged`.", call. = FALSE)
   }
-  
+
   out$registries$horizon_registry <- tibble::as_tibble(out$registries$horizon_registry)
   out$registries$threshold_registry <- tibble::as_tibble(out$registries$threshold_registry)
   out$registries$dataset_registry <- tibble::as_tibble(out$registries$dataset_registry)
   out$registries$scaling_registry <- tibble::as_tibble(out$registries$scaling_registry)
-  
-  out
-}
 
-build_horizon_annotation_from_stage1 <- function(horizon_registry, datasets, horizons) {
-  out <- tibble::as_tibble(horizon_registry)
-  
-  if (nrow(out) == 0L) {
-    out <- tidyr::crossing(
-      dataset = names(datasets),
-      horizon_year = as.integer(horizons)
-    ) %>%
-      mutate(
-        dataset_key = dataset,
-        support_tier = case_when(
-          dataset == "PNU" & horizon_year == 1L ~ "primary_supported",
-          dataset == "PNU" & horizon_year == 2L ~ "sensitivity",
-          dataset == "PNU" & horizon_year >= 3L ~ "projection",
-          dataset %in% c("SNU", "merged") & horizon_year %in% c(1L, 2L) ~ "primary_supported",
-          dataset %in% c("SNU", "merged") & horizon_year <= 5L ~ "secondary",
-          TRUE ~ "projection"
-        ),
-        horizon_evidence_class = case_when(
-          dataset == "PNU" & horizon_year == 1L ~ "directly_observed_data_supported",
-          dataset == "PNU" & horizon_year == 2L ~ "partly_model_dependent",
-          dataset == "PNU" & horizon_year >= 3L ~ "mostly_extrapolated",
-          dataset %in% c("SNU", "merged") & horizon_year %in% c(1L, 2L) ~ "directly_observed_data_supported",
-          dataset %in% c("SNU", "merged") & horizon_year <= 5L ~ "partly_model_dependent",
-          TRUE ~ "mostly_extrapolated"
-        ),
-        claim_restriction_flag = case_when(
-          horizon_evidence_class == "directly_observed_data_supported" ~ "primary_claim_allowed",
-          horizon_evidence_class == "partly_model_dependent" ~ "secondary_or_sensitivity_only",
-          TRUE ~ "projection_only"
-        ),
-        interpretation_note = case_when(
-          claim_restriction_flag == "primary_claim_allowed" ~ "Primary supported horizon with comparatively direct follow-up support.",
-          claim_restriction_flag == "secondary_or_sensitivity_only" ~ "Secondary or sensitivity horizon with explicit model dependence.",
-          TRUE ~ "Projection-dominant horizon."
-        )
-      )
-  }
-  
-  out %>%
-    transmute(
-      dataset = as.character(dataset %||% dataset_key),
-      dataset_key = as.character(dataset_key %||% dataset),
-      horizon_year = as.integer(safe_numeric(horizon_year)),
-      support_tier = as.character(support_tier),
-      horizon_evidence_class = as.character(horizon_evidence_class),
-      claim_restriction_flag = as.character(claim_restriction_flag),
-      interpretation_note = as.character(
-        coalesce(
-          .data$interpretation_note,
-          if ("support_tier_standard" %in% names(out)) as.character(out$support_tier_standard) else NA_character_
-        )
-      )
-    ) %>%
-    filter(dataset %in% c("PNU", "SNU", "merged"), horizon_year %in% horizons) %>%
-    distinct(dataset, horizon_year, .keep_all = TRUE) %>%
-    arrange(factor(dataset, levels = c("PNU", "SNU", "merged")), horizon_year)
+  out
 }
 
 build_threshold_vector_from_stage1 <- function(threshold_registry, fallback = c(0.05, 0.10, 0.15, 0.20)) {
@@ -408,8 +282,6 @@ build_threshold_vector_from_stage1 <- function(threshold_registry, fallback = c(
   sort(unique(safe_numeric(out$threshold)))
 }
 
-# 🔴 Define: Stage6 carry-forward readers ===============================
-## 🟠 Define: Stage6 screening import and model lookup ===============================
 empty_stage6_lookup <- function() {
   tibble(
     dataset = character(),
@@ -437,7 +309,7 @@ normalize_stage6_formula_anchor <- function(x) {
 expand_stage6_dataset_key <- function(dataset_value, formula_anchor_value = NA_character_) {
   dataset_value <- trimws(as.character(dataset_value %||% NA_character_))
   formula_anchor_value <- trimws(as.character(formula_anchor_value %||% NA_character_))
-  
+
   if (identical(dataset_value, "merged__site_free")) {
     return(tibble(dataset = "merged", formula_anchor = c("base", "interaction")))
   }
@@ -450,84 +322,67 @@ expand_stage6_dataset_key <- function(dataset_value, formula_anchor_value = NA_c
       formula_anchor = if (!is.na(formula_anchor_value) && nzchar(formula_anchor_value)) formula_anchor_value else "ALL"
     ))
   }
-  
+
   tibble(
     dataset = dataset_value,
     formula_anchor = if (!is.na(formula_anchor_value) && nzchar(formula_anchor_value)) formula_anchor_value else "ALL"
   )
 }
 
+
 read_stage6_screening_lookup <- function(path) {
   if (is.null(path) || !nzchar(path) || !file.exists(path)) {
     return(empty_stage6_lookup())
   }
-  
   df <- read_delimited_or_rds(path)
   df <- tibble::as_tibble(df)
-  
-  dataset_col <- first_existing_name(
-    df,
-    c("dataset_key", "dataset", "source_dataset", "cohort", "screening_dataset_key")
-  )
+
+  dataset_col <- first_existing_name(df, c("dataset_key", "dataset", "source_dataset", "cohort", "screening_dataset_key"))
   formula_col <- first_existing_name(df, c("formula_anchor", "formula_name", "formula_type"))
-  eligibility_col <- first_existing_name(
-    df,
-    c("cure_model_eligibility_flag", "stage6_final_class", "final_decision_flag", "screening_flag")
-  )
+  eligibility_col <- first_existing_name(df, c("cure_model_eligibility_flag", "stage6_final_class", "final_decision_flag", "screening_flag"))
   receus_col <- first_existing_name(df, c("receus_primary_class", "primary_gate_flag"))
   presence_col <- first_existing_name(df, c("cure_presence_support_flag", "presence_modifier_flag"))
   followup_col <- first_existing_name(df, c("followup_not_contradicted_flag", "followup_contradiction_flag"))
-  note_col <- first_existing_name(
-    df,
-    c("screening_note", "screening_detail", "primary_gate_method", "screening_context")
-  )
-  
+  note_col <- first_existing_name(df, c("screening_note", "screening_detail", "primary_gate_method", "screening_context"))
+
   if (is.null(dataset_col) || is.null(eligibility_col)) {
     return(empty_stage6_lookup())
   }
-  
+
   raw_out <- tibble(
     dataset_value = as.character(df[[dataset_col]]),
-    formula_anchor_value = if (!is.null(formula_col)) {
-      normalize_stage6_formula_anchor(df[[formula_col]])
-    } else {
-      NA_character_
-    },
+    formula_anchor_value = if (!is.null(formula_col)) normalize_stage6_formula_anchor(df[[formula_col]]) else NA_character_,
     cure_model_eligibility_flag = as.character(df[[eligibility_col]]),
     receus_primary_class = if (!is.null(receus_col)) as.character(df[[receus_col]]) else NA_character_,
     cure_presence_support_flag = if (!is.null(presence_col)) as.character(df[[presence_col]]) else NA_character_,
     followup_not_contradicted_flag = if (!is.null(followup_col)) as.character(df[[followup_col]]) else NA_character_,
     screening_note = if (!is.null(note_col)) as.character(df[[note_col]]) else NA_character_
   )
-  
+
   out <- bind_rows(lapply(seq_len(nrow(raw_out)), function(i) {
     one <- raw_out[i, , drop = FALSE]
     expanded <- expand_stage6_dataset_key(one$dataset_value[[1]], one$formula_anchor_value[[1]])
-    
     carried <- dplyr::select(one, -dataset_value, -formula_anchor_value)
     carried <- carried[rep(1L, nrow(expanded)), , drop = FALSE]
-    
     dplyr::bind_cols(expanded, carried)
   })) %>%
-    dplyr::filter(dataset %in% c("PNU", "SNU", "merged")) %>%
-    dplyr::mutate(formula_anchor = ifelse(is.na(formula_anchor) | formula_anchor == "", "ALL", formula_anchor)) %>%
-    dplyr::group_by(dataset, formula_anchor) %>%
-    dplyr::summarise(
-      cure_model_eligibility_flag = paste(unique(stats::na.omit(cure_model_eligibility_flag)), collapse = "|"),
-      receus_primary_class = paste(unique(stats::na.omit(receus_primary_class)), collapse = "|"),
-      cure_presence_support_flag = paste(unique(stats::na.omit(cure_presence_support_flag)), collapse = "|"),
-      followup_not_contradicted_flag = paste(unique(stats::na.omit(followup_not_contradicted_flag)), collapse = "|"),
-      screening_note = paste(unique(stats::na.omit(screening_note)), collapse = "; "),
+    filter(dataset %in% c("PNU", "SNU", "merged")) %>%
+    mutate(formula_anchor = ifelse(is.na(formula_anchor) | formula_anchor == "", "ALL", formula_anchor)) %>%
+    group_by(dataset, formula_anchor) %>%
+    summarise(
+      cure_model_eligibility_flag = paste(unique(na.omit(cure_model_eligibility_flag)), collapse = "|"),
+      receus_primary_class = paste(unique(na.omit(receus_primary_class)), collapse = "|"),
+      cure_presence_support_flag = paste(unique(na.omit(cure_presence_support_flag)), collapse = "|"),
+      followup_not_contradicted_flag = paste(unique(na.omit(followup_not_contradicted_flag)), collapse = "|"),
+      screening_note = paste(unique(na.omit(screening_note)), collapse = "; "),
       .groups = "drop"
     )
-  
+
   if (nrow(out) == 0L) {
     return(empty_stage6_lookup())
   }
-  
   out
 }
-
 
 build_stage6_model_lookup <- function(screening_lookup, model_grid) {
   if (nrow_or_zero(screening_lookup) == 0L) {
@@ -541,16 +396,15 @@ build_stage6_model_lookup <- function(screening_lookup, model_grid) {
                screening_note = NA_character_
              ))
   }
-  
-  model_base <- model_grid %>%
-    distinct(model_id, dataset, formula_anchor)
-  
+
+  model_base <- model_grid %>% distinct(model_id, dataset, formula_anchor)
+
   exact_lookup <- model_base %>%
     left_join(
       screening_lookup %>% filter(formula_anchor != "ALL"),
       by = c("dataset", "formula_anchor")
     )
-  
+
   all_lookup <- model_base %>%
     left_join(
       screening_lookup %>%
@@ -559,7 +413,7 @@ build_stage6_model_lookup <- function(screening_lookup, model_grid) {
         rename_with(~ paste0(.x, "_all"), -dataset),
       by = "dataset"
     )
-  
+
   exact_lookup %>%
     left_join(all_lookup, by = c("model_id", "dataset", "formula_anchor")) %>%
     transmute(
@@ -572,23 +426,15 @@ build_stage6_model_lookup <- function(screening_lookup, model_grid) {
     )
 }
 
-# 🔴 Define: Stage8A import helpers for 8B-versus-8A deltas ===============================
-## 🟠 Define: Stage8A readers and harmonizers ===============================
 load_stage8a_outputs <- function(model_registry_csv, cohort_yearly_csv, classification_csv) {
   out <- list(
     model_registry = tibble(),
     posterior_cohort_yearly = tibble(),
     posterior_classification = tibble()
   )
-  if (file.exists(model_registry_csv)) {
-    out$model_registry <- tibble::as_tibble(read_delimited_or_rds(model_registry_csv))
-  }
-  if (file.exists(cohort_yearly_csv)) {
-    out$posterior_cohort_yearly <- tibble::as_tibble(read_delimited_or_rds(cohort_yearly_csv))
-  }
-  if (file.exists(classification_csv)) {
-    out$posterior_classification <- tibble::as_tibble(read_delimited_or_rds(classification_csv))
-  }
+  if (file.exists(model_registry_csv)) out$model_registry <- tibble::as_tibble(read_delimited_or_rds(model_registry_csv))
+  if (file.exists(cohort_yearly_csv)) out$posterior_cohort_yearly <- tibble::as_tibble(read_delimited_or_rds(cohort_yearly_csv))
+  if (file.exists(classification_csv)) out$posterior_classification <- tibble::as_tibble(read_delimited_or_rds(classification_csv))
   out
 }
 
@@ -596,14 +442,14 @@ augment_stage8a_with_model_keys <- function(stage8a_outputs) {
   reg <- tibble::as_tibble(stage8a_outputs$model_registry)
   cohort <- tibble::as_tibble(stage8a_outputs$posterior_cohort_yearly)
   class_tbl <- tibble::as_tibble(stage8a_outputs$posterior_classification)
-  
+
   if (nrow_or_zero(reg) == 0L) {
     return(list(
       posterior_cohort_yearly = tibble(),
       posterior_classification = tibble()
     ))
   }
-  
+
   key_tbl <- reg %>%
     transmute(
       dataset = as.character(dataset),
@@ -612,30 +458,28 @@ augment_stage8a_with_model_keys <- function(stage8a_outputs) {
       family_code = as.character(family_code),
       formula_anchor = as.character(formula_anchor)
     )
-  
+
   cohort_out <- cohort %>%
     left_join(key_tbl, by = c("dataset", "model_id", "formula_anchor")) %>%
     mutate(horizon_year = as.integer(safe_numeric(horizon_year)))
-  
+
   class_out <- class_tbl %>%
     left_join(key_tbl, by = c("dataset", "model_id", "formula_anchor")) %>%
     mutate(
       horizon_year = as.integer(safe_numeric(horizon_year)),
       threshold = as.numeric(safe_numeric(threshold))
     )
-  
+
   list(
     posterior_cohort_yearly = cohort_out,
     posterior_classification = class_out
   )
 }
 
-# 🔴 Define: Stage8B structural grid and priors ===============================
-## 🟠 Define: model grid, prior specs, and design bundles ===============================
 build_stage8b_model_grid <- function(
-    include_merged_incidence_site_supplementary = TRUE,
-    fit_prior_branches = c("anchor_informed", "neutral_no_external_info"),
-    fit_site_prior_families = c("normal_0_1_main", "student_t3_0_1_sensitivity")
+  include_merged_incidence_site_supplementary = TRUE,
+  fit_prior_branches = c("anchor_informed", "neutral_no_external_info"),
+  fit_site_prior_families = c("normal_0_1_main", "student_t3_0_1_sensitivity")
 ) {
   single_rows <- tibble::tribble(
     ~dataset, ~structural_model_id, ~formula_anchor, ~transition_latency_branch, ~remission_branch, ~incidence_site_indicator, ~latency_site_indicator, ~remission_site_indicator, ~interaction_indicator, ~site_placement_label, ~is_supplementary_branch,
@@ -644,7 +488,7 @@ build_stage8b_model_grid <- function(
     "SNU", "SNU-L0R0", "base", "L0", "R0", FALSE, FALSE, FALSE, FALSE, "site_in_neither", FALSE,
     "SNU", "SNU-L1R1", "interaction", "L1", "R1", FALSE, FALSE, FALSE, TRUE, "site_in_neither", FALSE
   )
-  
+
   merged_rows <- tibble::tribble(
     ~dataset, ~structural_model_id, ~formula_anchor, ~transition_latency_branch, ~remission_branch, ~incidence_site_indicator, ~latency_site_indicator, ~remission_site_indicator, ~interaction_indicator, ~site_placement_label, ~is_supplementary_branch,
     "merged", "MERGED-L0S0-R0S0", "base", "L0S0", "R0S0", FALSE, FALSE, FALSE, FALSE, "site_in_neither", FALSE,
@@ -652,7 +496,7 @@ build_stage8b_model_grid <- function(
     "merged", "MERGED-L0S1-R0S1", "site_added", "L0S1", "R0S1", FALSE, TRUE, TRUE, FALSE, "site_in_latency_only", FALSE,
     "merged", "MERGED-L1S1-R1S1", "site_interaction", "L1S1", "R1S1", FALSE, TRUE, TRUE, TRUE, "site_in_latency_only", FALSE
   )
-  
+
   if (isTRUE(include_merged_incidence_site_supplementary)) {
     merged_rows <- bind_rows(
       merged_rows,
@@ -665,7 +509,7 @@ build_stage8b_model_grid <- function(
       )
     )
   }
-  
+
   family_rows <- tibble::tribble(
     ~family_code, ~latency_family, ~family_id,
     "E", "exponential", 1L,
@@ -673,27 +517,20 @@ build_stage8b_model_grid <- function(
     "LN", "lognormal", 3L,
     "LL", "loglogistic", 4L
   )
-  
+
   base_grid <- tidyr::crossing(bind_rows(single_rows, merged_rows), family_rows) %>%
-    mutate(
-      has_any_site_term = incidence_site_indicator | latency_site_indicator | remission_site_indicator
-    )
-  
+    mutate(has_any_site_term = incidence_site_indicator | latency_site_indicator | remission_site_indicator)
+
   rows_out <- list()
-  
   for (ii in seq_len(nrow(base_grid))) {
     row_i <- base_grid[ii, , drop = FALSE]
     site_prior_candidates <- if (isTRUE(row_i$has_any_site_term[[1]])) fit_site_prior_families else "not_applicable"
-    cross_i <- tidyr::crossing(
+    rows_out[[ii]] <- tidyr::crossing(
       row_i,
-      tibble(
-        prior_branch = fit_prior_branches,
-        site_prior_family = site_prior_candidates
-      )
+      tibble(prior_branch = fit_prior_branches, site_prior_family = site_prior_candidates)
     )
-    rows_out[[ii]] <- cross_i
   }
-  
+
   bind_rows(rows_out) %>%
     mutate(
       dataset_key = dataset,
@@ -742,12 +579,13 @@ build_stage8b_prior_specs <- function() {
   )
 }
 
+
 make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, remission_cut_years) {
   z_i <- as.integer(df$sex_num)
   x20_i <- as.integer(df$age_exact_entry >= 20 & df$age_exact_entry < 30)
   x30_i <- as.integer(df$age_exact_entry >= 30)
   s_i <- as.integer(df$site == snu_label)
-  
+
   X_inc <- cbind(
     sex_num = z_i,
     age20_29 = x20_i,
@@ -757,16 +595,16 @@ make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, rem
   )
   mu_beta_inc <- prior_spec$mu_beta_inc_base
   sd_beta_inc <- prior_spec$sd_beta_inc_base
-  
+
   if (isTRUE(model_row$incidence_site_indicator)) {
     X_inc <- cbind(X_inc, site_SNU = s_i)
     mu_beta_inc <- c(mu_beta_inc, 0)
     sd_beta_inc <- c(sd_beta_inc, prior_spec$sd_site)
   }
-  
+
   a_i <- as.numeric(df$age_s)
   az_i <- a_i * z_i
-  
+
   X_lat <- switch(
     model_row$transition_latency_branch,
     L0 = cbind(age_s = a_i, sex_num = z_i),
@@ -777,7 +615,7 @@ make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, rem
     L1S1 = cbind(age_s = a_i, sex_num = z_i, age_s_x_sex = az_i, site_SNU = s_i),
     stop(sprintf("Unknown transition latency branch `%s`.", model_row$transition_latency_branch), call. = FALSE)
   )
-  
+
   X_rem <- switch(
     model_row$remission_branch,
     R0 = cbind(age_s = a_i, sex_num = z_i),
@@ -788,7 +626,7 @@ make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, rem
     R1S1 = cbind(age_s = a_i, sex_num = z_i, age_s_x_sex = az_i, site_SNU = s_i),
     stop(sprintf("Unknown remission branch `%s`.", model_row$remission_branch), call. = FALSE)
   )
-  
+
   sd_gamma_lat <- rep(prior_spec$sd_gamma, ncol(X_lat))
   sd_beta_rem <- rep(prior_spec$sd_rem, ncol(X_rem))
   if (grepl("S1$", model_row$transition_latency_branch) && isTRUE(model_row$latency_site_indicator)) {
@@ -797,12 +635,12 @@ make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, rem
   if (grepl("S1$", model_row$remission_branch) && isTRUE(model_row$remission_site_indicator)) {
     sd_beta_rem[ncol(X_rem)] <- prior_spec$sd_site
   }
-  
+
   rem_cuts <- as.numeric(remission_cut_years)
   if (length(rem_cuts) < 2L || any(diff(rem_cuts) <= 0)) {
     stop("`remission_cut_years` must be a strictly increasing numeric vector.", call. = FALSE)
   }
-  
+
   list(
     X_inc = unclass(as.matrix(X_inc)),
     X_lat = unclass(as.matrix(X_lat)),
@@ -819,9 +657,6 @@ make_stage8b_design_bundle <- function(df, model_row, prior_spec, snu_label, rem
   )
 }
 
-
-# 🔴 Define: observed competing-risk references and support metadata ===============================
-## 🟠 Define: Aalen-Johansen, censoring IPCW, and support joins ===============================
 km_step_eval <- function(survfit_obj, times) {
   base_times <- survfit_obj$time
   base_surv <- survfit_obj$surv
@@ -830,11 +665,7 @@ km_step_eval <- function(survfit_obj, times) {
     FUN.VALUE = numeric(1),
     FUN = function(tt) {
       idx <- max(c(0L, which(base_times <= tt)))
-      if (idx == 0L) {
-        1
-      } else {
-        base_surv[[idx]]
-      }
+      if (idx == 0L) 1 else base_surv[[idx]]
     }
   )
 }
@@ -842,99 +673,89 @@ km_step_eval <- function(survfit_obj, times) {
 build_aalen_johansen_reference <- function(df, horizons) {
   event_times <- sort(unique(df$time_year[df$status_num %in% c(1L, 2L)]))
   if (length(event_times) == 0L) {
-    return(
-      tibble(
-        horizon_year = as.integer(horizons),
-        observed_transition_cif = 0,
-        observed_remission_cif = 0,
-        observed_all_event_free = 1
-      )
-    )
+    return(tibble(
+      horizon_year = as.integer(horizons),
+      observed_transition_cif = 0,
+      observed_remission_cif = 0,
+      observed_all_event_free = 1
+    ))
   }
-  
+
   n_total <- nrow(df)
   S_all <- 1
   F1 <- 0
   F2 <- 0
-  
+
   aj_tbl <- tibble(
     time_year = event_times,
     observed_transition_cif = NA_real_,
     observed_remission_cif = NA_real_,
     observed_all_event_free = NA_real_
   )
-  
+
   n_risk <- n_total
   for (ii in seq_along(event_times)) {
     tt <- event_times[[ii]]
     d1 <- sum(df$status_num == 1L & df$time_year == tt)
     d2 <- sum(df$status_num == 2L & df$time_year == tt)
     c0 <- sum(df$status_num == 0L & df$time_year == tt)
-    
+
     if (n_risk <= 0L) {
       aj_tbl$observed_transition_cif[[ii]] <- F1
       aj_tbl$observed_remission_cif[[ii]] <- F2
       aj_tbl$observed_all_event_free[[ii]] <- S_all
       next
     }
-    
+
     F1 <- F1 + S_all * d1 / n_risk
     F2 <- F2 + S_all * d2 / n_risk
     S_all <- S_all * (1 - (d1 + d2) / n_risk)
-    
+
     aj_tbl$observed_transition_cif[[ii]] <- F1
     aj_tbl$observed_remission_cif[[ii]] <- F2
     aj_tbl$observed_all_event_free[[ii]] <- S_all
-    
+
     n_risk <- n_risk - d1 - d2 - c0
   }
-  
+
   eval_step <- function(values, times, horizons_eval) {
     vapply(horizons_eval, function(hh) {
       idx <- max(c(0L, which(times <= hh)))
-      if (idx == 0L) {
-        return(0)
-      }
+      if (idx == 0L) return(0)
       values[[idx]]
     }, numeric(1))
   }
-  
+
   tibble(
     horizon_year = as.integer(horizons),
     observed_transition_cif = eval_step(aj_tbl$observed_transition_cif, aj_tbl$time_year, horizons),
     observed_remission_cif = eval_step(aj_tbl$observed_remission_cif, aj_tbl$time_year, horizons),
-    observed_all_event_free = {
-      vals <- vapply(horizons, function(hh) {
-        idx <- max(c(0L, which(aj_tbl$time_year <= hh)))
-        if (idx == 0L) {
-          return(1)
-        }
-        aj_tbl$observed_all_event_free[[idx]]
-      }, numeric(1))
-      vals
-    }
+    observed_all_event_free = vapply(horizons, function(hh) {
+      idx <- max(c(0L, which(aj_tbl$time_year <= hh)))
+      if (idx == 0L) return(1)
+      aj_tbl$observed_all_event_free[[idx]]
+    }, numeric(1))
   )
 }
 
 build_stage8b_ipcw_reference <- function(df, horizons) {
   censor_fit <- survival::survfit(survival::Surv(time_year, status_num == 0L) ~ 1, data = df)
   aj_ref <- build_aalen_johansen_reference(df, horizons)
-  
+
   out_rows <- lapply(horizons, function(hh) {
     G_h <- pmax(km_step_eval(censor_fit, hh), 1e-8)
-    
     G_tminus <- pmax(km_step_eval(censor_fit, pmax(df$time_year - 1e-10, 0)), 1e-8)
     G_t <- pmax(km_step_eval(censor_fit, df$time_year), 1e-8)
-    
+
     w_case <- ifelse(df$status_num == 1L & df$time_year <= hh, 1 / G_tminus, 0)
     w_control <- ifelse(
       df$status_num == 2L & df$time_year <= hh,
       1 / G_t,
       ifelse(df$time_year > hh, 1 / G_h, 0)
     )
-    
+
     aj_row <- aj_ref %>% filter(horizon_year == hh)
-    
+
     tibble(
       horizon_year = as.integer(hh),
       observed_transition_cif = aj_row$observed_transition_cif[[1]],
@@ -947,16 +768,145 @@ build_stage8b_ipcw_reference <- function(df, horizons) {
       w_control = list(w_control)
     )
   })
-  
+
   bind_rows(out_rows)
 }
 
+stage8b_support_tier_from_grid <- function(dataset, horizon_year) {
+  dataset <- as.character(dataset)
+  horizon_year <- as.integer(safe_numeric(horizon_year))
+  dplyr::case_when(
+    dataset == "PNU" & horizon_year == 1L ~ "primary_supported",
+    dataset == "PNU" & horizon_year == 2L ~ "sensitivity",
+    dataset == "PNU" & horizon_year >= 3L ~ "projection",
+    dataset %in% c("SNU", "merged") & horizon_year %in% c(1L, 2L) ~ "primary_supported",
+    dataset %in% c("SNU", "merged") & horizon_year <= 5L ~ "secondary",
+    TRUE ~ "projection"
+  )
+}
+
+stage8b_horizon_evidence_from_grid <- function(dataset, horizon_year) {
+  dataset <- as.character(dataset)
+  horizon_year <- as.integer(safe_numeric(horizon_year))
+  dplyr::case_when(
+    dataset == "PNU" & horizon_year == 1L ~ "directly_observed_data_supported",
+    dataset == "PNU" & horizon_year == 2L ~ "partly_model_dependent",
+    dataset == "PNU" & horizon_year >= 3L ~ "mostly_extrapolated",
+    dataset %in% c("SNU", "merged") & horizon_year %in% c(1L, 2L) ~ "directly_observed_data_supported",
+    dataset %in% c("SNU", "merged") & horizon_year <= 5L ~ "partly_model_dependent",
+    TRUE ~ "mostly_extrapolated"
+  )
+}
+
+stage8b_claim_restriction_from_evidence <- function(horizon_evidence_class) {
+  dplyr::case_when(
+    horizon_evidence_class == "directly_observed_data_supported" ~ "primary_claim_allowed",
+    horizon_evidence_class == "partly_model_dependent" ~ "secondary_or_sensitivity_only",
+    TRUE ~ "projection_only"
+  )
+}
+
+stage8b_interpretation_note_from_grid <- function(dataset, horizon_year, support_tier, horizon_evidence_class, claim_restriction_flag) {
+  dataset <- as.character(dataset)
+  horizon_year <- as.integer(safe_numeric(horizon_year))
+  dplyr::case_when(
+    claim_restriction_flag == "primary_claim_allowed" ~
+      "Primary supported horizon with comparatively direct follow-up support.",
+    dataset == "PNU" & horizon_year == 2L ~
+      "Sensitivity horizon for PNU; partly model-dependent and not for primary claims.",
+    claim_restriction_flag == "secondary_or_sensitivity_only" ~
+      "Secondary or sensitivity horizon with explicit model dependence.",
+    TRUE ~ "Projection-dominant horizon."
+  )
+}
+
+build_horizon_annotation_from_stage1 <- function(horizon_registry, datasets, horizons) {
+  dataset_levels <- if (is.list(datasets)) names(datasets) else as.character(datasets)
+  out <- tibble::as_tibble(horizon_registry)
+
+  if (nrow(out) == 0L) {
+    out <- tidyr::crossing(
+      dataset = dataset_levels,
+      horizon_year = as.integer(horizons)
+    )
+  }
+
+  if (!("dataset" %in% names(out))) {
+    if ("dataset_key" %in% names(out)) {
+      out$dataset <- out$dataset_key
+    } else {
+      stop("Stage1 horizon registry must contain `dataset` or `dataset_key`.", call. = FALSE)
+    }
+  }
+  if (!("dataset_key" %in% names(out))) out$dataset_key <- out$dataset
+  if (!("horizon_year" %in% names(out))) {
+    horizon_col <- first_existing_name(out, c("horizon", "year"))
+    if (is.null(horizon_col)) {
+      stop("Stage1 horizon registry must contain `horizon_year` (or `horizon` / `year`).", call. = FALSE)
+    }
+    out$horizon_year <- out[[horizon_col]]
+  }
+  if (!("support_tier" %in% names(out))) out$support_tier <- NA_character_
+  if (!("support_tier_standard" %in% names(out))) out$support_tier_standard <- NA_character_
+  if (!("horizon_evidence_class" %in% names(out))) out$horizon_evidence_class <- NA_character_
+  if (!("claim_restriction_flag" %in% names(out))) out$claim_restriction_flag <- NA_character_
+  if (!("interpretation_note" %in% names(out))) out$interpretation_note <- NA_character_
+
+  out %>%
+    dplyr::mutate(
+      dataset = as.character(dataset),
+      dataset_key = dplyr::coalesce(as.character(dataset_key), as.character(dataset)),
+      horizon_year = as.integer(safe_numeric(horizon_year)),
+      support_tier = dplyr::coalesce(
+        dplyr::na_if(as.character(support_tier), ""),
+        dplyr::na_if(as.character(support_tier_standard), ""),
+        stage8b_support_tier_from_grid(dataset, horizon_year)
+      ),
+      horizon_evidence_class = dplyr::coalesce(
+        dplyr::na_if(as.character(horizon_evidence_class), ""),
+        stage8b_horizon_evidence_from_grid(dataset, horizon_year)
+      ),
+      claim_restriction_flag = dplyr::coalesce(
+        dplyr::na_if(as.character(claim_restriction_flag), ""),
+        stage8b_claim_restriction_from_evidence(horizon_evidence_class)
+      ),
+      interpretation_note = dplyr::coalesce(
+        dplyr::na_if(as.character(interpretation_note), ""),
+        stage8b_interpretation_note_from_grid(
+          dataset = dataset,
+          horizon_year = horizon_year,
+          support_tier = support_tier,
+          horizon_evidence_class = horizon_evidence_class,
+          claim_restriction_flag = claim_restriction_flag
+        )
+      )
+    ) %>%
+    dplyr::transmute(
+      dataset = as.character(dataset),
+      dataset_key = as.character(dataset_key),
+      horizon_year = as.integer(horizon_year),
+      support_tier = as.character(support_tier),
+      horizon_evidence_class = as.character(horizon_evidence_class),
+      claim_restriction_flag = as.character(claim_restriction_flag),
+      interpretation_note = as.character(interpretation_note)
+    ) %>%
+    dplyr::filter(dataset %in% c("PNU", "SNU", "merged"), horizon_year %in% as.integer(horizons)) %>%
+    dplyr::distinct(dataset, horizon_year, .keep_all = TRUE) %>%
+    dplyr::arrange(factor(dataset, levels = c("PNU", "SNU", "merged")), horizon_year)
+}
+
 make_stage8b_support_registry <- function(horizon_registry_stage1, datasets = c("PNU", "SNU", "merged"), horizons = 1:10) {
-  out <- tibble::as_tibble(horizon_registry_stage1)
+  out <- build_horizon_annotation_from_stage1(
+    horizon_registry = horizon_registry_stage1,
+    datasets = datasets,
+    horizons = horizons
+  )
+
   if (nrow(out) == 0L) {
     return(
       tidyr::expand_grid(dataset = datasets, horizon_year = as.integer(horizons)) %>%
-        mutate(
+        dplyr::mutate(
+          dataset_key = dataset,
           support_tier = NA_character_,
           support_tier_standard = NA_character_,
           horizon_evidence_class = NA_character_,
@@ -965,25 +915,24 @@ make_stage8b_support_registry <- function(horizon_registry_stage1, datasets = c(
         )
     )
   }
-  
+
   out %>%
-    transmute(
+    dplyr::transmute(
       dataset = as.character(dataset),
-      dataset_key = as.character(dataset_key %||% dataset),
+      dataset_key = as.character(dataset_key),
       horizon_year = as.integer(safe_numeric(horizon_year)),
       support_tier = as.character(support_tier),
-      support_tier_standard = as.character(support_tier_standard %||% support_tier),
+      support_tier_standard = as.character(support_tier),
       horizon_evidence_class = as.character(horizon_evidence_class),
       claim_restriction_flag = as.character(claim_restriction_flag),
       interpretation_note = as.character(interpretation_note)
     ) %>%
-    filter(dataset %in% datasets, horizon_year %in% horizons) %>%
-    distinct(dataset, horizon_year, .keep_all = TRUE) %>%
-    arrange(factor(dataset, levels = datasets), horizon_year)
+    dplyr::filter(dataset %in% datasets, horizon_year %in% as.integer(horizons)) %>%
+    dplyr::distinct(dataset, horizon_year, .keep_all = TRUE) %>%
+    dplyr::arrange(factor(dataset, levels = datasets), horizon_year)
 }
 
-# 🔴 Define: Stage8B posterior math and numerical integration ===============================
-## 🟠 Define: transition-family, remission, and CIF integration helpers ===============================
+
 interval_exposure_vector <- function(t, cuts) {
   lower <- cuts[-length(cuts)]
   upper <- cuts[-1]
@@ -994,9 +943,7 @@ interval_index_for_time <- function(t, cuts) {
   lower <- cuts[-length(cuts)]
   upper <- cuts[-1]
   idx <- which(t >= lower & t < upper)
-  if (length(idx) == 0L) {
-    return(length(lower))
-  }
+  if (length(idx) == 0L) return(length(lower))
   idx[[1L]]
 }
 
@@ -1004,14 +951,14 @@ compute_stage8b_linear_terms <- function(draws, X_inc, X_lat, X_rem, alpha_prior
   eta_inc <- draws$beta_inc %*% t(X_inc)
   eta_inc <- sweep(eta_inc, 1, alpha_prior_center + draws$delta0, FUN = "+")
   pi_mat <- plogis(eta_inc)
-  
+
   mu_lat <- draws$gamma_lat %*% t(X_lat)
   mu_lat <- sweep(mu_lat, 1, draws$gamma0, FUN = "+")
   median_mat <- exp(mu_lat)
-  
+
   eta_rem <- draws$beta_rem %*% t(X_rem)
   eta_rem <- sweep(eta_rem, 1, draws$xi0, FUN = "+")
-  
+
   list(
     pi_mat = pmin(pmax(pi_mat, 1e-12), 1 - 1e-12),
     cure_prob_mat = pmin(pmax(1 - pi_mat, 1e-12), 1 - 1e-12),
@@ -1051,7 +998,7 @@ transition_family_components <- function(t, family_code, mu_lat_mat, median_mat,
   } else {
     stop(sprintf("Unknown family code `%s`.", family_code), call. = FALSE)
   }
-  
+
   list(
     Su = pmin(pmax(Su, 1e-12), 1 - 1e-12),
     haz = pmax(haz, 1e-12),
@@ -1063,11 +1010,11 @@ remission_components_piecewise <- function(t, eta_rem_mat, log_rho_rem_mat, rem_
   expo <- interval_exposure_vector(t, rem_cuts)
   base_draw <- as.vector(exp(log_rho_rem_mat) %*% expo)
   H2 <- sweep(exp(eta_rem_mat), 1, base_draw, FUN = "*")
-  
+
   interval_idx <- interval_index_for_time(t, rem_cuts)
   rho_t_draw <- exp(log_rho_rem_mat[, interval_idx])
   h2 <- sweep(exp(eta_rem_mat), 1, rho_t_draw, FUN = "*")
-  
+
   list(
     H2 = pmax(H2, 0),
     G2 = pmin(pmax(exp(-H2), 1e-12), 1),
@@ -1078,46 +1025,40 @@ remission_components_piecewise <- function(t, eta_rem_mat, log_rho_rem_mat, rem_
 build_stage8b_prediction_trajectories <- function(state, draws, model_row, horizons, integration_step_year, rem_cuts) {
   max_h <- max(horizons)
   bounds <- seq(0, max_h, by = integration_step_year)
-  if (tail(bounds, 1) < max_h) {
-    bounds <- c(bounds, max_h)
-  }
+  if (tail(bounds, 1) < max_h) bounds <- c(bounds, max_h)
   mids <- (bounds[-1] + bounds[-length(bounds)]) / 2
   widths <- diff(bounds)
-  
+
   n_draw <- nrow(state$pi_mat)
   n_subj <- ncol(state$pi_mat)
-  
   F1_cum <- matrix(0, nrow = n_draw, ncol = n_subj)
   F2_cum <- matrix(0, nrow = n_draw, ncol = n_subj)
-  
+
   horizon_results <- vector("list", length(horizons))
   names(horizon_results) <- as.character(horizons)
-  
   step_to_horizon <- findInterval(horizons, vec = bounds[-1], left.open = FALSE)
-  
   horizon_counter <- 1L
+
   for (jj in seq_along(mids)) {
     tt <- max(mids[[jj]], 1e-8)
     comp1 <- transition_family_components(tt, model_row$family_code[[1]], state$mu_lat_mat, state$median_mat, draws)
     comp2 <- remission_components_piecewise(tt, state$eta_rem_mat, draws$log_rho_rem, rem_cuts)
-    
+
     M1 <- (1 - state$pi_mat) + state$pi_mat * comp1$Su
     trans_inc <- state$pi_mat * comp1$fu * comp2$G2 * widths[[jj]]
     rem_inc <- comp2$h2 * comp2$G2 * M1 * widths[[jj]]
-    
+
     F1_cum <- F1_cum + trans_inc
     F2_cum <- F2_cum + rem_inc
-    
+
     while (horizon_counter <= length(horizons) && step_to_horizon[[horizon_counter]] == jj) {
       hh <- horizons[[horizon_counter]]
       comp1_h <- transition_family_components(max(hh, 1e-8), model_row$family_code[[1]], state$mu_lat_mat, state$median_mat, draws)
       comp2_h <- remission_components_piecewise(max(hh, 1e-8), state$eta_rem_mat, draws$log_rho_rem, rem_cuts)
-      
       M1_h <- (1 - state$pi_mat) + state$pi_mat * comp1_h$Su
       S_all_h <- comp2_h$G2 * M1_h
-      
       hazard_trans_pop <- (state$pi_mat * comp1_h$fu) / pmax(M1_h, 1e-12)
-      
+
       horizon_results[[as.character(hh)]] <- list(
         transition_cif = pmin(pmax(F1_cum, 0), 1),
         remission_cif = pmin(pmax(F2_cum, 0), 1),
@@ -1129,7 +1070,7 @@ build_stage8b_prediction_trajectories <- function(state, draws, model_row, horiz
       horizon_counter <- horizon_counter + 1L
     }
   }
-  
+
   horizon_results
 }
 
@@ -1145,7 +1086,7 @@ compute_stage8b_degeneracy <- function(pi_mat, median_mat, transition_cif_suppor
     rep(FALSE, nrow(pi_mat))
   }
   any_problem <- near_zero_pi | near_one_pi | near_zero_median | huge_median_flat
-  
+
   tibble(
     near_zero_pi_rate = mean(near_zero_pi),
     near_one_pi_rate = mean(near_one_pi),
@@ -1162,31 +1103,22 @@ compute_stage8b_classification_summary <- function(risk_draws, horizon_row, thre
   denom_case <- as.numeric(horizon_row$denom_case)
   denom_control <- as.numeric(horizon_row$denom_control)
   n_subject <- ncol(risk_draws)
-  
+
   out_list <- vector("list", length(thresholds))
   for (jj in seq_along(thresholds)) {
     thr <- thresholds[[jj]]
     H_mat <- (risk_draws >= thr) * 1
-    
-    if (denom_case > 0) {
-      tpr_draw <- as.vector(H_mat %*% w_case) / denom_case
-    } else {
-      tpr_draw <- rep(NA_real_, nrow(risk_draws))
-    }
-    
-    if (denom_control > 0) {
-      fpr_draw <- as.vector(H_mat %*% w_control) / denom_control
-    } else {
-      fpr_draw <- rep(NA_real_, nrow(risk_draws))
-    }
-    
+
+    if (denom_case > 0) tpr_draw <- as.vector(H_mat %*% w_case) / denom_case else tpr_draw <- rep(NA_real_, nrow(risk_draws))
+    if (denom_control > 0) fpr_draw <- as.vector(H_mat %*% w_control) / denom_control else fpr_draw <- rep(NA_real_, nrow(risk_draws))
+
     pos_rate_draw <- prevalence * tpr_draw + (1 - prevalence) * fpr_draw
     ppv_draw <- ifelse(pos_rate_draw > 0, prevalence * tpr_draw / pos_rate_draw, NA_real_)
     fp_burden_draw <- (1 - prevalence) * fpr_draw
     fp100_draw <- 100 * fp_burden_draw
     fp_count_draw <- n_subject * fp_burden_draw
     nb_draw <- prevalence * tpr_draw - (1 - prevalence) * fpr_draw * (thr / (1 - thr))
-    
+
     out_list[[jj]] <- tibble(
       threshold = thr,
       positive_rate_mean = mean(pos_rate_draw, na.rm = TRUE),
@@ -1223,18 +1155,15 @@ compute_stage8b_classification_summary <- function(risk_draws, horizon_row, thre
       NB_q975 = stats::quantile(nb_draw, 0.975, na.rm = TRUE, names = FALSE)
     )
   }
-  
+
   bind_rows(out_list)
 }
 
 classify_hazard_shape <- function(hazard_values, tol = 1e-6) {
   hv <- as.numeric(hazard_values)
-  if (length(hv) < 2L || all(is.na(hv))) {
-    return("undetermined")
-  }
+  if (length(hv) < 2L || all(is.na(hv))) return("undetermined")
   diffs <- diff(hv)
   diffs[abs(diffs) < tol] <- 0
-  
   if (all(diffs >= 0)) {
     if (all(diffs == 0)) return("flat")
     return("monotone_increasing")
@@ -1247,16 +1176,11 @@ classify_hazard_shape <- function(hazard_values, tol = 1e-6) {
   if (peak_idx > 1L && peak_idx < length(hv)) {
     left_ok <- all(diff(hv[1:peak_idx]) >= -tol)
     right_ok <- all(diff(hv[peak_idx:length(hv)]) <= tol)
-    if (left_ok && right_ok) {
-      return("unimodal")
-    }
+    if (left_ok && right_ok) return("unimodal")
   }
   "irregular"
 }
 
-
-# 🔴 Define: prior predictive summaries, anchor updates, and diagnostics ===============================
-## 🟠 Define: summary helpers, prior predictive simulation, and anchor-update tables ===============================
 summary_scalar <- function(x) {
   tibble(
     mean = mean(x, na.rm = TRUE),
@@ -1278,9 +1202,7 @@ summarize_cols_matrix <- function(mat) {
 }
 
 ppc_horizons_for_dataset <- function(dataset_name) {
-  if (dataset_name == "PNU") {
-    return(c(1L, 2L))
-  }
+  if (dataset_name == "PNU") return(c(1L, 2L))
   c(1L, 2L, 5L)
 }
 
@@ -1293,9 +1215,7 @@ get_stage8b_site_prior_indices <- function(model_row, design_bundle) {
 }
 
 apply_stage8b_site_prior_draws <- function(mat, idx, site_prior_family, scale) {
-  if (is.na(idx) || idx <= 0L || idx > ncol(mat)) {
-    return(mat)
-  }
+  if (is.na(idx) || idx <= 0L || idx > ncol(mat)) return(mat)
   if (identical(site_prior_family, "student_t3_0_1_sensitivity")) {
     mat[, idx] <- stats::rt(nrow(mat), df = 3) * scale
   }
@@ -1328,7 +1248,7 @@ simulate_stage8b_prior_predictive <- function(dataset_df, model_row, design_bund
   K_lat <- ncol(design_bundle$X_lat)
   K_rem <- ncol(design_bundle$X_rem)
   J_rem <- length(design_bundle$rem_cuts) - 1L
-  
+
   sim_draws <- list(
     delta0 = rnorm(n_draws, 0, prior_spec$sd_delta),
     beta_inc = matrix(
@@ -1361,26 +1281,11 @@ simulate_stage8b_prior_predictive <- function(dataset_df, model_row, design_bund
     log_sigma_LN = rnorm(n_draws, 0, prior_spec$sd_log_sigma_LN),
     psi_LL = rnorm(n_draws, 0, prior_spec$sd_psi_LL)
   )
-  
-  sim_draws$beta_inc <- apply_stage8b_site_prior_draws(
-    sim_draws$beta_inc,
-    idx_info$inc_idx,
-    model_row$site_prior_family[[1]],
-    prior_spec$sd_site
-  )
-  sim_draws$gamma_lat <- apply_stage8b_site_prior_draws(
-    sim_draws$gamma_lat,
-    idx_info$lat_idx,
-    model_row$site_prior_family[[1]],
-    prior_spec$sd_site
-  )
-  sim_draws$beta_rem <- apply_stage8b_site_prior_draws(
-    sim_draws$beta_rem,
-    idx_info$rem_idx,
-    model_row$site_prior_family[[1]],
-    prior_spec$sd_site
-  )
-  
+
+  sim_draws$beta_inc <- apply_stage8b_site_prior_draws(sim_draws$beta_inc, idx_info$inc_idx, model_row$site_prior_family[[1]], prior_spec$sd_site)
+  sim_draws$gamma_lat <- apply_stage8b_site_prior_draws(sim_draws$gamma_lat, idx_info$lat_idx, model_row$site_prior_family[[1]], prior_spec$sd_site)
+  sim_draws$beta_rem <- apply_stage8b_site_prior_draws(sim_draws$beta_rem, idx_info$rem_idx, model_row$site_prior_family[[1]], prior_spec$sd_site)
+
   state <- compute_stage8b_linear_terms(
     draws = sim_draws,
     X_inc = design_bundle$X_inc,
@@ -1388,7 +1293,7 @@ simulate_stage8b_prior_predictive <- function(dataset_df, model_row, design_bund
     X_rem = design_bundle$X_rem,
     alpha_prior_center = design_bundle$alpha_prior_center
   )
-  
+
   pred <- build_stage8b_prediction_trajectories(
     state = state,
     draws = sim_draws,
@@ -1397,108 +1302,32 @@ simulate_stage8b_prior_predictive <- function(dataset_df, model_row, design_bund
     integration_step_year = integration_step_year,
     rem_cuts = design_bundle$rem_cuts
   )
-  
+
   supported_horizons <- intersect(as.character(ppc_horizons_for_dataset(model_row$dataset[[1]])), names(pred))
   transition_supported <- lapply(supported_horizons, function(hh) pred[[hh]]$transition_cif)
   degeneracy <- compute_stage8b_degeneracy(state$pi_mat, state$median_mat, transition_supported)
-  
+
   out_rows <- list(
-    tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "susceptible_fraction",
-      horizon = NA_integer_,
-      summary_scalar(rowMeans(state$pi_mat)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    ),
-    tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "cure_fraction",
-      horizon = NA_integer_,
-      summary_scalar(rowMeans(1 - state$pi_mat)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    ),
-    tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "median_susceptible_time",
-      horizon = NA_integer_,
-      summary_scalar(apply(state$median_mat, 1, stats::median)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    )
+    tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "susceptible_fraction", horizon = NA_integer_, summary_scalar(rowMeans(state$pi_mat)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]]),
+    tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "cure_fraction", horizon = NA_integer_, summary_scalar(rowMeans(1 - state$pi_mat)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]]),
+    tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "median_susceptible_time", horizon = NA_integer_, summary_scalar(apply(state$median_mat, 1, stats::median)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]])
   )
-  
+
   for (hh in sort(unique(as.integer(horizons_eval)))) {
     pred_h <- pred[[as.character(hh)]]
-    out_rows[[length(out_rows) + 1L]] <- tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "transition_cif",
-      horizon = hh,
-      summary_scalar(rowMeans(pred_h$transition_cif)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    )
-    out_rows[[length(out_rows) + 1L]] <- tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "remission_cif",
-      horizon = hh,
-      summary_scalar(rowMeans(pred_h$remission_cif)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    )
-    out_rows[[length(out_rows) + 1L]] <- tibble(
-      dataset_key = model_row$dataset[[1]],
-      branch = "Stage8B",
-      model_id = model_row$model_id[[1]],
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      risk_scale = model_row$risk_scale[[1]],
-      prior_branch = model_row$prior_branch[[1]],
-      site_prior_family = model_row$site_prior_family[[1]],
-      metric = "all_event_free",
-      horizon = hh,
-      summary_scalar(rowMeans(pred_h$all_event_free)),
-      prior_degenerate_flag = degeneracy$degenerate_flag[[1]]
-    )
+    out_rows[[length(out_rows) + 1L]] <- tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "transition_cif", horizon = hh, summary_scalar(rowMeans(pred_h$transition_cif)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]])
+    out_rows[[length(out_rows) + 1L]] <- tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "remission_cif", horizon = hh, summary_scalar(rowMeans(pred_h$remission_cif)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]])
+    out_rows[[length(out_rows) + 1L]] <- tibble(dataset_key = model_row$dataset[[1]], branch = "Stage8B", model_id = model_row$model_id[[1]], retained_fit_id = model_row$retained_fit_id[[1]], risk_scale = model_row$risk_scale[[1]], prior_branch = model_row$prior_branch[[1]], site_prior_family = model_row$site_prior_family[[1]], metric = "all_event_free", horizon = hh, summary_scalar(rowMeans(pred_h$all_event_free)), prior_degenerate_flag = degeneracy$degenerate_flag[[1]])
   }
-  
+
   bind_rows(out_rows)
 }
 
 annotate_stage8b_prior_predictive <- function(df) {
   if (nrow_or_zero(df) == 0L) {
-    return(empty_stage8b_prior_predictive_summary() %>%
-             mutate(
-               prior_tail_warning_flag = logical(),
-               prior_tail_warning_detail = character()
-             ))
+    return(empty_stage8b_prior_predictive_summary() %>% mutate(prior_tail_warning_flag = logical(), prior_tail_warning_detail = character()))
   }
-  
+
   tibble::as_tibble(df) %>%
     mutate(
       horizon = as.integer(safe_numeric(horizon)),
@@ -1510,16 +1339,14 @@ annotate_stage8b_prior_predictive <- function(df) {
       prior_tail_warning_flag = metric == "median_susceptible_time" &
         ((mean > prior_tail_warning_mean_years) | (q975 > prior_tail_warning_q975_years)),
       prior_tail_warning_detail = case_when(
-        metric == "median_susceptible_time" & mean > prior_tail_warning_mean_years & q975 > prior_tail_warning_q975_years ~
-          paste0("Prior median susceptible time mean > ", prior_tail_warning_mean_years, " years and q975 > ", prior_tail_warning_q975_years, " years."),
-        metric == "median_susceptible_time" & mean > prior_tail_warning_mean_years ~
-          paste0("Prior median susceptible time mean > ", prior_tail_warning_mean_years, " years."),
-        metric == "median_susceptible_time" & q975 > prior_tail_warning_q975_years ~
-          paste0("Prior median susceptible time q975 > ", prior_tail_warning_q975_years, " years."),
+        metric == "median_susceptible_time" & mean > prior_tail_warning_mean_years & q975 > prior_tail_warning_q975_years ~ paste0("Prior median susceptible time mean > ", prior_tail_warning_mean_years, " years and q975 > ", prior_tail_warning_q975_years, " years."),
+        metric == "median_susceptible_time" & mean > prior_tail_warning_mean_years ~ paste0("Prior median susceptible time mean > ", prior_tail_warning_mean_years, " years."),
+        metric == "median_susceptible_time" & q975 > prior_tail_warning_q975_years ~ paste0("Prior median susceptible time q975 > ", prior_tail_warning_q975_years, " years."),
         TRUE ~ NA_character_
       )
     )
 }
+
 
 make_stage8b_anchor_cells <- function(model_row) {
   age_band_df <- tibble::tribble(
@@ -1531,7 +1358,7 @@ make_stage8b_anchor_cells <- function(model_row) {
     0L, 0L, 1L, "Female_30plus",
     1L, 0L, 1L, "Male_30plus"
   )
-  
+
   site_levels <- if (model_row$dataset[[1]] == "merged" && isTRUE(model_row$incidence_site_indicator[[1]])) {
     c("PNU", "SNU")
   } else if (model_row$dataset[[1]] == "merged") {
@@ -1539,26 +1366,22 @@ make_stage8b_anchor_cells <- function(model_row) {
   } else {
     model_row$dataset[[1]]
   }
-  
+
   tidyr::crossing(age_band_df, tibble(site_level = site_levels)) %>%
     mutate(
       sex_x_age20_29 = sex_num * age20_29,
       sex_x_age30plus = sex_num * age30plus,
       site_SNU = as.integer(site_level == "SNU"),
-      age_sex_anchor_cell = ifelse(site_level %in% c("pooled", "PNU", "SNU"),
-                                   paste0(cell_label, "__", site_level),
-                                   cell_label)
+      age_sex_anchor_cell = ifelse(site_level %in% c("pooled", "PNU", "SNU"), paste0(cell_label, "__", site_level), cell_label)
     )
 }
 
 make_stage8b_incidence_anchor_update <- function(model_row, design_bundle, prior_spec, draws_compact) {
-  if (!identical(model_row$prior_branch[[1]], "anchor_informed")) {
-    return(tibble())
-  }
-  
+  if (!identical(model_row$prior_branch[[1]], "anchor_informed")) return(tibble())
+
   cells <- make_stage8b_anchor_cells(model_row)
   out_rows <- vector("list", nrow(cells))
-  
+
   for (ii in seq_len(nrow(cells))) {
     one <- cells[ii, , drop = FALSE]
     x_vec <- c(
@@ -1571,14 +1394,14 @@ make_stage8b_incidence_anchor_update <- function(model_row, design_bundle, prior
     if (isTRUE(model_row$incidence_site_indicator[[1]])) {
       x_vec <- c(x_vec, site_SNU = one$site_SNU[[1]])
     }
-    
+
     prior_center_logit <- design_bundle$alpha_prior_center + sum(design_bundle$mu_beta_inc * x_vec)
     external_one_year_risk <- plogis(prior_center_logit)
     external_incidence_rate_per10k <- -10000 * log(pmax(1 - external_one_year_risk, 1e-12))
-    
+
     post_logit <- design_bundle$alpha_prior_center + draws_compact$delta0 + as.vector(draws_compact$beta_inc %*% x_vec)
     post_risk <- plogis(post_logit)
-    
+
     out_rows[[ii]] <- tibble(
       dataset_key = model_row$dataset[[1]],
       branch = "Stage8B",
@@ -1602,12 +1425,10 @@ make_stage8b_incidence_anchor_update <- function(model_row, design_bundle, prior
       posterior_minus_prior_risk = mean(post_risk) - external_one_year_risk
     )
   }
-  
+
   bind_rows(out_rows)
 }
 
-# 🔴 Define: Stan compilation, draw extraction, and diagnostics ===============================
-## 🟠 Define: Stan model, compact draws, and information criteria ===============================
 compile_stage8b_stan_model <- function() {
   stan_code <- r"(
 functions {
@@ -1845,8 +1666,9 @@ generated quantities {
   }
 }
 )"
-rstan::stan_model(model_code = stan_code, model_name = "stage8b_bayesian_competing_risk_cure")
+  rstan::stan_model(model_code = stan_code, model_name = "stage8b_bayesian_competing_risk_cure")
 }
+
 
 extract_stage8b_draws_compact <- function(fit, K_inc, K_lat, K_rem, J_rem) {
   ext <- rstan::extract(
@@ -1855,19 +1677,19 @@ extract_stage8b_draws_compact <- function(fit, K_inc, K_lat, K_rem, J_rem) {
     permuted = TRUE,
     inc_warmup = FALSE
   )
-  
+
   beta_inc <- ext$beta_inc
   gamma_lat <- ext$gamma_lat
   beta_rem <- ext$beta_rem
   log_rho_rem <- ext$log_rho_rem
   log_lik <- ext$log_lik
-  
+
   if (is.null(dim(beta_inc))) beta_inc <- matrix(beta_inc, ncol = K_inc)
   if (is.null(dim(gamma_lat))) gamma_lat <- matrix(gamma_lat, ncol = K_lat)
   if (is.null(dim(beta_rem))) beta_rem <- matrix(beta_rem, ncol = K_rem)
   if (is.null(dim(log_rho_rem))) log_rho_rem <- matrix(log_rho_rem, ncol = J_rem)
   if (is.null(dim(log_lik))) log_lik <- matrix(log_lik, nrow = length(ext$delta0))
-  
+
   list(
     delta0 = as.numeric(ext$delta0),
     beta_inc = beta_inc,
@@ -1899,21 +1721,16 @@ compute_information_criteria <- function(log_lik) {
     loo_warning_flag = FALSE,
     info_criteria_warning_detail = NA_character_
   )
-  
-  if (is.null(log_lik) || !requireNamespace("loo", quietly = TRUE)) {
-    return(out)
-  }
-  
+
+  if (is.null(log_lik) || !requireNamespace("loo", quietly = TRUE)) return(out)
+
   warning_texts <- character()
   collect_warning <- function(w) {
     warning_texts <<- c(warning_texts, conditionMessage(w))
     tryInvokeRestart("muffleWarning")
   }
-  
-  waic_obj <- withCallingHandlers(
-    tryCatch(loo::waic(log_lik), error = function(e) e),
-    warning = collect_warning
-  )
+
+  waic_obj <- withCallingHandlers(tryCatch(loo::waic(log_lik), error = function(e) e), warning = collect_warning)
   if (!inherits(waic_obj, "error")) {
     if ("waic" %in% rownames(waic_obj$estimates)) out$waic <- as.numeric(waic_obj$estimates["waic", "Estimate"])
     if ("p_waic" %in% rownames(waic_obj$estimates)) out$p_waic <- as.numeric(waic_obj$estimates["p_waic", "Estimate"])
@@ -1925,11 +1742,8 @@ compute_information_criteria <- function(log_lik) {
   } else {
     warning_texts <- c(warning_texts, paste0("waic_error: ", conditionMessage(waic_obj)))
   }
-  
-  loo_obj <- withCallingHandlers(
-    tryCatch(loo::loo(log_lik), error = function(e) e),
-    warning = collect_warning
-  )
+
+  loo_obj <- withCallingHandlers(tryCatch(loo::loo(log_lik), error = function(e) e), warning = collect_warning)
   if (!inherits(loo_obj, "error")) {
     if ("looic" %in% rownames(loo_obj$estimates)) out$looic <- as.numeric(loo_obj$estimates["looic", "Estimate"])
     if ("p_loo" %in% rownames(loo_obj$estimates)) out$p_loo <- as.numeric(loo_obj$estimates["p_loo", "Estimate"])
@@ -1943,12 +1757,10 @@ compute_information_criteria <- function(log_lik) {
   } else {
     warning_texts <- c(warning_texts, paste0("loo_error: ", conditionMessage(loo_obj)))
   }
-  
+
   out$waic_warning_flag <- any(grepl("p_waic", warning_texts, fixed = TRUE))
   out$loo_warning_flag <- any(grepl("Pareto k", warning_texts, fixed = TRUE))
-  if (length(warning_texts) > 0L) {
-    out$info_criteria_warning_detail <- paste(unique(warning_texts), collapse = " | ")
-  }
+  if (length(warning_texts) > 0L) out$info_criteria_warning_detail <- paste(unique(warning_texts), collapse = " | ")
   out
 }
 
@@ -1966,11 +1778,7 @@ select_stage8b_trace_parameters <- function(family_code, K_inc, K_lat, K_rem, J_
 
 make_stage8b_trace_record <- function(fit, model_id, family_code, K_inc, K_lat, K_rem, J_rem) {
   pars <- select_stage8b_trace_parameters(family_code, K_inc, K_lat, K_rem, J_rem)
-  list(
-    model_id = model_id,
-    selected_pars = pars,
-    arr = as.array(fit, pars = pars)
-  )
+  list(model_id = model_id, selected_pars = pars, arr = as.array(fit, pars = pars))
 }
 
 plot_stage8b_trace_record <- function(trace_record) {
@@ -1980,53 +1788,37 @@ plot_stage8b_trace_record <- function(trace_record) {
   on.exit(par(par_old), add = TRUE)
   par(mfrow = c(2, 2), mar = c(3, 3, 3, 1))
   for (jj in seq_len(min(length(selected_pars), 4L))) {
-    matplot(
-      arr[, , jj],
-      type = "l",
-      lty = 1,
-      col = seq_len(dim(arr)[2]),
-      main = paste(trace_record$model_id, selected_pars[[jj]]),
-      xlab = "Iteration",
-      ylab = ""
-    )
+    matplot(arr[, , jj], type = "l", lty = 1, col = seq_len(dim(arr)[2]), main = paste(trace_record$model_id, selected_pars[[jj]]), xlab = "Iteration", ylab = "")
   }
   if (length(selected_pars) < 4L) {
     for (jj in seq_len(4L - length(selected_pars))) plot.new()
   }
 }
 
-safe_generate_stage8b_diagnostic_pdf <- function(
-    trace_records,
-    posterior_cohort_yearly,
-    posterior_classification,
-    ppc_summary,
-    final_path
-) {
+safe_generate_stage8b_diagnostic_pdf <- function(trace_records, posterior_cohort_yearly, posterior_classification, ppc_summary, final_path) {
   dir.create(dirname(final_path), recursive = TRUE, showWarnings = FALSE)
   tmp_pdf <- make_temp_output_path(final_path, tag = "tmp")
   pdf_open <- FALSE
-  
+
   close_pdf <- function() {
     if (isTRUE(pdf_open)) {
       try(grDevices::dev.off(), silent = TRUE)
       pdf_open <<- FALSE
     }
   }
-  
+
   on.exit({
     close_pdf()
     if (file.exists(tmp_pdf)) unlink(tmp_pdf)
   }, add = TRUE)
-  
+
   grDevices::pdf(tmp_pdf, width = 11, height = 8.5, onefile = TRUE)
   pdf_open <- TRUE
-  
+
   if (length(trace_records) > 0L) {
-    for (tr in trace_records) {
-      plot_stage8b_trace_record(tr)
-    }
+    for (tr in trace_records) plot_stage8b_trace_record(tr)
   }
-  
+
   if (nrow_or_zero(posterior_cohort_yearly) > 0L) {
     g1 <- posterior_cohort_yearly %>%
       ggplot(aes(x = horizon, y = transition_cif_mean, color = model_id, fill = model_id)) +
@@ -2034,21 +1826,19 @@ safe_generate_stage8b_diagnostic_pdf <- function(
       geom_line(linewidth = 0.7) +
       facet_wrap(~ dataset_key, scales = "free_y") +
       labs(title = "Stage 8B posterior transition CIF trajectories", x = "Horizon (years)", y = "Transition CIF") +
-      theme_bw() +
-      theme(legend.position = "none")
+      theme_bw() + theme(legend.position = "none")
     print(g1)
-    
+
     g2 <- posterior_cohort_yearly %>%
       ggplot(aes(x = horizon, y = remission_cif_mean, color = model_id, fill = model_id)) +
       geom_ribbon(aes(ymin = remission_cif_q025, ymax = remission_cif_q975), alpha = 0.15, linewidth = 0) +
       geom_line(linewidth = 0.7) +
       facet_wrap(~ dataset_key, scales = "free_y") +
       labs(title = "Stage 8B posterior remission CIF trajectories", x = "Horizon (years)", y = "Remission CIF") +
-      theme_bw() +
-      theme(legend.position = "none")
+      theme_bw() + theme(legend.position = "none")
     print(g2)
   }
-  
+
   if (nrow_or_zero(posterior_classification) > 0L) {
     nb_df <- posterior_classification %>% filter(horizon %in% c(1L, 2L, 5L))
     if (nrow(nb_df) > 0L) {
@@ -2058,12 +1848,11 @@ safe_generate_stage8b_diagnostic_pdf <- function(
         geom_line(linewidth = 0.7) +
         facet_grid(dataset_key ~ horizon, scales = "free_y") +
         labs(title = "Stage 8B net benefit by threshold", x = "Threshold", y = "Net benefit") +
-        theme_bw() +
-        theme(legend.position = "none")
+        theme_bw() + theme(legend.position = "none")
       print(g_nb)
     }
   }
-  
+
   if (nrow_or_zero(ppc_summary) > 0L) {
     g_ppc <- ppc_summary %>%
       ggplot(aes(x = horizon, y = posterior_mean_transition_cif, color = model_id)) +
@@ -2073,39 +1862,30 @@ safe_generate_stage8b_diagnostic_pdf <- function(
       geom_point(aes(y = observed_transition_cif), shape = 4, size = 2.0, stroke = 0.9, color = "black") +
       facet_wrap(~ dataset_key, scales = "free_y") +
       labs(title = "Stage 8B posterior predictive checks vs observed transition CIF", x = "Horizon (years)", y = "Transition CIF") +
-      theme_bw() +
-      theme(legend.position = "none")
+      theme_bw() + theme(legend.position = "none")
     print(g_ppc)
   }
-  
+
   if (length(trace_records) == 0L && nrow_or_zero(posterior_cohort_yearly) == 0L && nrow_or_zero(posterior_classification) == 0L && nrow_or_zero(ppc_summary) == 0L) {
     plot.new()
     text(0.5, 0.5, "No diagnostic pages were available for this Stage 8B run.")
   }
-  
+
   close_pdf()
-  if (!pdf_file_is_usable(tmp_pdf)) {
-    stop("Temporary Stage8B diagnostic PDF was not created correctly.", call. = FALSE)
-  }
+  if (!pdf_file_is_usable(tmp_pdf)) stop("Temporary Stage8B diagnostic PDF was not created correctly.", call. = FALSE)
   safe_promote_file(tmp_pdf, final_path)
   invisible(TRUE)
 }
 
 load_stage8b_reuse_bundle <- function(path) {
-  if (!file.exists(path)) {
-    return(NULL)
-  }
+  if (!file.exists(path)) return(NULL)
   tryCatch(readRDS(path), error = function(e) NULL)
 }
 
 is_stage8b_bundle_reusable <- function(bundle, model_row, dataset_df) {
-  if (is.null(bundle) || !is.list(bundle) || is.null(bundle$model_registry_row)) {
-    return(FALSE)
-  }
+  if (is.null(bundle) || !is.list(bundle) || is.null(bundle$model_registry_row)) return(FALSE)
   reg <- tibble::as_tibble(bundle$model_registry_row)
-  if (nrow(reg) != 1L) {
-    return(FALSE)
-  }
+  if (nrow(reg) != 1L) return(FALSE)
   identical(as.character(reg$model_id[[1]]), as.character(model_row$model_id[[1]])) &&
     identical(as.character(reg$dataset_key[[1]]), as.character(model_row$dataset[[1]])) &&
     identical(as.character(reg$fit_status[[1]]), "ok") &&
@@ -2113,8 +1893,6 @@ is_stage8b_bundle_reusable <- function(bundle, model_row, dataset_df) {
 }
 
 
-# 🔴 Load: Stage1 backbone, Stage6 carry-forward, and Stage8A comparators ===============================
-## 🟠 Define: backbone objects, common grids, and comparator registries ===============================
 stage1_backbone <- load_stage1_backbone(
   bundle_file = stage1_bundle_file,
   datasets_file = stage1_analysis_datasets_file,
@@ -2137,9 +1915,7 @@ thresholds_from_stage1 <- build_threshold_vector_from_stage1(stage1_backbone$reg
 horizons_year <- sort(unique(as.integer(horizon_registry_stage1$horizon_year)))
 risk_thresholds <- sort(unique(as.numeric(thresholds_from_stage1)))
 
-if (!identical(horizons_year, 1:10)) {
-  stop("Stage8B requires Stage1 horizon grid `1:10`.", call. = FALSE)
-}
+if (!identical(horizons_year, 1:10)) stop("Stage8B requires Stage1 horizon grid `1:10`.", call. = FALSE)
 if (length(risk_thresholds) == 0L || anyNA(risk_thresholds) || any(risk_thresholds <= 0 | risk_thresholds >= 1)) {
   stop("Stage8B risk thresholds must be probabilities strictly between 0 and 1.", call. = FALSE)
 }
@@ -2168,21 +1944,17 @@ dataset_registry_stage8b <- bind_rows(lapply(names(analysis_datasets), function(
 }))
 
 aj_registry <- lapply(names(analysis_datasets), function(ds) {
-  build_aalen_johansen_reference(analysis_datasets[[ds]], horizons_year) %>%
-    mutate(dataset_key = ds)
+  build_aalen_johansen_reference(analysis_datasets[[ds]], horizons_year) %>% mutate(dataset_key = ds)
 })
 names(aj_registry) <- names(analysis_datasets)
 
 ipcw_registry <- lapply(names(analysis_datasets), function(ds) {
-  build_stage8b_ipcw_reference(analysis_datasets[[ds]], horizons_year) %>%
-    mutate(dataset_key = ds)
+  build_stage8b_ipcw_reference(analysis_datasets[[ds]], horizons_year) %>% mutate(dataset_key = ds)
 })
 names(ipcw_registry) <- names(analysis_datasets)
 
 support_registry <- make_stage8b_support_registry(horizon_registry_stage1, datasets = names(analysis_datasets), horizons = horizons_year)
 
-# 🔴 Prepare: model grid, prior objects, and optional reuse plan ===============================
-## 🟠 Define: grid expansion, screening joins, and Stan setup ===============================
 prior_specs <- build_stage8b_prior_specs()
 
 model_grid <- build_stage8b_model_grid(
@@ -2193,14 +1965,11 @@ model_grid <- build_stage8b_model_grid(
 
 if (!is.null(run_model_ids)) {
   model_grid <- model_grid %>% filter(model_id %in% run_model_ids)
-  if (nrow(model_grid) == 0L) {
-    stop("`run_model_ids` filtered out all Stage8B models.", call. = FALSE)
-  }
+  if (nrow(model_grid) == 0L) stop("`run_model_ids` filtered out all Stage8B models.", call. = FALSE)
 }
 
 stage6_model_lookup <- build_stage6_model_lookup(screening_lookup_stage6, model_grid)
-model_grid <- model_grid %>%
-  left_join(stage6_model_lookup, by = "model_id")
+model_grid <- model_grid %>% left_join(stage6_model_lookup, by = "model_id")
 
 model_grid$stage8b_rds_path <- file.path(export_path, paste0(model_grid$model_id, "__bayes_stage8b_fit.rds"))
 model_grid$reuse_existing_fit <- FALSE
@@ -2215,30 +1984,20 @@ if (isTRUE(reuse_existing_stage8b_rds)) {
 n_models_reused <- sum(model_grid$reuse_existing_fit)
 n_models_to_fit <- sum(!model_grid$reuse_existing_fit)
 
-message(
-  "Stage8B reuse plan: ",
-  n_models_reused,
-  " model(s) reused; ",
-  n_models_to_fit,
-  " model(s) require fitting."
-)
+message("Stage8B reuse plan: ", n_models_reused, " model(s) reused; ", n_models_to_fit, " model(s) require fitting.")
 
 if (n_models_to_fit > 0L) {
   fit_packages <- c("rstan", "posterior", "loo")
   missing_fit_packages <- fit_packages[!vapply(fit_packages, requireNamespace, logical(1), quietly = TRUE)]
   if (length(missing_fit_packages) > 0L) {
-    stop(
-      "Install required fitting packages before running this script: ",
-      paste(missing_fit_packages, collapse = ", "),
-      call. = FALSE
-    )
+    stop("Install required fitting packages before running this script: ", paste(missing_fit_packages, collapse = ", "), call. = FALSE)
   }
-  
+
   suppressPackageStartupMessages({
     library(rstan)
     library(posterior)
   })
-  
+
   rstan_options(auto_write = TRUE)
   options(mc.cores = max(1L, min(stan_chains, parallel::detectCores(logical = TRUE))))
   stan_model_compiled <- compile_stage8b_stan_model()
@@ -2249,8 +2008,6 @@ if (n_models_to_fit > 0L) {
 diagnostic_pdf_path <- file.path(export_path, "bayes_stage8b_diagnostic_plots.pdf")
 trace_records <- list()
 
-# 🔴 Run: Stage8B model loop with reuse-first execution ===============================
-## 🟠 Define: model fitting, posterior summaries, and reusable RDS bundles ===============================
 registry_rows <- list()
 coef_rows <- list()
 diag_param_rows <- list()
@@ -2271,17 +2028,17 @@ withCallingHandlers({
     dataset_name <- model_row$dataset[[1]]
     dataset_df <- analysis_datasets[[dataset_name]]
     model_started_at <- Sys.time()
-    
+
     emit_progress(
       ii - 1L,
       nrow(model_grid),
       model_id_now,
       paste0("starting Stage8B (dataset=", dataset_name, ", family=", model_row$family_code[[1]], ", prior=", model_row$prior_branch[[1]], ", site-prior=", model_row$site_prior_family[[1]], ", reuse=", isTRUE(model_row$reuse_existing_fit[[1]]), ")")
     )
-    
+
     prior_spec <- prior_specs[[model_row$prior_branch[[1]]]]
     design_bundle <- make_stage8b_design_bundle(dataset_df, model_row, prior_spec, snu_site_label, remission_cut_years)
-    
+
     set.seed(stan_seed + ii)
     prior_predictive_tbl <- simulate_stage8b_prior_predictive(
       dataset_df = dataset_df,
@@ -2292,7 +2049,7 @@ withCallingHandlers({
       horizons_eval = prior_predictive_horizons
     )
     prior_predictive_rows[[length(prior_predictive_rows) + 1L]] <- prior_predictive_tbl
-    
+
     if (isTRUE(model_row$reuse_existing_fit[[1]])) {
       bundle_reuse <- load_stage8b_reuse_bundle(model_row$stage8b_rds_path[[1]])
       registry_rows[[length(registry_rows) + 1L]] <- tibble::as_tibble(bundle_reuse$model_registry_row)
@@ -2306,18 +2063,13 @@ withCallingHandlers({
       hazard_shape_rows[[length(hazard_shape_rows) + 1L]] <- tibble::as_tibble(bundle_reuse$hazard_shape_plausibility)
       uncured_support_rows[[length(uncured_support_rows) + 1L]] <- tibble::as_tibble(bundle_reuse$uncured_supporting_decomposition)
       anchor_update_rows[[length(anchor_update_rows) + 1L]] <- tibble::as_tibble(bundle_reuse$incidence_anchor_update)
-      
-      emit_progress(
-        ii,
-        nrow(model_grid),
-        model_id_now,
-        paste0("reused existing Stage8B fit; elapsed=", format_number(elapsed_seconds(model_started_at), digits = 1L), "s")
-      )
+
+      emit_progress(ii, nrow(model_grid), model_id_now, paste0("reused existing Stage8B fit; elapsed=", format_number(elapsed_seconds(model_started_at), digits = 1L), "s"))
       next
     }
-    
+
     site_idx <- get_stage8b_site_prior_indices(model_row, design_bundle)
-    
+
     stan_data <- list(
       N = nrow(dataset_df),
       time = as.numeric(design_bundle$time),
@@ -2351,10 +2103,10 @@ withCallingHandlers({
       use_t_prior_lat_site = as.integer(!is.na(site_idx$lat_idx) && identical(model_row$site_prior_family[[1]], "student_t3_0_1_sensitivity")),
       use_t_prior_rem_site = as.integer(!is.na(site_idx$rem_idx) && identical(model_row$site_prior_family[[1]], "student_t3_0_1_sensitivity"))
     )
-    
+
     fit_status <- "ok"
     fit_error_message <- NA_character_
-    
+
     fit <- tryCatch(
       rstan::sampling(
         object = stan_model_compiled,
@@ -2369,11 +2121,11 @@ withCallingHandlers({
       ),
       error = function(e) e
     )
-    
+
     if (inherits(fit, "error")) {
       fit_status <- "sampling_error"
       fit_error_message <- conditionMessage(fit)
-      
+
       registry_rows[[length(registry_rows) + 1L]] <- tibble(
         dataset_key = dataset_name,
         model_id = model_id_now,
@@ -2427,360 +2179,357 @@ withCallingHandlers({
         rds_path = NA_character_,
         fit_reused_flag = FALSE
       )
-      
-      emit_progress(
-        ii,
-        nrow(model_grid),
-        model_id_now,
-        paste0("sampling error after ", format_number(elapsed_seconds(model_started_at), digits = 1L), "s: ", fit_error_message)
-      )
+
+      emit_progress(ii, nrow(model_grid), model_id_now, paste0("sampling error after ", format_number(elapsed_seconds(model_started_at), digits = 1L), "s: ", fit_error_message))
       next
     }
-    
-    trace_records[[length(trace_records) + 1L]] <- make_stage8b_trace_record(
-      fit = fit,
+
+
+trace_records[[length(trace_records) + 1L]] <- make_stage8b_trace_record(
+  fit = fit,
+  model_id = model_id_now,
+  family_code = model_row$family_code[[1]],
+  K_inc = ncol(design_bundle$X_inc),
+  K_lat = ncol(design_bundle$X_lat),
+  K_rem = ncol(design_bundle$X_rem),
+  J_rem = length(design_bundle$rem_cuts) - 1L
+)
+
+param_names <- c(
+  "delta0", "gamma0", "xi0",
+  paste0("beta_inc[", seq_len(ncol(design_bundle$X_inc)), "]"),
+  paste0("gamma_lat[", seq_len(ncol(design_bundle$X_lat)), "]"),
+  paste0("beta_rem[", seq_len(ncol(design_bundle$X_rem)), "]"),
+  paste0("log_rho_rem[", seq_len(length(design_bundle$rem_cuts) - 1L), "]")
+)
+if (model_row$family_code[[1]] == "W") param_names <- c(param_names, "rho_W")
+if (model_row$family_code[[1]] == "LN") param_names <- c(param_names, "log_sigma_LN")
+if (model_row$family_code[[1]] == "LL") param_names <- c(param_names, "psi_LL")
+
+param_array <- posterior::as_draws_array(as.array(fit, pars = param_names))
+param_diag_tbl <- posterior::summarise_draws(
+  param_array,
+  mean = base::mean,
+  sd = stats::sd,
+  rhat = posterior::rhat,
+  ess_bulk = posterior::ess_bulk,
+  ess_tail = posterior::ess_tail
+)
+param_draws_mat <- posterior::as_draws_matrix(param_array)
+
+coef_tbl <- tibble(
+  dataset_key = dataset_name,
+  model_id = model_id_now,
+  retained_fit_id = model_row$retained_fit_id[[1]],
+  parameter = colnames(param_draws_mat),
+  mean = apply(param_draws_mat, 2, mean),
+  sd = apply(param_draws_mat, 2, stats::sd),
+  q025 = apply(param_draws_mat, 2, stats::quantile, probs = 0.025, names = FALSE),
+  q50 = apply(param_draws_mat, 2, stats::quantile, probs = 0.500, names = FALSE),
+  q975 = apply(param_draws_mat, 2, stats::quantile, probs = 0.975, names = FALSE)
+)
+
+diag_param_tbl_model <- tibble(
+  dataset_key = dataset_name,
+  model_id = model_id_now,
+  retained_fit_id = model_row$retained_fit_id[[1]],
+  parameter = param_diag_tbl$variable,
+  mean = param_diag_tbl$mean,
+  sd = param_diag_tbl$sd,
+  rhat = param_diag_tbl$rhat,
+  ess_bulk = param_diag_tbl$ess_bulk,
+  ess_tail = param_diag_tbl$ess_tail
+)
+
+sampler_params <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
+divergences <- sum(vapply(sampler_params, function(x) sum(x[, "divergent__"]), numeric(1)))
+treedepth_exceeded <- sum(vapply(sampler_params, function(x) sum(x[, "treedepth__"] >= stan_max_treedepth), numeric(1)))
+
+draws_compact <- extract_stage8b_draws_compact(
+  fit = fit,
+  K_inc = ncol(design_bundle$X_inc),
+  K_lat = ncol(design_bundle$X_lat),
+  K_rem = ncol(design_bundle$X_rem),
+  J_rem = length(design_bundle$rem_cuts) - 1L
+)
+
+info_criteria <- compute_information_criteria(draws_compact$log_lik)
+
+total_draws <- length(draws_compact$delta0)
+set.seed(stan_seed + 200000L + ii)
+keep_draw_idx <- if (total_draws <= posterior_prediction_draws) {
+  seq_len(total_draws)
+} else {
+  sort(sample(seq_len(total_draws), size = posterior_prediction_draws, replace = FALSE))
+}
+
+draws_pred <- list(
+  delta0 = draws_compact$delta0[keep_draw_idx],
+  beta_inc = draws_compact$beta_inc[keep_draw_idx, , drop = FALSE],
+  gamma0 = draws_compact$gamma0[keep_draw_idx],
+  gamma_lat = draws_compact$gamma_lat[keep_draw_idx, , drop = FALSE],
+  xi0 = draws_compact$xi0[keep_draw_idx],
+  beta_rem = draws_compact$beta_rem[keep_draw_idx, , drop = FALSE],
+  log_rho_rem = draws_compact$log_rho_rem[keep_draw_idx, , drop = FALSE],
+  rho_W = draws_compact$rho_W[keep_draw_idx],
+  log_sigma_LN = draws_compact$log_sigma_LN[keep_draw_idx],
+  psi_LL = draws_compact$psi_LL[keep_draw_idx]
+)
+
+state <- compute_stage8b_linear_terms(
+  draws = draws_pred,
+  X_inc = design_bundle$X_inc,
+  X_lat = design_bundle$X_lat,
+  X_rem = design_bundle$X_rem,
+  alpha_prior_center = design_bundle$alpha_prior_center
+)
+
+pred_trajectories <- build_stage8b_prediction_trajectories(
+  state = state,
+  draws = draws_pred,
+  model_row = model_row,
+  horizons = horizons_year,
+  integration_step_year = integration_step_year,
+  rem_cuts = design_bundle$rem_cuts
+)
+
+supported_horizons <- ppc_horizons_for_dataset(dataset_name)
+transition_supported <- lapply(as.character(supported_horizons), function(hh) pred_trajectories[[hh]]$transition_cif)
+posterior_degeneracy <- compute_stage8b_degeneracy(state$pi_mat, state$median_mat, transition_supported)
+
+subject_profile_tbl <- bind_cols(
+  tibble(
+    dataset_key = dataset_name,
+    model_id = model_id_now,
+    retained_fit_id = model_row$retained_fit_id[[1]],
+    branch = "Stage8B",
+    risk_scale = model_row$risk_scale[[1]],
+    prior_branch = model_row$prior_branch[[1]],
+    site_prior_family = model_row$site_prior_family[[1]]
+  ),
+  design_bundle$id_df,
+  tibble(
+    cure_fraction_mean = summarize_cols_matrix(state$cure_prob_mat)$mean,
+    cure_fraction_q025 = summarize_cols_matrix(state$cure_prob_mat)$q025,
+    cure_fraction_q50 = summarize_cols_matrix(state$cure_prob_mat)$q50,
+    cure_fraction_q975 = summarize_cols_matrix(state$cure_prob_mat)$q975,
+    susceptible_fraction_mean = summarize_cols_matrix(state$pi_mat)$mean,
+    susceptible_fraction_q025 = summarize_cols_matrix(state$pi_mat)$q025,
+    susceptible_fraction_q50 = summarize_cols_matrix(state$pi_mat)$q50,
+    susceptible_fraction_q975 = summarize_cols_matrix(state$pi_mat)$q975,
+    median_susceptible_time_mean = summarize_cols_matrix(state$median_mat)$mean,
+    median_susceptible_time_q025 = summarize_cols_matrix(state$median_mat)$q025,
+    median_susceptible_time_q50 = summarize_cols_matrix(state$median_mat)$q50,
+    median_susceptible_time_q975 = summarize_cols_matrix(state$median_mat)$q975
+  )
+)
+
+horizon_refs <- ipcw_registry[[dataset_name]]
+support_refs <- support_registry %>% filter(dataset == dataset_name)
+
+subject_year_rows_model <- list()
+cohort_rows_model <- list()
+class_rows_model <- list()
+ppc_rows_model <- list()
+
+coherence_error_max <- 0
+hazard_means <- rep(NA_real_, length(horizons_year))
+names(hazard_means) <- paste0("hazard_", horizons_year, "y")
+
+for (hh in horizons_year) {
+  pred_h <- pred_trajectories[[as.character(hh)]]
+  horizon_ref <- horizon_refs %>% filter(horizon_year == hh)
+  support_ref <- support_refs %>% filter(horizon_year == hh)
+
+  trans_sum <- summarize_cols_matrix(pred_h$transition_cif)
+  rem_sum <- summarize_cols_matrix(pred_h$remission_cif)
+  free_sum <- summarize_cols_matrix(pred_h$all_event_free)
+  uncured_surv_sum <- summarize_cols_matrix(pred_h$uncured_survival)
+  uncured_risk_sum <- summarize_cols_matrix(1 - pred_h$uncured_survival)
+
+  coherence_error_max <- max(
+    coherence_error_max,
+    max(abs(pred_h$transition_cif + pred_h$remission_cif + pred_h$all_event_free - 1), na.rm = TRUE)
+  )
+
+  subject_year_rows_model[[length(subject_year_rows_model) + 1L]] <- bind_cols(
+    tibble(
+      dataset_key = dataset_name,
       model_id = model_id_now,
+      retained_fit_id = model_row$retained_fit_id[[1]],
+      branch = "Stage8B",
+      risk_scale = model_row$risk_scale[[1]],
+      prior_branch = model_row$prior_branch[[1]],
+      site_prior_family = model_row$site_prior_family[[1]],
+      horizon = hh
+    ),
+    design_bundle$id_df,
+    tibble(
+      transition_cif_mean = trans_sum$mean,
+      transition_cif_q025 = trans_sum$q025,
+      transition_cif_q50 = trans_sum$q50,
+      transition_cif_q975 = trans_sum$q975,
+      remission_cif_mean = rem_sum$mean,
+      remission_cif_q025 = rem_sum$q025,
+      remission_cif_q50 = rem_sum$q50,
+      remission_cif_q975 = rem_sum$q975,
+      all_event_free_mean = free_sum$mean,
+      all_event_free_q025 = free_sum$q025,
+      all_event_free_q50 = free_sum$q50,
+      all_event_free_q975 = free_sum$q975,
+      uncured_survival_mean = uncured_surv_sum$mean,
+      uncured_survival_q025 = uncured_surv_sum$q025,
+      uncured_survival_q50 = uncured_surv_sum$q50,
+      uncured_survival_q975 = uncured_surv_sum$q975,
+      uncured_risk_mean = uncured_risk_sum$mean,
+      uncured_risk_q025 = uncured_risk_sum$q025,
+      uncured_risk_q50 = uncured_risk_sum$q50,
+      uncured_risk_q975 = uncured_risk_sum$q975
+    )
+  )
+
+  transition_cif_draw <- rowMeans(pred_h$transition_cif)
+  remission_cif_draw <- rowMeans(pred_h$remission_cif)
+  free_draw <- rowMeans(pred_h$all_event_free)
+  hazard_draw <- rowMeans(pred_h$transition_population_hazard)
+  cure_draw <- rowMeans(state$cure_prob_mat)
+  susc_draw <- rowMeans(state$pi_mat)
+  uncured_surv_draw <- rowMeans(pred_h$uncured_survival)
+  uncured_risk_draw <- rowMeans(1 - pred_h$uncured_survival)
+
+  hazard_means[[paste0("hazard_", hh, "y")]] <- mean(hazard_draw, na.rm = TRUE)
+
+  cohort_rows_model[[length(cohort_rows_model) + 1L]] <- tibble(
+    dataset_key = dataset_name,
+    model_id = model_id_now,
+    retained_fit_id = model_row$retained_fit_id[[1]],
+    structural_model_id = model_row$structural_model_id[[1]],
+    formula_anchor = model_row$formula_anchor[[1]],
+    family_code = model_row$family_code[[1]],
+    latency_family = model_row$latency_family[[1]],
+    site_placement_label = model_row$site_placement_label[[1]],
+    branch = "Stage8B",
+    risk_scale = model_row$risk_scale[[1]],
+    prior_branch = model_row$prior_branch[[1]],
+    site_prior_family = model_row$site_prior_family[[1]],
+    horizon = hh,
+    transition_cif_mean = mean(transition_cif_draw),
+    transition_cif_q025 = stats::quantile(transition_cif_draw, 0.025, names = FALSE),
+    transition_cif_q50 = stats::quantile(transition_cif_draw, 0.500, names = FALSE),
+    transition_cif_q975 = stats::quantile(transition_cif_draw, 0.975, names = FALSE),
+    remission_cif_mean = mean(remission_cif_draw),
+    remission_cif_q025 = stats::quantile(remission_cif_draw, 0.025, names = FALSE),
+    remission_cif_q50 = stats::quantile(remission_cif_draw, 0.500, names = FALSE),
+    remission_cif_q975 = stats::quantile(remission_cif_draw, 0.975, names = FALSE),
+    all_event_free_mean = mean(free_draw),
+    all_event_free_q025 = stats::quantile(free_draw, 0.025, names = FALSE),
+    all_event_free_q50 = stats::quantile(free_draw, 0.500, names = FALSE),
+    all_event_free_q975 = stats::quantile(free_draw, 0.975, names = FALSE),
+    cohort_mean_cure_fraction_mean = mean(cure_draw),
+    cohort_mean_cure_fraction_q025 = stats::quantile(cure_draw, 0.025, names = FALSE),
+    cohort_mean_cure_fraction_q50 = stats::quantile(cure_draw, 0.500, names = FALSE),
+    cohort_mean_cure_fraction_q975 = stats::quantile(cure_draw, 0.975, names = FALSE),
+    cohort_mean_susceptible_fraction_mean = mean(susc_draw),
+    cohort_mean_susceptible_fraction_q025 = stats::quantile(susc_draw, 0.025, names = FALSE),
+    cohort_mean_susceptible_fraction_q50 = stats::quantile(susc_draw, 0.500, names = FALSE),
+    cohort_mean_susceptible_fraction_q975 = stats::quantile(susc_draw, 0.975, names = FALSE),
+    mean_uncured_survival_mean = mean(uncured_surv_draw),
+    mean_uncured_survival_q025 = stats::quantile(uncured_surv_draw, 0.025, names = FALSE),
+    mean_uncured_survival_q50 = stats::quantile(uncured_surv_draw, 0.500, names = FALSE),
+    mean_uncured_survival_q975 = stats::quantile(uncured_surv_draw, 0.975, names = FALSE),
+    mean_uncured_risk_mean = mean(uncured_risk_draw),
+    mean_uncured_risk_q025 = stats::quantile(uncured_risk_draw, 0.025, names = FALSE),
+    mean_uncured_risk_q50 = stats::quantile(uncured_risk_draw, 0.500, names = FALSE),
+    mean_uncured_risk_q975 = stats::quantile(uncured_risk_draw, 0.975, names = FALSE),
+    mean_transition_hazard_mean = mean(hazard_draw),
+    mean_transition_hazard_q025 = stats::quantile(hazard_draw, 0.025, names = FALSE),
+    mean_transition_hazard_q50 = stats::quantile(hazard_draw, 0.500, names = FALSE),
+    mean_transition_hazard_q975 = stats::quantile(hazard_draw, 0.975, names = FALSE)
+  )
+
+  ppc_rows_model[[length(ppc_rows_model) + 1L]] <- tibble(
+    dataset_key = dataset_name,
+    model_id = model_id_now,
+    retained_fit_id = model_row$retained_fit_id[[1]],
+    structural_model_id = model_row$structural_model_id[[1]],
+    formula_anchor = model_row$formula_anchor[[1]],
+    family_code = model_row$family_code[[1]],
+    branch = "Stage8B",
+    risk_scale = model_row$risk_scale[[1]],
+    prior_branch = model_row$prior_branch[[1]],
+    site_prior_family = model_row$site_prior_family[[1]],
+    horizon = hh,
+    observed_transition_cif = horizon_ref$observed_transition_cif[[1]],
+    observed_remission_cif = horizon_ref$observed_remission_cif[[1]],
+    observed_all_event_free = horizon_ref$observed_all_event_free[[1]],
+    posterior_mean_transition_cif = mean(transition_cif_draw),
+    posterior_q025_transition_cif = stats::quantile(transition_cif_draw, 0.025, names = FALSE),
+    posterior_q975_transition_cif = stats::quantile(transition_cif_draw, 0.975, names = FALSE),
+    posterior_mean_remission_cif = mean(remission_cif_draw),
+    posterior_q025_remission_cif = stats::quantile(remission_cif_draw, 0.025, names = FALSE),
+    posterior_q975_remission_cif = stats::quantile(remission_cif_draw, 0.975, names = FALSE),
+    absolute_difference_transition_cif = abs(mean(transition_cif_draw) - horizon_ref$observed_transition_cif[[1]]),
+    gross_contradiction_flag = (
+      (hh %in% ppc_horizons_for_dataset(dataset_name)) &&
+        (
+          horizon_ref$observed_transition_cif[[1]] < stats::quantile(transition_cif_draw, 0.025, names = FALSE) ||
+            horizon_ref$observed_transition_cif[[1]] > stats::quantile(transition_cif_draw, 0.975, names = FALSE)
+        ) &&
+        abs(mean(transition_cif_draw) - horizon_ref$observed_transition_cif[[1]]) > ppc_tolerance_abs
+    )
+  )
+
+  class_tbl_h <- compute_stage8b_classification_summary(
+    risk_draws = pred_h$transition_cif,
+    horizon_row = horizon_ref,
+    thresholds = risk_thresholds
+  ) %>%
+    mutate(
+      dataset_key = dataset_name,
+      model_id = model_id_now,
+      retained_fit_id = model_row$retained_fit_id[[1]],
+      structural_model_id = model_row$structural_model_id[[1]],
+      formula_anchor = model_row$formula_anchor[[1]],
       family_code = model_row$family_code[[1]],
-      K_inc = ncol(design_bundle$X_inc),
-      K_lat = ncol(design_bundle$X_lat),
-      K_rem = ncol(design_bundle$X_rem),
-      J_rem = length(design_bundle$rem_cuts) - 1L
-    )
-    
-    param_names <- c(
-      "delta0", "gamma0", "xi0",
-      paste0("beta_inc[", seq_len(ncol(design_bundle$X_inc)), "]"),
-      paste0("gamma_lat[", seq_len(ncol(design_bundle$X_lat)), "]"),
-      paste0("beta_rem[", seq_len(ncol(design_bundle$X_rem)), "]"),
-      paste0("log_rho_rem[", seq_len(length(design_bundle$rem_cuts) - 1L), "]")
-    )
-    if (model_row$family_code[[1]] == "W") param_names <- c(param_names, "rho_W")
-    if (model_row$family_code[[1]] == "LN") param_names <- c(param_names, "log_sigma_LN")
-    if (model_row$family_code[[1]] == "LL") param_names <- c(param_names, "psi_LL")
-    
-    param_array <- posterior::as_draws_array(as.array(fit, pars = param_names))
-    param_diag_tbl <- posterior::summarise_draws(
-      param_array,
-      mean = base::mean,
-      sd = stats::sd,
-      rhat = posterior::rhat,
-      ess_bulk = posterior::ess_bulk,
-      ess_tail = posterior::ess_tail
-    )
-    param_draws_mat <- posterior::as_draws_matrix(param_array)
-    
-    coef_tbl <- tibble(
-      dataset_key = dataset_name,
-      model_id = model_id_now,
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      parameter = colnames(param_draws_mat),
-      mean = apply(param_draws_mat, 2, mean),
-      sd = apply(param_draws_mat, 2, stats::sd),
-      q025 = apply(param_draws_mat, 2, stats::quantile, probs = 0.025, names = FALSE),
-      q50 = apply(param_draws_mat, 2, stats::quantile, probs = 0.500, names = FALSE),
-      q975 = apply(param_draws_mat, 2, stats::quantile, probs = 0.975, names = FALSE)
-    )
-    
-    diag_param_tbl_model <- tibble(
-      dataset_key = dataset_name,
-      model_id = model_id_now,
-      retained_fit_id = model_row$retained_fit_id[[1]],
-      parameter = param_diag_tbl$variable,
-      mean = param_diag_tbl$mean,
-      sd = param_diag_tbl$sd,
-      rhat = param_diag_tbl$rhat,
-      ess_bulk = param_diag_tbl$ess_bulk,
-      ess_tail = param_diag_tbl$ess_tail
-    )
-    
-    sampler_params <- rstan::get_sampler_params(fit, inc_warmup = FALSE)
-    divergences <- sum(vapply(sampler_params, function(x) sum(x[, "divergent__"]), numeric(1)))
-    treedepth_exceeded <- sum(vapply(sampler_params, function(x) sum(x[, "treedepth__"] >= stan_max_treedepth), numeric(1)))
-    
-    draws_compact <- extract_stage8b_draws_compact(
-      fit = fit,
-      K_inc = ncol(design_bundle$X_inc),
-      K_lat = ncol(design_bundle$X_lat),
-      K_rem = ncol(design_bundle$X_rem),
-      J_rem = length(design_bundle$rem_cuts) - 1L
-    )
-    
-    info_criteria <- compute_information_criteria(draws_compact$log_lik)
-    
-    total_draws <- length(draws_compact$delta0)
-    set.seed(stan_seed + 200000L + ii)
-    keep_draw_idx <- if (total_draws <= posterior_prediction_draws) {
-      seq_len(total_draws)
-    } else {
-      sort(sample(seq_len(total_draws), size = posterior_prediction_draws, replace = FALSE))
-    }
-    
-    draws_pred <- list(
-      delta0 = draws_compact$delta0[keep_draw_idx],
-      beta_inc = draws_compact$beta_inc[keep_draw_idx, , drop = FALSE],
-      gamma0 = draws_compact$gamma0[keep_draw_idx],
-      gamma_lat = draws_compact$gamma_lat[keep_draw_idx, , drop = FALSE],
-      xi0 = draws_compact$xi0[keep_draw_idx],
-      beta_rem = draws_compact$beta_rem[keep_draw_idx, , drop = FALSE],
-      log_rho_rem = draws_compact$log_rho_rem[keep_draw_idx, , drop = FALSE],
-      rho_W = draws_compact$rho_W[keep_draw_idx],
-      log_sigma_LN = draws_compact$log_sigma_LN[keep_draw_idx],
-      psi_LL = draws_compact$psi_LL[keep_draw_idx]
-    )
-    
-    state <- compute_stage8b_linear_terms(
-      draws = draws_pred,
-      X_inc = design_bundle$X_inc,
-      X_lat = design_bundle$X_lat,
-      X_rem = design_bundle$X_rem,
-      alpha_prior_center = design_bundle$alpha_prior_center
-    )
-    
-    pred_trajectories <- build_stage8b_prediction_trajectories(
-      state = state,
-      draws = draws_pred,
-      model_row = model_row,
-      horizons = horizons_year,
-      integration_step_year = integration_step_year,
-      rem_cuts = design_bundle$rem_cuts
-    )
-    
-    supported_horizons <- ppc_horizons_for_dataset(dataset_name)
-    transition_supported <- lapply(as.character(supported_horizons), function(hh) pred_trajectories[[hh]]$transition_cif)
-    posterior_degeneracy <- compute_stage8b_degeneracy(state$pi_mat, state$median_mat, transition_supported)
-    
-    subject_profile_tbl <- bind_cols(
-      tibble(
-        dataset_key = dataset_name,
-        model_id = model_id_now,
-        retained_fit_id = model_row$retained_fit_id[[1]],
-        branch = "Stage8B",
-        risk_scale = model_row$risk_scale[[1]],
-        prior_branch = model_row$prior_branch[[1]],
-        site_prior_family = model_row$site_prior_family[[1]]
-      ),
-      design_bundle$id_df,
-      tibble(
-        cure_fraction_mean = summarize_cols_matrix(state$cure_prob_mat)$mean,
-        cure_fraction_q025 = summarize_cols_matrix(state$cure_prob_mat)$q025,
-        cure_fraction_q50 = summarize_cols_matrix(state$cure_prob_mat)$q50,
-        cure_fraction_q975 = summarize_cols_matrix(state$cure_prob_mat)$q975,
-        susceptible_fraction_mean = summarize_cols_matrix(state$pi_mat)$mean,
-        susceptible_fraction_q025 = summarize_cols_matrix(state$pi_mat)$q025,
-        susceptible_fraction_q50 = summarize_cols_matrix(state$pi_mat)$q50,
-        susceptible_fraction_q975 = summarize_cols_matrix(state$pi_mat)$q975,
-        median_susceptible_time_mean = summarize_cols_matrix(state$median_mat)$mean,
-        median_susceptible_time_q025 = summarize_cols_matrix(state$median_mat)$q025,
-        median_susceptible_time_q50 = summarize_cols_matrix(state$median_mat)$q50,
-        median_susceptible_time_q975 = summarize_cols_matrix(state$median_mat)$q975
-      )
-    )
-    
-    horizon_refs <- ipcw_registry[[dataset_name]]
-    support_refs <- support_registry %>% filter(dataset == dataset_name)
-    
-    subject_year_rows_model <- list()
-    cohort_rows_model <- list()
-    class_rows_model <- list()
-    ppc_rows_model <- list()
-    
-    coherence_error_max <- 0
-    hazard_means <- rep(NA_real_, length(horizons_year))
-    names(hazard_means) <- paste0("hazard_", horizons_year, "y")
-    
-    for (hh in horizons_year) {
-      pred_h <- pred_trajectories[[as.character(hh)]]
-      horizon_ref <- horizon_refs %>% filter(horizon_year == hh)
-      support_ref <- support_refs %>% filter(horizon_year == hh)
-      
-      trans_sum <- summarize_cols_matrix(pred_h$transition_cif)
-      rem_sum <- summarize_cols_matrix(pred_h$remission_cif)
-      free_sum <- summarize_cols_matrix(pred_h$all_event_free)
-      uncured_surv_sum <- summarize_cols_matrix(pred_h$uncured_survival)
-      uncured_risk_sum <- summarize_cols_matrix(1 - pred_h$uncured_survival)
-      
-      coherence_error_max <- max(
-        coherence_error_max,
-        max(abs(pred_h$transition_cif + pred_h$remission_cif + pred_h$all_event_free - 1), na.rm = TRUE)
-      )
-      
-      subject_year_rows_model[[length(subject_year_rows_model) + 1L]] <- bind_cols(
-        tibble(
-          dataset_key = dataset_name,
-          model_id = model_id_now,
-          retained_fit_id = model_row$retained_fit_id[[1]],
-          branch = "Stage8B",
-          risk_scale = model_row$risk_scale[[1]],
-          prior_branch = model_row$prior_branch[[1]],
-          site_prior_family = model_row$site_prior_family[[1]],
-          horizon = hh
-        ),
-        design_bundle$id_df,
-        tibble(
-          transition_cif_mean = trans_sum$mean,
-          transition_cif_q025 = trans_sum$q025,
-          transition_cif_q50 = trans_sum$q50,
-          transition_cif_q975 = trans_sum$q975,
-          remission_cif_mean = rem_sum$mean,
-          remission_cif_q025 = rem_sum$q025,
-          remission_cif_q50 = rem_sum$q50,
-          remission_cif_q975 = rem_sum$q975,
-          all_event_free_mean = free_sum$mean,
-          all_event_free_q025 = free_sum$q025,
-          all_event_free_q50 = free_sum$q50,
-          all_event_free_q975 = free_sum$q975,
-          uncured_survival_mean = uncured_surv_sum$mean,
-          uncured_survival_q025 = uncured_surv_sum$q025,
-          uncured_survival_q50 = uncured_surv_sum$q50,
-          uncured_survival_q975 = uncured_surv_sum$q975,
-          uncured_risk_mean = uncured_risk_sum$mean,
-          uncured_risk_q025 = uncured_risk_sum$q025,
-          uncured_risk_q50 = uncured_risk_sum$q50,
-          uncured_risk_q975 = uncured_risk_sum$q975
-        )
-      )
-      
-      transition_cif_draw <- rowMeans(pred_h$transition_cif)
-      remission_cif_draw <- rowMeans(pred_h$remission_cif)
-      free_draw <- rowMeans(pred_h$all_event_free)
-      hazard_draw <- rowMeans(pred_h$transition_population_hazard)
-      cure_draw <- rowMeans(state$cure_prob_mat)
-      susc_draw <- rowMeans(state$pi_mat)
-      uncured_surv_draw <- rowMeans(pred_h$uncured_survival)
-      uncured_risk_draw <- rowMeans(1 - pred_h$uncured_survival)
-      
-      hazard_means[[paste0("hazard_", hh, "y")]] <- mean(hazard_draw, na.rm = TRUE)
-      
-      cohort_rows_model[[length(cohort_rows_model) + 1L]] <- tibble(
-        dataset_key = dataset_name,
-        model_id = model_id_now,
-        retained_fit_id = model_row$retained_fit_id[[1]],
-        structural_model_id = model_row$structural_model_id[[1]],
-        formula_anchor = model_row$formula_anchor[[1]],
-        family_code = model_row$family_code[[1]],
-        latency_family = model_row$latency_family[[1]],
-        site_placement_label = model_row$site_placement_label[[1]],
-        branch = "Stage8B",
-        risk_scale = model_row$risk_scale[[1]],
-        prior_branch = model_row$prior_branch[[1]],
-        site_prior_family = model_row$site_prior_family[[1]],
-        horizon = hh,
-        transition_cif_mean = mean(transition_cif_draw),
-        transition_cif_q025 = stats::quantile(transition_cif_draw, 0.025, names = FALSE),
-        transition_cif_q50 = stats::quantile(transition_cif_draw, 0.500, names = FALSE),
-        transition_cif_q975 = stats::quantile(transition_cif_draw, 0.975, names = FALSE),
-        remission_cif_mean = mean(remission_cif_draw),
-        remission_cif_q025 = stats::quantile(remission_cif_draw, 0.025, names = FALSE),
-        remission_cif_q50 = stats::quantile(remission_cif_draw, 0.500, names = FALSE),
-        remission_cif_q975 = stats::quantile(remission_cif_draw, 0.975, names = FALSE),
-        all_event_free_mean = mean(free_draw),
-        all_event_free_q025 = stats::quantile(free_draw, 0.025, names = FALSE),
-        all_event_free_q50 = stats::quantile(free_draw, 0.500, names = FALSE),
-        all_event_free_q975 = stats::quantile(free_draw, 0.975, names = FALSE),
-        cohort_mean_cure_fraction_mean = mean(cure_draw),
-        cohort_mean_cure_fraction_q025 = stats::quantile(cure_draw, 0.025, names = FALSE),
-        cohort_mean_cure_fraction_q50 = stats::quantile(cure_draw, 0.500, names = FALSE),
-        cohort_mean_cure_fraction_q975 = stats::quantile(cure_draw, 0.975, names = FALSE),
-        cohort_mean_susceptible_fraction_mean = mean(susc_draw),
-        cohort_mean_susceptible_fraction_q025 = stats::quantile(susc_draw, 0.025, names = FALSE),
-        cohort_mean_susceptible_fraction_q50 = stats::quantile(susc_draw, 0.500, names = FALSE),
-        cohort_mean_susceptible_fraction_q975 = stats::quantile(susc_draw, 0.975, names = FALSE),
-        mean_uncured_survival_mean = mean(uncured_surv_draw),
-        mean_uncured_survival_q025 = stats::quantile(uncured_surv_draw, 0.025, names = FALSE),
-        mean_uncured_survival_q50 = stats::quantile(uncured_surv_draw, 0.500, names = FALSE),
-        mean_uncured_survival_q975 = stats::quantile(uncured_surv_draw, 0.975, names = FALSE),
-        mean_uncured_risk_mean = mean(uncured_risk_draw),
-        mean_uncured_risk_q025 = stats::quantile(uncured_risk_draw, 0.025, names = FALSE),
-        mean_uncured_risk_q50 = stats::quantile(uncured_risk_draw, 0.500, names = FALSE),
-        mean_uncured_risk_q975 = stats::quantile(uncured_risk_draw, 0.975, names = FALSE),
-        mean_transition_hazard_mean = mean(hazard_draw),
-        mean_transition_hazard_q025 = stats::quantile(hazard_draw, 0.025, names = FALSE),
-        mean_transition_hazard_q50 = stats::quantile(hazard_draw, 0.500, names = FALSE),
-        mean_transition_hazard_q975 = stats::quantile(hazard_draw, 0.975, names = FALSE)
-      )
-      
-      ppc_rows_model[[length(ppc_rows_model) + 1L]] <- tibble(
-        dataset_key = dataset_name,
-        model_id = model_id_now,
-        retained_fit_id = model_row$retained_fit_id[[1]],
-        structural_model_id = model_row$structural_model_id[[1]],
-        formula_anchor = model_row$formula_anchor[[1]],
-        family_code = model_row$family_code[[1]],
-        branch = "Stage8B",
-        risk_scale = model_row$risk_scale[[1]],
-        prior_branch = model_row$prior_branch[[1]],
-        site_prior_family = model_row$site_prior_family[[1]],
-        horizon = hh,
-        observed_transition_cif = horizon_ref$observed_transition_cif[[1]],
-        observed_remission_cif = horizon_ref$observed_remission_cif[[1]],
-        observed_all_event_free = horizon_ref$observed_all_event_free[[1]],
-        posterior_mean_transition_cif = mean(transition_cif_draw),
-        posterior_q025_transition_cif = stats::quantile(transition_cif_draw, 0.025, names = FALSE),
-        posterior_q975_transition_cif = stats::quantile(transition_cif_draw, 0.975, names = FALSE),
-        posterior_mean_remission_cif = mean(remission_cif_draw),
-        posterior_q025_remission_cif = stats::quantile(remission_cif_draw, 0.025, names = FALSE),
-        posterior_q975_remission_cif = stats::quantile(remission_cif_draw, 0.975, names = FALSE),
-        absolute_difference_transition_cif = abs(mean(transition_cif_draw) - horizon_ref$observed_transition_cif[[1]]),
-        gross_contradiction_flag = (
-          (hh %in% ppc_horizons_for_dataset(dataset_name)) &&
-            (
-              horizon_ref$observed_transition_cif[[1]] < stats::quantile(transition_cif_draw, 0.025, names = FALSE) ||
-                horizon_ref$observed_transition_cif[[1]] > stats::quantile(transition_cif_draw, 0.975, names = FALSE)
-            ) &&
-            abs(mean(transition_cif_draw) - horizon_ref$observed_transition_cif[[1]]) > ppc_tolerance_abs
-        )
-      )
-      
-      class_tbl_h <- compute_stage8b_classification_summary(
-        risk_draws = pred_h$transition_cif,
-        horizon_row = horizon_ref,
-        thresholds = risk_thresholds
-      ) %>%
-        mutate(
-          dataset_key = dataset_name,
-          model_id = model_id_now,
-          retained_fit_id = model_row$retained_fit_id[[1]],
-          structural_model_id = model_row$structural_model_id[[1]],
-          formula_anchor = model_row$formula_anchor[[1]],
-          family_code = model_row$family_code[[1]],
-          latency_family = model_row$latency_family[[1]],
-          branch = "Stage8B",
-          risk_scale = model_row$risk_scale[[1]],
-          prior_branch = model_row$prior_branch[[1]],
-          site_prior_family = model_row$site_prior_family[[1]],
-          horizon = hh,
-          observed_transition_cif = horizon_ref$observed_transition_cif[[1]]
-        ) %>%
-        relocate(dataset_key, model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, branch, risk_scale, prior_branch, site_prior_family, horizon, threshold)
-      
-      class_rows_model[[length(class_rows_model) + 1L]] <- class_tbl_h
-    }
-    
-    ppc_model_tbl <- bind_rows(ppc_rows_model)
-    subject_year_tbl <- bind_rows(subject_year_rows_model)
-    cohort_model_tbl <- bind_rows(cohort_rows_model)
-    class_model_tbl <- bind_rows(class_rows_model)
-    
-    ppc_gross_contradiction_flag <- any(ppc_model_tbl$gross_contradiction_flag, na.rm = TRUE)
-    coherence_violation_flag <- is.finite(coherence_error_max) && coherence_error_max > 0.02
-    
-    max_rhat <- max(param_diag_tbl$rhat, na.rm = TRUE)
-    min_bulk_ess <- min(param_diag_tbl$ess_bulk, na.rm = TRUE)
-    min_tail_ess <- min(param_diag_tbl$ess_tail, na.rm = TRUE)
-    
-    admissibility_reasons <- character()
-    if (any(prior_predictive_tbl$prior_degenerate_flag %in% TRUE)) admissibility_reasons <- c(admissibility_reasons, "prior_degenerate")
-    if (posterior_degeneracy$degenerate_flag[[1]]) admissibility_reasons <- c(admissibility_reasons, "posterior_degenerate")
-    if (!is.finite(max_rhat) || max_rhat >= rhat_max_threshold) admissibility_reasons <- c(admissibility_reasons, "rhat")
-    if (!is.finite(min_bulk_ess) || min_bulk_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "bulk_ess")
-    if (!is.finite(min_tail_ess) || min_tail_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "tail_ess")
-    if (divergences > 0) admissibility_reasons <- c(admissibility_reasons, "divergences")
-    if (treedepth_exceeded > 0) admissibility_reasons <- c(admissibility_reasons, "treedepth")
-    if (isTRUE(ppc_gross_contradiction_flag)) admissibility_reasons <- c(admissibility_reasons, "ppc")
-    if (isTRUE(coherence_violation_flag)) admissibility_reasons <- c(admissibility_reasons, "coherence")
-    
-    admissibility_flag <- length(admissibility_reasons) == 0L
-    
+      latency_family = model_row$latency_family[[1]],
+      branch = "Stage8B",
+      risk_scale = model_row$risk_scale[[1]],
+      prior_branch = model_row$prior_branch[[1]],
+      site_prior_family = model_row$site_prior_family[[1]],
+      horizon = hh,
+      observed_transition_cif = horizon_ref$observed_transition_cif[[1]]
+    ) %>%
+    relocate(dataset_key, model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, branch, risk_scale, prior_branch, site_prior_family, horizon, threshold)
+
+  class_rows_model[[length(class_rows_model) + 1L]] <- class_tbl_h
+}
+
+ppc_model_tbl <- bind_rows(ppc_rows_model)
+subject_year_tbl <- bind_rows(subject_year_rows_model)
+cohort_model_tbl <- bind_rows(cohort_rows_model)
+class_model_tbl <- bind_rows(class_rows_model)
+
+ppc_gross_contradiction_flag <- any(ppc_model_tbl$gross_contradiction_flag, na.rm = TRUE)
+coherence_violation_flag <- is.finite(coherence_error_max) && coherence_error_max > 0.02
+
+max_rhat <- max(param_diag_tbl$rhat, na.rm = TRUE)
+min_bulk_ess <- min(param_diag_tbl$ess_bulk, na.rm = TRUE)
+min_tail_ess <- min(param_diag_tbl$ess_tail, na.rm = TRUE)
+
+admissibility_reasons <- character()
+if (any(prior_predictive_tbl$prior_degenerate_flag %in% TRUE)) admissibility_reasons <- c(admissibility_reasons, "prior_degenerate")
+if (posterior_degeneracy$degenerate_flag[[1]]) admissibility_reasons <- c(admissibility_reasons, "posterior_degenerate")
+if (!is.finite(max_rhat) || max_rhat >= rhat_max_threshold) admissibility_reasons <- c(admissibility_reasons, "rhat")
+if (!is.finite(min_bulk_ess) || min_bulk_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "bulk_ess")
+if (!is.finite(min_tail_ess) || min_tail_ess < ess_min_threshold) admissibility_reasons <- c(admissibility_reasons, "tail_ess")
+if (divergences > 0) admissibility_reasons <- c(admissibility_reasons, "divergences")
+if (treedepth_exceeded > 0) admissibility_reasons <- c(admissibility_reasons, "treedepth")
+if (isTRUE(ppc_gross_contradiction_flag)) admissibility_reasons <- c(admissibility_reasons, "ppc")
+if (isTRUE(coherence_violation_flag)) admissibility_reasons <- c(admissibility_reasons, "coherence")
+
+admissibility_flag <- length(admissibility_reasons) == 0L
+
+
     hazard_shape_tbl <- tibble(
       dataset_key = dataset_name,
       model_id = model_id_now,
@@ -2807,7 +2556,7 @@ withCallingHandlers({
       hazard_ratio_10y_vs_1y = safe_numeric(hazard_means[["hazard_10y"]]) / pmax(safe_numeric(hazard_means[["hazard_1y"]]), 1e-12),
       shape_class = classify_hazard_shape(unname(hazard_means))
     )
-    
+
     cure_draw <- rowMeans(state$cure_prob_mat)
     susc_draw <- rowMeans(state$pi_mat)
     uncured_support_tbl <- bind_rows(lapply(horizons_year, function(hh) {
@@ -2849,9 +2598,9 @@ withCallingHandlers({
         uncured_mean_support_flag = FALSE
       )
     }))
-    
+
     anchor_update_tbl <- make_stage8b_incidence_anchor_update(model_row, design_bundle, prior_spec, draws_compact)
-    
+
     rds_path_now <- model_row$stage8b_rds_path[[1]]
     registry_row <- tibble(
       dataset_key = dataset_name,
@@ -2910,7 +2659,7 @@ withCallingHandlers({
       rds_path = rds_path_now,
       fit_reused_flag = FALSE
     )
-    
+
     save_obj <- list(
       version = "stage8b_v1",
       model_registry_row = registry_row,
@@ -2926,11 +2675,9 @@ withCallingHandlers({
       uncured_supporting_decomposition = if (isTRUE(admissibility_flag)) uncured_support_tbl else tibble(),
       incidence_anchor_update = if (isTRUE(admissibility_flag)) anchor_update_tbl else tibble()
     )
-    if (isTRUE(save_full_stanfit_rds)) {
-      save_obj$fit <- fit
-    }
+    if (isTRUE(save_full_stanfit_rds)) save_obj$fit <- fit
     saveRDS(save_obj, rds_path_now)
-    
+
     registry_rows[[length(registry_rows) + 1L]] <- registry_row
     coef_rows[[length(coef_rows) + 1L]] <- coef_tbl
     diag_param_rows[[length(diag_param_rows) + 1L]] <- diag_param_tbl_model
@@ -2944,10 +2691,10 @@ withCallingHandlers({
       uncured_support_rows[[length(uncured_support_rows) + 1L]] <- uncured_support_tbl
       anchor_update_rows[[length(anchor_update_rows) + 1L]] <- anchor_update_tbl
     }
-    
+
     rm(fit, param_array, param_draws_mat, draws_compact, draws_pred, state, pred_trajectories)
     gc(verbose = FALSE)
-    
+
     emit_progress(
       ii,
       nrow(model_grid),
@@ -2961,14 +2708,10 @@ withCallingHandlers({
     )
   }
 }, warning = function(w) {
-  if (is_localhost_connection_warning(w)) {
-    tryInvokeRestart("muffleWarning")
-  }
+  if (is_localhost_connection_warning(w)) tryInvokeRestart("muffleWarning")
 })
 
 
-# 🔴 Assemble: final Stage8B tables and governance metadata ===============================
-## 🟠 Define: combined tables, support joins, and delta reconstructions ===============================
 model_order <- model_grid$model_id
 
 model_registry <- bind_rows_safe(registry_rows) %>%
@@ -3067,59 +2810,28 @@ model_registry <- model_registry %>%
 cohort_delta_long <- bind_rows(
   posterior_cohort_yearly %>%
     transmute(
-      dataset_key,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      site_prior_family,
-      model_id,
-      prior_branch,
-      horizon,
-      threshold = NA_real_,
-      metric = "transition_cif",
-      estimate = transition_cif_mean
+      dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon,
+      threshold = NA_real_, metric = "transition_cif", estimate = transition_cif_mean
     ),
   posterior_cohort_yearly %>%
     transmute(
-      dataset_key,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      site_prior_family,
-      model_id,
-      prior_branch,
-      horizon,
-      threshold = NA_real_,
-      metric = "cure_fraction",
-      estimate = cohort_mean_cure_fraction_mean
+      dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon,
+      threshold = NA_real_, metric = "cure_fraction", estimate = cohort_mean_cure_fraction_mean
     )
 )
 
 class_delta_long <- bind_rows(
-  posterior_classification %>%
-    transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "false_positive_burden", estimate = false_positive_burden_mean),
-  posterior_classification %>%
-    transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "FP100", estimate = FP100_mean),
-  posterior_classification %>%
-    transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "NB", estimate = NB_mean),
-  posterior_classification %>%
-    transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "PPV", estimate = PPV_mean),
-  posterior_classification %>%
-    transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "TPR", estimate = TPR_mean)
+  posterior_classification %>% transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "false_positive_burden", estimate = false_positive_burden_mean),
+  posterior_classification %>% transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "FP100", estimate = FP100_mean),
+  posterior_classification %>% transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "NB", estimate = NB_mean),
+  posterior_classification %>% transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "PPV", estimate = PPV_mean),
+  posterior_classification %>% transmute(dataset_key, retained_fit_id, structural_model_id, formula_anchor, family_code, site_prior_family, model_id, prior_branch, horizon, threshold, metric = "TPR", estimate = TPR_mean)
 )
 
 anchor_vs_neutral_delta <- bind_rows(cohort_delta_long, class_delta_long) %>%
-  mutate(
-    threshold_key = ifelse(is.na(threshold), "__NA__", sprintf("%.10f", threshold))
-  ) %>%
+  mutate(threshold_key = ifelse(is.na(threshold), "__NA__", sprintf("%.10f", threshold))) %>%
   select(-threshold) %>%
-  tidyr::pivot_wider(
-    names_from = prior_branch,
-    values_from = c(model_id, estimate),
-    names_sep = "__"
-  ) %>%
+  tidyr::pivot_wider(names_from = prior_branch, values_from = c(model_id, estimate), names_sep = "__") %>%
   transmute(
     dataset_key = dataset_key,
     branch = "Stage8B",
@@ -3156,10 +2868,8 @@ prior_tail_sensitive_lookup <- anchor_vs_neutral_delta %>%
   summarise(prior_tail_sensitive = any(material_flag %in% TRUE), .groups = "drop")
 
 apply_prior_tail_sensitive <- function(df, has_threshold = FALSE) {
-  if (nrow_or_zero(df) == 0L) {
-    return(df)
-  }
-  out <- df %>%
+  if (nrow_or_zero(df) == 0L) return(df)
+  df %>%
     mutate(threshold_key = if (has_threshold) ifelse(is.na(threshold), "__NA__", sprintf("%.10f", threshold)) else "__NA__") %>%
     left_join(prior_tail_sensitive_lookup, by = c("dataset_key", "retained_fit_id", "horizon", "threshold_key")) %>%
     left_join(prior_warning_by_model %>% select(model_id, retained_fit_id, prior_tail_warning_flag), by = c("model_id", "retained_fit_id")) %>%
@@ -3172,7 +2882,6 @@ apply_prior_tail_sensitive <- function(df, has_threshold = FALSE) {
       )
     ) %>%
     select(-threshold_key, -prior_tail_warning_flag)
-  out
 }
 
 posterior_subject_yearly <- apply_prior_tail_sensitive(posterior_subject_yearly, has_threshold = FALSE)
@@ -3207,211 +2916,43 @@ stage8a_class_key <- tibble::as_tibble(stage8a_outputs_aug$posterior_classificat
     stage8a_TPR = TPR_mean
   )
 
+
 delta_vs_stage8a <- bind_rows(
   posterior_cohort_yearly %>%
     left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold = NA_real_,
-      metric = "transition_cif",
-      stage8b_estimate = transition_cif_mean,
-      stage8a_estimate = stage8a_transition_risk,
-      delta_8B_minus_8A = transition_cif_mean - stage8a_transition_risk
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "transition_cif", stage8b_estimate = transition_cif_mean, stage8a_estimate = stage8a_transition_risk, delta_8B_minus_8A = transition_cif_mean - stage8a_transition_risk),
   posterior_cohort_yearly %>%
     left_join(stage8a_cohort_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold = NA_real_,
-      metric = "cure_fraction",
-      stage8b_estimate = cohort_mean_cure_fraction_mean,
-      stage8a_estimate = stage8a_cure_fraction,
-      delta_8B_minus_8A = cohort_mean_cure_fraction_mean - stage8a_cure_fraction
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold = NA_real_, metric = "cure_fraction", stage8b_estimate = cohort_mean_cure_fraction_mean, stage8a_estimate = stage8a_cure_fraction, delta_8B_minus_8A = cohort_mean_cure_fraction_mean - stage8a_cure_fraction),
   posterior_classification %>%
     left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold,
-      metric = "false_positive_burden",
-      stage8b_estimate = false_positive_burden_mean,
-      stage8a_estimate = stage8a_false_positive_burden,
-      delta_8B_minus_8A = false_positive_burden_mean - stage8a_false_positive_burden
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "false_positive_burden", stage8b_estimate = false_positive_burden_mean, stage8a_estimate = stage8a_false_positive_burden, delta_8B_minus_8A = false_positive_burden_mean - stage8a_false_positive_burden),
   posterior_classification %>%
     left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold,
-      metric = "FP100",
-      stage8b_estimate = FP100_mean,
-      stage8a_estimate = stage8a_FP100,
-      delta_8B_minus_8A = FP100_mean - stage8a_FP100
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "FP100", stage8b_estimate = FP100_mean, stage8a_estimate = stage8a_FP100, delta_8B_minus_8A = FP100_mean - stage8a_FP100),
   posterior_classification %>%
     left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold,
-      metric = "NB",
-      stage8b_estimate = NB_mean,
-      stage8a_estimate = stage8a_NB,
-      delta_8B_minus_8A = NB_mean - stage8a_NB
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "NB", stage8b_estimate = NB_mean, stage8a_estimate = stage8a_NB, delta_8B_minus_8A = NB_mean - stage8a_NB),
   posterior_classification %>%
     left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold,
-      metric = "PPV",
-      stage8b_estimate = PPV_mean,
-      stage8a_estimate = stage8a_PPV,
-      delta_8B_minus_8A = PPV_mean - stage8a_PPV
-    ),
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "PPV", stage8b_estimate = PPV_mean, stage8a_estimate = stage8a_PPV, delta_8B_minus_8A = PPV_mean - stage8a_PPV),
   posterior_classification %>%
     left_join(stage8a_class_key, by = c("dataset_key", "structural_model_id", "formula_anchor", "family_code", "horizon", "threshold")) %>%
-    transmute(
-      dataset_key,
-      branch = "Stage8B",
-      risk_scale = "transition_cif_competing",
-      model_id,
-      retained_fit_id,
-      structural_model_id,
-      formula_anchor,
-      family_code,
-      prior_branch,
-      site_prior_family,
-      horizon,
-      threshold,
-      metric = "TPR",
-      stage8b_estimate = TPR_mean,
-      stage8a_estimate = stage8a_TPR,
-      delta_8B_minus_8A = TPR_mean - stage8a_TPR
-    )
+    transmute(dataset_key, branch = "Stage8B", risk_scale = "transition_cif_competing", model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, threshold, metric = "TPR", stage8b_estimate = TPR_mean, stage8a_estimate = stage8a_TPR, delta_8B_minus_8A = TPR_mean - stage8a_TPR)
 ) %>%
   left_join_replacing_columns(horizon_annotation, by = c("dataset_key", "horizon")) %>%
   arrange(factor(model_id, levels = model_order), horizon, threshold, metric)
 
 horizon_support_panel <- posterior_cohort_yearly %>%
-  select(
-    dataset_key,
-    model_id,
-    retained_fit_id,
-    structural_model_id,
-    formula_anchor,
-    family_code,
-    prior_branch,
-    site_prior_family,
-    horizon,
-    transition_cif_mean,
-    transition_cif_q025,
-    transition_cif_q975,
-    support_tier,
-    horizon_evidence_class,
-    claim_restriction_flag,
-    prior_tail_sensitive,
-    admissibility_flag
-  ) %>%
+  select(dataset_key, model_id, retained_fit_id, structural_model_id, formula_anchor, family_code, prior_branch, site_prior_family, horizon, transition_cif_mean, transition_cif_q025, transition_cif_q975, support_tier, horizon_evidence_class, claim_restriction_flag, prior_tail_sensitive, admissibility_flag) %>%
   arrange(factor(model_id, levels = model_order), horizon)
 
-# 🔴 Check: output consistency and export manifest ===============================
-## 🟠 Define: audit summary, PDF generation, and CSV/RDS manifest ===============================
 output_audit <- bind_rows(
-  tibble(
-    check_name = "model_registry_row_count",
-    status = ifelse(nrow(model_registry) == nrow(model_grid), "pass", "fail"),
-    observed_value = as.character(nrow(model_registry)),
-    expected_value = as.character(nrow(model_grid)),
-    detail = "One model-registry row should exist per Stage8B model."
-  ),
-  tibble(
-    check_name = "posterior_cohort_yearly_row_count",
-    status = ifelse(nrow(posterior_cohort_yearly) == sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year), "pass", "fail"),
-    observed_value = as.character(nrow(posterior_cohort_yearly)),
-    expected_value = as.character(sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year)),
-    detail = "Admissible fits should contribute one cohort row per horizon."
-  ),
-  tibble(
-    check_name = "posterior_classification_row_count",
-    status = ifelse(nrow(posterior_classification) == sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year) * length(risk_thresholds), "pass", "fail"),
-    observed_value = as.character(nrow(posterior_classification)),
-    expected_value = as.character(sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year) * length(risk_thresholds)),
-    detail = "Admissible fits should contribute one classification row per horizon-threshold pair."
-  ),
-  tibble(
-    check_name = "anchor_vs_neutral_delta_nonempty",
-    status = ifelse(nrow(anchor_vs_neutral_delta) > 0L, "pass", "warn"),
-    observed_value = as.character(nrow(anchor_vs_neutral_delta)),
-    expected_value = ">0",
-    detail = "Anchor-versus-neutral delta table should be populated when both prior branches were fitted."
-  ),
-  tibble(
-    check_name = "delta_vs_stage8a_nonempty",
-    status = ifelse(nrow(delta_vs_stage8a) > 0L, "pass", "warn"),
-    observed_value = as.character(nrow(delta_vs_stage8a)),
-    expected_value = ">0",
-    detail = "Stage8B-versus-Stage8A delta table is populated only when matching Stage8A outputs were found."
-  )
+  tibble(check_name = "model_registry_row_count", status = ifelse(nrow(model_registry) == nrow(model_grid), "pass", "fail"), observed_value = as.character(nrow(model_registry)), expected_value = as.character(nrow(model_grid)), detail = "One model-registry row should exist per Stage8B model."),
+  tibble(check_name = "posterior_cohort_yearly_row_count", status = ifelse(nrow(posterior_cohort_yearly) == sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year), "pass", "fail"), observed_value = as.character(nrow(posterior_cohort_yearly)), expected_value = as.character(sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year)), detail = "Admissible fits should contribute one cohort row per horizon."),
+  tibble(check_name = "posterior_classification_row_count", status = ifelse(nrow(posterior_classification) == sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year) * length(risk_thresholds), "pass", "fail"), observed_value = as.character(nrow(posterior_classification)), expected_value = as.character(sum(model_registry$admissibility_flag %in% TRUE) * length(horizons_year) * length(risk_thresholds)), detail = "Admissible fits should contribute one classification row per horizon-threshold pair."),
+  tibble(check_name = "anchor_vs_neutral_delta_nonempty", status = ifelse(nrow(anchor_vs_neutral_delta) > 0L, "pass", "warn"), observed_value = as.character(nrow(anchor_vs_neutral_delta)), expected_value = ">0", detail = "Anchor-versus-neutral delta table should be populated when both prior branches were fitted."),
+  tibble(check_name = "delta_vs_stage8a_nonempty", status = ifelse(nrow(delta_vs_stage8a) > 0L, "pass", "warn"), observed_value = as.character(nrow(delta_vs_stage8a)), expected_value = ">0", detail = "Stage8B-versus-Stage8A delta table is populated only when matching Stage8A outputs were found.")
 )
 
 pdf_ok <- tryCatch(
@@ -3426,23 +2967,14 @@ pdf_ok <- tryCatch(
     TRUE
   },
   error = function(e) {
-    warning(
-      paste0("Stage8B diagnostic PDF generation failed: ", conditionMessage(e)),
-      call. = FALSE
-    )
+    warning(paste0("Stage8B diagnostic PDF generation failed: ", conditionMessage(e)), call. = FALSE)
     FALSE
   }
 )
 
 output_audit <- bind_rows(
   output_audit,
-  tibble(
-    check_name = "diagnostic_pdf_exists",
-    status = ifelse(pdf_file_is_usable(diagnostic_pdf_path), "pass", "fail"),
-    observed_value = ifelse(pdf_file_is_usable(diagnostic_pdf_path), "TRUE", "FALSE"),
-    expected_value = "TRUE",
-    detail = "Diagnostic PDF should exist after Stage8B export."
-  )
+  tibble(check_name = "diagnostic_pdf_exists", status = ifelse(pdf_file_is_usable(diagnostic_pdf_path), "pass", "fail"), observed_value = ifelse(pdf_file_is_usable(diagnostic_pdf_path), "TRUE", "FALSE"), expected_value = "TRUE", detail = "Diagnostic PDF should exist after Stage8B export.")
 )
 
 metadata_registry <- tibble::tribble(
@@ -3561,8 +3093,6 @@ export_manifest <- tibble(
   ))
 )
 
-# 🔴 Export: Stage8B CSV outputs and final manifest ===============================
-## 🟠 Define: write tables, save manifest, and finish run ===============================
 write_csv_preserve_schema(model_registry, file.path(export_path, "bayes_stage8b_model_registry.csv"))
 write_csv_preserve_schema(coefficient_summary, file.path(export_path, "bayes_stage8b_coefficient_summary.csv"))
 write_csv_preserve_schema(diagnostics_parameter_level, file.path(export_path, "bayes_stage8b_diagnostics_parameter_level.csv"))
