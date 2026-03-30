@@ -8,12 +8,12 @@ stage6_screening_file <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/
 stage5_root_dir <- "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results/stage5_Individualized no-cure comparator"
 
 skip_stage7_core_refit_if_outputs_exist <- TRUE
-force_stage7_core_refit <- TRUE
+force_stage7_core_refit <- FALSE
 save_stage7_fit_rds <- FALSE
 stage7_model_rds_prefix <- "stage7_fit_object"
 stage7_expected_bootstrap_reps <- 0L
 stage7_coefficient_ci_level <- 0.95
-stage7_smcure_uncertainty_boot_reps <- 10L
+stage7_smcure_uncertainty_boot_reps <- 0L
 stage7_family_contrast_pvalue_method <- "reference_chisq_proxy"
 
 refresh_patched_exports_even_when_outputs_exist <- TRUE
@@ -3434,6 +3434,193 @@ ensure_stage7_core_outputs <- function(run_root_dir, stage1_inputs) {
   stage7_fit_core_outputs(resolved_run_root_dir, stage1_inputs = stage1_inputs)
   list(resolved_run_root_dir = resolved_run_root_dir, reused_existing = FALSE)
 }
+
+stage7_coefficients_need_uncertainty_refresh <- function(coefficients_tbl) {
+  coefficients_tbl <- tibble::as_tibble(coefficients_tbl)
+  if (nrow(coefficients_tbl) == 0L) {
+    return(TRUE)
+  }
+  required_cols <- c("std_error", "p_value", "estimate_ci_lower", "estimate_ci_upper", "uncertainty_method")
+  if (!all(required_cols %in% names(coefficients_tbl))) {
+    return(TRUE)
+  }
+  nonmissing_ci <- sum(is.finite(suppressWarnings(as.numeric(coefficients_tbl$estimate_ci_lower))) | is.finite(suppressWarnings(as.numeric(coefficients_tbl$estimate_ci_upper))), na.rm = TRUE)
+  nonmissing_p <- sum(is.finite(suppressWarnings(as.numeric(coefficients_tbl$p_value))), na.rm = TRUE)
+  nonmissing_ci == 0L || nonmissing_p == 0L
+}
+
+stage7_refresh_fit_metrics_and_coefficients <- function(run_root_dir, stage1_inputs) {
+  run_root_dir <- normalize_existing_path(run_root_dir)
+  formula_plan_obj <- stage7_prepare_formula_plan(stage1_inputs)
+  model_plan <- formula_plan_obj$model_plan
+  benchmark_plan <- formula_plan_obj$benchmark_plan
+  model_catalog <- stage7_model_catalog()
+
+  fit_rows <- list()
+  coef_rows <- list()
+  fit_counter <- 0L
+
+  stage7_prepare_dataset <- function(df, dataset_name) {
+    df <- tibble::as_tibble(df)
+    if (!"dataset" %in% names(df)) df$dataset <- dataset_name
+    if (!"unique_person_id" %in% names(df)) {
+      if (all(c("site", "id") %in% names(df))) {
+        df$unique_person_id <- paste0(df$site, "__", df$id)
+      } else {
+        stop(sprintf("Stage 1 dataset `%s` does not contain `unique_person_id` or the fallback `site` + `id` columns.", dataset_name), call. = FALSE)
+      }
+    }
+    if (!"site" %in% names(df)) df$site <- dataset_name
+    df$site <- factor(as.character(df$site))
+    df$sex_num <- suppressWarnings(as.numeric(df$sex_num))
+    df$time_year <- suppressWarnings(as.numeric(df$time_year))
+    if (all(is.na(df$time_year)) && "days_followup" %in% names(df)) {
+      df$time_year <- suppressWarnings(as.numeric(df$days_followup)) / 365.25
+    }
+    df$event_main <- if ("event_main" %in% names(df)) as.integer(df$event_main) else as.integer(df$status_num == 1L)
+    if (!"censor_main" %in% names(df)) df$censor_main <- as.integer(df$status_num %in% c(0L, 2L))
+    df
+  }
+
+  run_one_model_fit_only <- function(df, meta_row, model_row) {
+    t0 <- proc.time()[[3]]
+    fit_result <- switch(
+      model_row$fit_method,
+      benchmark_km = stage7_fit_benchmark_km(df, horizons = sort(unique(as.integer(stage1_inputs$horizon_registry$horizon_year)))),
+      nocure_exp = stage7_fit_nocure_survreg(df, meta_row$latency_rhs, "exp"),
+      nocure_weibull = stage7_fit_nocure_survreg(df, meta_row$latency_rhs, "weibull"),
+      nocure_lnorm = stage7_fit_nocure_survreg(df, meta_row$latency_rhs, "lnorm"),
+      nocure_llogis = stage7_fit_nocure_survreg(df, meta_row$latency_rhs, "llogis"),
+      nocure_coxph = stage7_fit_nocure_coxph(df, meta_row$latency_rhs),
+      cure_exp = stage7_fit_parametric_cure(df, meta_row$incidence_rhs, meta_row$latency_rhs, "exp"),
+      cure_weibull = stage7_fit_parametric_cure(df, meta_row$incidence_rhs, meta_row$latency_rhs, "weibull"),
+      cure_lnorm = stage7_fit_parametric_cure(df, meta_row$incidence_rhs, meta_row$latency_rhs, "lnorm"),
+      cure_llogis = stage7_fit_parametric_cure(df, meta_row$incidence_rhs, meta_row$latency_rhs, "llogis"),
+      cure_coxlatency = stage7_fit_smcure_model(df, meta_row$incidence_rhs, meta_row$latency_rhs, model_type = "ph"),
+      cure_aft_sensitivity = stage7_fit_smcure_model(df, meta_row$incidence_rhs, meta_row$latency_rhs, model_type = "aft"),
+      stop(sprintf("Unsupported fit method: %s", model_row$fit_method), call. = FALSE)
+    )
+    fit_elapsed <- proc.time()[[3]] - t0
+
+    model_meta <- meta_row %>%
+      mutate(
+        model_id = model_row$model_id,
+        model_class = model_row$model_class,
+        model_block = model_row$model_block,
+        model_family = model_row$model_family,
+        latency_type = model_row$latency_type,
+        fit_engine = model_row$fit_engine,
+        is_cure_model = model_row$is_cure_model,
+        matched_nocure_model_id = model_row$matched_nocure_model_id
+      )
+
+    fit_ok <- isTRUE(fit_result$success)
+    fit_warning_text <- collapse_unique_sorted(fit_result$warnings, empty_value = "")
+
+    fit_row <- tibble(
+      dataset = model_meta$dataset,
+      formula_variant = model_meta$formula_variant,
+      site_branch = model_meta$site_branch,
+      interaction_branch = model_meta$interaction_branch,
+      model_id = model_meta$model_id,
+      loglik = ifelse(fit_ok, fit_result$loglik %||% NA_real_, NA_real_),
+      logLik = ifelse(fit_ok, fit_result$loglik %||% NA_real_, NA_real_),
+      n_parameters = ifelse(fit_ok, fit_result$n_parameters %||% NA_real_, NA_real_),
+      AIC = ifelse(fit_ok && is.finite(fit_result$loglik %||% NA_real_) && is.finite(fit_result$n_parameters %||% NA_real_), -2 * fit_result$loglik + 2 * fit_result$n_parameters, NA_real_),
+      BIC = ifelse(fit_ok && is.finite(fit_result$loglik %||% NA_real_) && is.finite(fit_result$n_parameters %||% NA_real_), -2 * fit_result$loglik + log(nrow(df)) * fit_result$n_parameters, NA_real_),
+      fit_status = ifelse(fit_ok, "ok_fit", "fit_error"),
+      convergence_code = ifelse(fit_ok, fit_result$convergence_code %||% NA_real_, NA_real_),
+      has_converged_solution = ifelse(fit_ok, fit_result$has_converged_solution %||% NA, NA),
+      optimizer_method = ifelse(fit_ok, fit_result$optimizer_method %||% NA_character_, NA_character_),
+      fit_warning_count = length(fit_result$warnings),
+      fit_warning_message = fit_warning_text,
+      warning_count = length(fit_result$warnings),
+      warning_message = fit_warning_text,
+      fit_message = dplyr::coalesce(fit_result$error_message, ""),
+      error_message = dplyr::coalesce(fit_result$error_message, ""),
+      fit_elapsed_sec = fit_elapsed
+    )
+
+    coef_tbl <- if (fit_ok && nrow(fit_result$coefficients) > 0L) {
+      fit_result$coefficients %>%
+        mutate(
+          dataset = model_meta$dataset,
+          formula_variant = model_meta$formula_variant,
+          site_branch = model_meta$site_branch,
+          interaction_branch = model_meta$interaction_branch,
+          model_id = model_meta$model_id,
+          model_class = model_meta$model_class,
+          model_block = model_meta$model_block,
+          model_family = model_meta$model_family,
+          latency_type = model_meta$latency_type,
+          matched_nocure_model_id = model_meta$matched_nocure_model_id,
+          formula_label = model_meta$formula_label,
+          formula_scope = model_meta$formula_scope,
+          site_term_interpretation = model_meta$site_term_interpretation,
+          uses_site = model_meta$uses_site,
+          uses_age_sex_interaction = model_meta$uses_age_sex_interaction,
+          site_placement_label = model_meta$site_placement_label,
+          incidence_uses_site = model_meta$incidence_uses_site,
+          latency_uses_site = model_meta$latency_uses_site,
+          stage = model_meta$stage,
+          branch = model_meta$branch,
+          incidence_link = model_meta$incidence_link,
+          dataset_key = make_stage6_join_key(model_meta$dataset, site_branch = model_meta$site_branch)
+        ) %>%
+        stage7_finalize_coefficient_export() %>%
+        select(dataset, formula_variant, site_branch, interaction_branch, model_id, model_class, model_block, model_family, latency_type, component, term, estimate, std_error, test_statistic_z, p_value, boot_n_success_estimate, boot_success_rate_estimate, estimate_ci_lower, estimate_ci_upper, estimate_ci_level, uncertainty_method, uncertainty_available_flag, formula_label, formula_scope, site_term_interpretation, uses_site, uses_age_sex_interaction, site_placement_label, incidence_uses_site, latency_uses_site, stage, branch, incidence_link, matched_nocure_model_id, dataset_key)
+    } else {
+      tibble()
+    }
+
+    list(fit_row = fit_row, coefficients = coef_tbl)
+  }
+
+  for (dataset_name in names(stage1_inputs$analysis_datasets)) {
+    df <- stage7_prepare_dataset(stage1_inputs$analysis_datasets[[dataset_name]], dataset_name)
+
+    benchmark_meta <- benchmark_plan %>% filter(dataset == dataset_name)
+    benchmark_spec <- model_catalog %>% filter(model_id == "benchmark_km")
+    fit_counter <- fit_counter + 1L
+    message(sprintf("[uncertainty %03d] Re-fitting %s | %s | %s", fit_counter, dataset_name, benchmark_meta$formula_variant[[1]], benchmark_spec$model_id[[1]]))
+    result <- run_one_model_fit_only(df, benchmark_meta, benchmark_spec)
+    fit_rows[[length(fit_rows) + 1L]] <- result$fit_row
+    if (nrow(result$coefficients) > 0L) coef_rows[[length(coef_rows) + 1L]] <- result$coefficients
+
+    dataset_plan <- model_plan %>% filter(dataset == dataset_name)
+    nonbenchmark_catalog <- model_catalog %>% filter(model_id != "benchmark_km")
+    for (ii in seq_len(nrow(dataset_plan))) {
+      meta_row <- dataset_plan[ii, , drop = FALSE]
+      for (jj in seq_len(nrow(nonbenchmark_catalog))) {
+        model_row <- nonbenchmark_catalog[jj, , drop = FALSE]
+        fit_counter <- fit_counter + 1L
+        message(sprintf("[uncertainty %03d] Re-fitting %s | %s | %s", fit_counter, dataset_name, meta_row$formula_variant[[1]], model_row$model_id[[1]]))
+        result <- run_one_model_fit_only(df, meta_row, model_row)
+        fit_rows[[length(fit_rows) + 1L]] <- result$fit_row
+        if (nrow(result$coefficients) > 0L) coef_rows[[length(coef_rows) + 1L]] <- result$coefficients
+      }
+    }
+  }
+
+  refreshed_metrics_tbl <- bind_rows(fit_rows)
+  refreshed_coefficients_tbl <- bind_rows(coef_rows)
+
+  existing_fit_registry_tbl <- safe_read_csv(file.path(run_root_dir, "stage7_fit_registry.csv"))
+  join_keys <- c("dataset", "formula_variant", "site_branch", "interaction_branch", "model_id")
+  updated_cols <- setdiff(names(refreshed_metrics_tbl), join_keys)
+
+  updated_fit_registry_tbl <- existing_fit_registry_tbl %>%
+    select(-any_of(updated_cols)) %>%
+    left_join(refreshed_metrics_tbl, by = join_keys)
+
+  safe_write_csv(updated_fit_registry_tbl, file.path(run_root_dir, "stage7_fit_registry.csv"))
+  safe_write_csv(refreshed_coefficients_tbl, file.path(run_root_dir, "stage7_coefficients.csv"))
+
+  list(
+    fit_registry = updated_fit_registry_tbl,
+    coefficients = refreshed_coefficients_tbl
+  )
+}
 # 🔴 Load: current artifacts and supporting inputs ===============================
 ## 🟠 Load: Stage 1, Stage 6, and Stage 7 objects ===============================
 stage1_inputs <- load_stage1_backbone(stage1_data_path)
@@ -3443,6 +3630,12 @@ stage6_carry_forward_tbl <- load_stage6_carry_forward_optional(stage6_screening_
 stage6_registry <- build_stage6_registry(stage6_carry_forward_tbl)
 stage7_core_status <- ensure_stage7_core_outputs(run_root_dir, stage1_inputs = stage1_inputs)
 stage7_objects <- load_stage7_outputs(stage7_core_status$resolved_run_root_dir)
+if (stage7_coefficients_need_uncertainty_refresh(stage7_objects$coefficients)) {
+  message("ℹ️  Existing Stage 7 coefficients do not contain usable uncertainty columns; refreshing fit metrics and coefficient uncertainty only.")
+  refreshed_uncertainty_outputs <- stage7_refresh_fit_metrics_and_coefficients(stage7_objects$resolved_root_dir, stage1_inputs)
+  stage7_objects$fit_registry <- refreshed_uncertainty_outputs$fit_registry
+  stage7_objects$coefficients <- refreshed_uncertainty_outputs$coefficients
+}
 run_root_dir <- stage7_objects$resolved_root_dir
 export_path <- resolve_stage7_export_path(
   export_path = export_path,

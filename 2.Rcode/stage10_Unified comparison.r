@@ -220,6 +220,18 @@ extract_long_metric_numeric <- function(df, metric_candidates, summary_candidate
   ifelse(metric_names %in% trim_lower(metric_candidates) & summary_ok, metric_values, NA_real_)
 }
 
+derive_net_benefit_from_counts <- function(tp_count, fp_count, n_total, threshold) {
+  tp_num <- coerce_numeric_text(tp_count)
+  fp_num <- coerce_numeric_text(fp_count)
+  n_num <- coerce_numeric_text(n_total)
+  thr_num <- coerce_numeric_text(threshold)
+  
+  valid <- !is.na(tp_num) & !is.na(fp_num) & !is.na(n_num) & !is.na(thr_num) & n_num > 0 & thr_num >= 0 & thr_num < 1
+  out <- rep(NA_real_, length(tp_num))
+  out[valid] <- (tp_num[valid] / n_num[valid]) - (fp_num[valid] / n_num[valid]) * (thr_num[valid] / pmax(1 - thr_num[valid], 1e-8))
+  out
+}
+
 first_non_missing_scalar <- function(x) {
   if (is.null(x) || length(x) == 0L) {
     return(NA)
@@ -996,8 +1008,8 @@ standardize_classification_table <- function(df, stage_name, source_file, horizo
         extract_long_metric_numeric(df, c('false_positive_burden', 'false_positive_burden_known_nonevent', 'false_positive_burden_non_event', 'false_positive_burden_nonevents', 'false_positive_burden_primary', 'false_positive_burden_all'), summary_candidates = c('value', 'mean'))
       ),
       false_positives_per100 = dplyr::coalesce(
-        coerce_numeric_text(coalesce_cols(df, c('false_positives_per100', 'fp100', 'fp100_mean', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), default = NA)),
-        extract_long_metric_numeric(df, c('false_positives_per100', 'fp100', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), summary_candidates = c('value', 'mean'))
+        coerce_numeric_text(coalesce_cols(df, c('false_positives_per100', 'false_positives_per_100', 'fp100', 'FP100', 'fp100_mean', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), default = NA)),
+        extract_long_metric_numeric(df, c('false_positives_per100', 'false_positives_per_100', 'fp100', 'false_positive_per_100', 'unnecessary_high_risk_per_100_population', 'unnecessary_high_risk_per_100_non_event'), summary_candidates = c('value', 'mean'))
       ),
       ppv = dplyr::coalesce(
         coerce_numeric_text(coalesce_cols(df, c('ppv', 'positive_predictive_value', 'PPV_mean'), default = NA)),
@@ -1014,18 +1026,28 @@ standardize_classification_table <- function(df, stage_name, source_file, horizo
       instability_marker = as.character(coalesce_cols(df, c('instability_marker', 'late_horizon_instability_flag', 'tail_instability_flag'), default = NA_character_))
     )
   ) %>%
+    mutate(
+      false_positives_per100 = dplyr::coalesce(false_positives_per100, 100 * false_positive_burden)
+    ) %>%
     add_support_metadata(horizon_registry)
 }
 
 standardize_decision_table <- function(df, stage_name, source_file, horizon_registry) {
   base <- standardize_base_fields(df, stage_name, source_file)
+  fallback_net_benefit <- derive_net_benefit_from_counts(
+    tp_count = coalesce_cols(df, c('tp_count', 'weighted_tp'), default = NA),
+    fp_count = coalesce_cols(df, c('fp_count', 'weighted_fp'), default = NA),
+    n_total = coalesce_cols(df, c('n_subjects', 'n_subject', 'n_total', 'cohort_n'), default = NA),
+    threshold = coalesce_cols(df, c('threshold', 'risk_threshold', 'threshold_value', 'c'), default = NA)
+  )
   
   bind_cols(
     base,
     tibble::tibble(
       net_benefit = dplyr::coalesce(
         coerce_numeric_text(coalesce_cols(df, c('net_benefit', 'nb', 'NB_mean'), default = NA)),
-        extract_long_metric_numeric(df, c('net_benefit', 'nb'), summary_candidates = c('value', 'mean'))
+        extract_long_metric_numeric(df, c('net_benefit', 'nb'), summary_candidates = c('value', 'mean')),
+        fallback_net_benefit
       ),
       net_reduction_in_unnecessary_intervention = dplyr::coalesce(
         coerce_numeric_text(coalesce_cols(df, c('net_reduction_in_unnecessary_intervention', 'net_reduction', 'net_reduction_unnecessary_per_100'), default = NA)),
