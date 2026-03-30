@@ -12,6 +12,9 @@ force_stage7_core_refit <- TRUE
 save_stage7_fit_rds <- FALSE
 stage7_model_rds_prefix <- "stage7_fit_object"
 stage7_expected_bootstrap_reps <- 0L
+stage7_coefficient_ci_level <- 0.95
+stage7_smcure_uncertainty_boot_reps <- 10L
+stage7_family_contrast_pvalue_method <- "reference_chisq_proxy"
 
 refresh_patched_exports_even_when_outputs_exist <- TRUE
 refresh_ipcw_registry_even_when_output_exists <- FALSE
@@ -1251,8 +1254,10 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
     LR_2delta_logLik = double(),
     delta_AIC_cure_minus_noncure = double(),
     delta_BIC_cure_minus_noncure = double(),
+    lrt_reference_df = double(),
     lrt_calibration_status = character(),
     lrt_pvalue_bootstrap = double(),
+    lrt_pvalue_method = character(),
     same_family_fit_gain_signal = character(),
     convergence_pair_flag = logical(),
     risk_scale = character()
@@ -1286,6 +1291,7 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
       std_logLik,
       std_AIC,
       std_BIC,
+      std_n_parameters,
       std_convergence_status
     )
 
@@ -1294,12 +1300,13 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
     mutate(
       dataset_key = dplyr::coalesce(as.character(dataset_key), make_stage6_join_key(dataset, site_branch))
     ) %>%
-    select(dataset_key, formula_variant, model_id, std_logLik, std_AIC, std_BIC, std_convergence_status) %>%
+    select(dataset_key, formula_variant, model_id, std_logLik, std_AIC, std_BIC, std_n_parameters, std_convergence_status) %>%
     rename(
       matched_noncure_model_id = model_id,
       logLik_noncure = std_logLik,
       AIC_noncure = std_AIC,
       BIC_noncure = std_BIC,
+      n_parameters_noncure = std_n_parameters,
       convergence_status_noncure = std_convergence_status
     )
 
@@ -1318,18 +1325,34 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
       LR_2delta_logLik = if_else(is.finite(logLik_cure) & is.finite(logLik_noncure), 2 * delta_logLik_cure_minus_noncure, NA_real_),
       delta_AIC_cure_minus_noncure = std_AIC - AIC_noncure,
       delta_BIC_cure_minus_noncure = std_BIC - BIC_noncure,
+      convergence_pair_flag = is_success_status(std_convergence_status) & is_success_status(convergence_status_noncure),
+      lrt_reference_df = if_else(
+        is.finite(std_n_parameters) & is.finite(n_parameters_noncure),
+        pmax(std_n_parameters - n_parameters_noncure, 1),
+        NA_real_
+      ),
+      lrt_pvalue_bootstrap = dplyr::case_when(
+        !convergence_pair_flag ~ NA_real_,
+        is.finite(LR_2delta_logLik) & is.finite(lrt_reference_df) ~ stats::pchisq(pmax(LR_2delta_logLik, 0), df = lrt_reference_df, lower.tail = FALSE),
+        TRUE ~ NA_real_
+      ),
       lrt_calibration_status = dplyr::case_when(
         is.na(logLik_noncure) | is.na(logLik_cure) ~ "missing_likelihood_metrics",
+        !convergence_pair_flag ~ "not_reported_pair_not_fully_converged",
+        is.finite(lrt_pvalue_bootstrap) ~ paste0(stage7_family_contrast_pvalue_method, "_nonregular_caution"),
         TRUE ~ "not_reported_nonregular_problem"
       ),
-      lrt_pvalue_bootstrap = NA_real_,
+      lrt_pvalue_method = dplyr::case_when(
+        is.finite(lrt_pvalue_bootstrap) ~ stage7_family_contrast_pvalue_method,
+        !convergence_pair_flag ~ "not_reported_pair_not_fully_converged",
+        TRUE ~ "not_available"
+      ),
       same_family_fit_gain_signal = dplyr::case_when(
         is.na(delta_logLik_cure_minus_noncure) ~ "cannot_assess",
         delta_logLik_cure_minus_noncure > 0 & !is.na(delta_AIC_cure_minus_noncure) & delta_AIC_cure_minus_noncure < 0 ~ "partial_cure_fit_gain",
         delta_logLik_cure_minus_noncure > 0 ~ "likelihood_only_cure_fit_gain",
         TRUE ~ "no_cure_fit_gain"
       ),
-      convergence_pair_flag = is_success_status(std_convergence_status) & is_success_status(convergence_status_noncure),
       risk_scale = dplyr::coalesce(risk_scale, main_risk_scale)
     ) %>%
     transmute(
@@ -1346,8 +1369,10 @@ build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5_fit_tbl =
       LR_2delta_logLik = as.numeric(LR_2delta_logLik),
       delta_AIC_cure_minus_noncure = as.numeric(delta_AIC_cure_minus_noncure),
       delta_BIC_cure_minus_noncure = as.numeric(delta_BIC_cure_minus_noncure),
+      lrt_reference_df = as.numeric(lrt_reference_df),
       lrt_calibration_status,
       lrt_pvalue_bootstrap,
+      lrt_pvalue_method,
       same_family_fit_gain_signal,
       convergence_pair_flag,
       risk_scale = as.character(risk_scale)
@@ -2058,6 +2083,314 @@ stage7_standardize_term_name <- function(x) {
   out
 }
 
+stage7_empty_coefficient_uncertainty <- function() {
+  tibble(
+    component = character(),
+    term = character(),
+    std_error = double(),
+    test_statistic_z = double(),
+    p_value = double(),
+    estimate_ci_lower = double(),
+    estimate_ci_upper = double(),
+    uncertainty_method = character(),
+    uncertainty_available_flag = logical(),
+    estimate_ci_level = double(),
+    boot_n_success_estimate = double(),
+    boot_success_rate_estimate = double()
+  )
+}
+
+stage7_finalize_coefficient_export <- function(coef_tbl) {
+  coef_tbl <- tibble::as_tibble(coef_tbl)
+  coef_tbl <- ensure_columns_exist(
+    coef_tbl,
+    list(
+      component = character(),
+      term = character(),
+      estimate = double(),
+      std_error = double(),
+      test_statistic_z = double(),
+      p_value = double(),
+      estimate_ci_lower = double(),
+      estimate_ci_upper = double(),
+      uncertainty_method = character(),
+      uncertainty_available_flag = logical(),
+      estimate_ci_level = double(),
+      boot_n_success_estimate = double(),
+      boot_success_rate_estimate = double()
+    )
+  )
+
+  coef_tbl %>%
+    mutate(
+      component = as.character(component),
+      term = as.character(term),
+      estimate = suppressWarnings(as.numeric(estimate)),
+      std_error = suppressWarnings(as.numeric(std_error)),
+      test_statistic_z = suppressWarnings(as.numeric(test_statistic_z)),
+      p_value = suppressWarnings(as.numeric(p_value)),
+      estimate_ci_lower = suppressWarnings(as.numeric(estimate_ci_lower)),
+      estimate_ci_upper = suppressWarnings(as.numeric(estimate_ci_upper)),
+      uncertainty_method = dplyr::coalesce(as.character(uncertainty_method), "not_available"),
+      uncertainty_available_flag = dplyr::coalesce(
+        as.logical(uncertainty_available_flag),
+        is.finite(std_error) | is.finite(p_value) | (is.finite(estimate_ci_lower) & is.finite(estimate_ci_upper)),
+        FALSE
+      ),
+      estimate_ci_level = dplyr::coalesce(suppressWarnings(as.numeric(estimate_ci_level)), stage7_coefficient_ci_level),
+      boot_n_success_estimate = suppressWarnings(as.numeric(boot_n_success_estimate)),
+      boot_success_rate_estimate = suppressWarnings(as.numeric(boot_success_rate_estimate))
+    )
+}
+
+stage7_attach_coefficient_uncertainty <- function(coef_tbl, uncertainty_tbl) {
+  coef_tbl <- tibble::as_tibble(coef_tbl)
+  uncertainty_tbl <- tibble::as_tibble(uncertainty_tbl)
+
+  if (nrow(coef_tbl) == 0L) {
+    return(stage7_finalize_coefficient_export(coef_tbl))
+  }
+
+  if (nrow(uncertainty_tbl) == 0L) {
+    return(stage7_finalize_coefficient_export(coef_tbl))
+  }
+
+  coef_tbl %>%
+    left_join(
+      uncertainty_tbl %>%
+        select(component, term, std_error, test_statistic_z, p_value, estimate_ci_lower, estimate_ci_upper, uncertainty_method, uncertainty_available_flag, estimate_ci_level, boot_n_success_estimate, boot_success_rate_estimate),
+      by = c("component", "term")
+    ) %>%
+    stage7_finalize_coefficient_export()
+}
+
+stage7_wald_ci_bounds <- function(estimate, std_error, ci_level = stage7_coefficient_ci_level) {
+  z_alpha <- stats::qnorm(1 - (1 - ci_level) / 2)
+  estimate <- suppressWarnings(as.numeric(estimate))
+  std_error <- suppressWarnings(as.numeric(std_error))
+  tibble(
+    estimate_ci_lower = ifelse(is.finite(estimate) & is.finite(std_error), estimate - z_alpha * std_error, NA_real_),
+    estimate_ci_upper = ifelse(is.finite(estimate) & is.finite(std_error), estimate + z_alpha * std_error, NA_real_)
+  )
+}
+
+stage7_extract_survreg_uncertainty <- function(fit, family, ci_level = stage7_coefficient_ci_level) {
+  sm_tbl <- tryCatch(summary(fit)$table, error = function(e) NULL)
+  if (is.null(sm_tbl) || length(sm_tbl) == 0L) {
+    return(stage7_empty_coefficient_uncertainty())
+  }
+
+  sm_df <- as.data.frame(sm_tbl)
+  sm_df$raw_term <- rownames(sm_tbl)
+  rownames(sm_df) <- NULL
+  ci_tbl <- stage7_wald_ci_bounds(sm_df$Value, sm_df$`Std. Error`, ci_level = ci_level)
+
+  out <- tibble(
+    component = dplyr::case_when(
+      sm_df$raw_term == "Log(scale)" ~ "latency_auxiliary",
+      TRUE ~ "latency"
+    ),
+    term = dplyr::case_when(
+      sm_df$raw_term == "Log(scale)" ~ "log_shape_or_sigma",
+      TRUE ~ stage7_standardize_term_name(sm_df$raw_term)
+    ),
+    std_error = suppressWarnings(as.numeric(sm_df$`Std. Error`)),
+    test_statistic_z = suppressWarnings(as.numeric(sm_df$z)),
+    p_value = suppressWarnings(as.numeric(sm_df$p)),
+    estimate_ci_lower = ci_tbl$estimate_ci_lower,
+    estimate_ci_upper = ci_tbl$estimate_ci_upper,
+    uncertainty_method = "survreg_summary_wald",
+    uncertainty_available_flag = TRUE,
+    estimate_ci_level = ci_level,
+    boot_n_success_estimate = NA_real_,
+    boot_success_rate_estimate = NA_real_
+  )
+
+  if (identical(family, "exp")) {
+    out <- out %>% filter(component != "latency_auxiliary")
+  }
+
+  stage7_finalize_coefficient_export(out)
+}
+
+stage7_extract_coxph_uncertainty <- function(fit, ci_level = stage7_coefficient_ci_level) {
+  sm_coef <- tryCatch(summary(fit)$coefficients, error = function(e) NULL)
+  if (is.null(sm_coef) || length(sm_coef) == 0L) {
+    return(stage7_empty_coefficient_uncertainty())
+  }
+
+  sm_df <- as.data.frame(sm_coef)
+  sm_df$raw_term <- rownames(sm_coef)
+  rownames(sm_df) <- NULL
+  ci_tbl <- stage7_wald_ci_bounds(sm_df$coef, sm_df$`se(coef)`, ci_level = ci_level)
+
+  stage7_finalize_coefficient_export(
+    tibble(
+      component = "latency",
+      term = stage7_standardize_term_name(sm_df$raw_term),
+      std_error = suppressWarnings(as.numeric(sm_df$`se(coef)`)),
+      test_statistic_z = suppressWarnings(as.numeric(sm_df$z)),
+      p_value = suppressWarnings(as.numeric(sm_df$`Pr(>|z|)`)),
+      estimate_ci_lower = ci_tbl$estimate_ci_lower,
+      estimate_ci_upper = ci_tbl$estimate_ci_upper,
+      uncertainty_method = "coxph_summary_wald",
+      uncertainty_available_flag = TRUE,
+      estimate_ci_level = ci_level,
+      boot_n_success_estimate = NA_real_,
+      boot_success_rate_estimate = NA_real_
+    )
+  )
+}
+
+stage7_safe_inverse_hessian <- function(hessian) {
+  if (is.null(hessian)) {
+    return(NULL)
+  }
+  hessian <- suppressWarnings(as.matrix(hessian))
+  if (length(hessian) == 0L || !all(dim(hessian) > 0L)) {
+    return(NULL)
+  }
+  hessian <- (hessian + t(hessian)) / 2
+  tryCatch(solve(hessian), error = function(e) NULL)
+}
+
+stage7_extract_parametric_cure_uncertainty <- function(par_hat, X_inc, X_lat, family, hessian, ci_level = stage7_coefficient_ci_level) {
+  vcov_mat <- stage7_safe_inverse_hessian(hessian)
+  component_vec <- c(
+    rep("incidence_uncured_logit", ncol(X_inc)),
+    rep("latency", ncol(X_lat)),
+    if (family == "exp") character(0) else "latency_auxiliary"
+  )
+  term_vec <- c(
+    stage7_standardize_term_name(colnames(X_inc)),
+    stage7_standardize_term_name(colnames(X_lat)),
+    if (family == "exp") character(0) else "log_shape_or_sigma"
+  )
+  estimate_vec <- suppressWarnings(as.numeric(par_hat))
+
+  if (is.null(vcov_mat)) {
+    return(
+      stage7_finalize_coefficient_export(
+        tibble(
+          component = component_vec,
+          term = term_vec,
+          std_error = NA_real_,
+          test_statistic_z = NA_real_,
+          p_value = NA_real_,
+          estimate_ci_lower = NA_real_,
+          estimate_ci_upper = NA_real_,
+          uncertainty_method = "optim_hessian_unavailable",
+          uncertainty_available_flag = FALSE,
+          estimate_ci_level = ci_level,
+          boot_n_success_estimate = NA_real_,
+          boot_success_rate_estimate = NA_real_
+        )
+      )
+    )
+  }
+
+  se_vec <- suppressWarnings(sqrt(diag(vcov_mat)))
+  se_vec[!is.finite(se_vec)] <- NA_real_
+  z_vec <- ifelse(is.finite(estimate_vec) & is.finite(se_vec) & se_vec > 0, estimate_vec / se_vec, NA_real_)
+  p_vec <- ifelse(is.finite(z_vec), 2 * stats::pnorm(abs(z_vec), lower.tail = FALSE), NA_real_)
+  ci_tbl <- stage7_wald_ci_bounds(estimate_vec, se_vec, ci_level = ci_level)
+
+  stage7_finalize_coefficient_export(
+    tibble(
+      component = component_vec,
+      term = term_vec,
+      std_error = se_vec,
+      test_statistic_z = z_vec,
+      p_value = p_vec,
+      estimate_ci_lower = ci_tbl$estimate_ci_lower,
+      estimate_ci_upper = ci_tbl$estimate_ci_upper,
+      uncertainty_method = "custom_mle_hessian_wald",
+      uncertainty_available_flag = is.finite(se_vec),
+      estimate_ci_level = ci_level,
+      boot_n_success_estimate = NA_real_,
+      boot_success_rate_estimate = NA_real_
+    )
+  )
+}
+
+stage7_extract_smcure_uncertainty <- function(fit, ci_level = stage7_coefficient_ci_level, nboot = NA_real_) {
+  b_names <- fit$bnm %||% names(fit$b) %||% rep("incidence", length(fit$b))
+  beta_names <- fit$betanm %||% names(fit$beta) %||% rep("latency", length(fit$beta))
+
+  if (is.null(fit$b_sd) || is.null(fit$beta_sd)) {
+    return(
+      stage7_finalize_coefficient_export(
+        bind_rows(
+          tibble(
+            component = "incidence_uncured_logit",
+            term = stage7_standardize_term_name(b_names),
+            std_error = NA_real_,
+            test_statistic_z = NA_real_,
+            p_value = NA_real_,
+            estimate_ci_lower = NA_real_,
+            estimate_ci_upper = NA_real_,
+            uncertainty_method = "smcure_variance_not_requested",
+            uncertainty_available_flag = FALSE,
+            estimate_ci_level = ci_level,
+            boot_n_success_estimate = NA_real_,
+            boot_success_rate_estimate = NA_real_
+          ),
+          tibble(
+            component = "latency",
+            term = stage7_standardize_term_name(beta_names),
+            std_error = NA_real_,
+            test_statistic_z = NA_real_,
+            p_value = NA_real_,
+            estimate_ci_lower = NA_real_,
+            estimate_ci_upper = NA_real_,
+            uncertainty_method = "smcure_variance_not_requested",
+            uncertainty_available_flag = FALSE,
+            estimate_ci_level = ci_level,
+            boot_n_success_estimate = NA_real_,
+            boot_success_rate_estimate = NA_real_
+          )
+        )
+      )
+    )
+  }
+
+  b_ci_tbl <- stage7_wald_ci_bounds(fit$b, fit$b_sd, ci_level = ci_level)
+  beta_ci_tbl <- stage7_wald_ci_bounds(fit$beta, fit$beta_sd, ci_level = ci_level)
+
+  stage7_finalize_coefficient_export(
+    bind_rows(
+      tibble(
+        component = "incidence_uncured_logit",
+        term = stage7_standardize_term_name(b_names),
+        std_error = suppressWarnings(as.numeric(fit$b_sd)),
+        test_statistic_z = suppressWarnings(as.numeric(fit$b_zvalue)),
+        p_value = suppressWarnings(as.numeric(fit$b_pvalue)),
+        estimate_ci_lower = b_ci_tbl$estimate_ci_lower,
+        estimate_ci_upper = b_ci_tbl$estimate_ci_upper,
+        uncertainty_method = "smcure_internal_bootstrap_wald",
+        uncertainty_available_flag = TRUE,
+        estimate_ci_level = ci_level,
+        boot_n_success_estimate = nboot,
+        boot_success_rate_estimate = NA_real_
+      ),
+      tibble(
+        component = "latency",
+        term = stage7_standardize_term_name(beta_names),
+        std_error = suppressWarnings(as.numeric(fit$beta_sd)),
+        test_statistic_z = suppressWarnings(as.numeric(fit$beta_zvalue)),
+        p_value = suppressWarnings(as.numeric(fit$beta_pvalue)),
+        estimate_ci_lower = beta_ci_tbl$estimate_ci_lower,
+        estimate_ci_upper = beta_ci_tbl$estimate_ci_upper,
+        uncertainty_method = "smcure_internal_bootstrap_wald",
+        uncertainty_available_flag = TRUE,
+        estimate_ci_level = ci_level,
+        boot_n_success_estimate = nboot,
+        boot_success_rate_estimate = NA_real_
+      )
+    )
+  )
+}
+
 stage7_step_eval <- function(time, value, at, yleft = 1, yright = NULL) {
   time <- as.numeric(time)
   value <- as.numeric(value)
@@ -2221,14 +2554,17 @@ stage7_fit_nocure_survreg <- function(df, latency_rhs, family) {
   mm <- stats::model.matrix(delete.response(stats::terms(fit)), data = df)
   lp <- drop(mm %*% stats::coef(fit))
   aux_log <- if (family == "exp") NA_real_ else log(fit$scale)
+  coef_tbl <- bind_rows(
+    tibble(component = "latency", term = stage7_standardize_term_name(names(stats::coef(fit))), estimate = as.numeric(stats::coef(fit))),
+    if (family == "exp") tibble() else tibble(component = "latency_auxiliary", term = "log_shape_or_sigma", estimate = aux_log)
+  ) %>%
+    stage7_attach_coefficient_uncertainty(stage7_extract_survreg_uncertainty(fit, family, ci_level = stage7_coefficient_ci_level))
+
   list(
     success = TRUE,
     fit_object = fit,
     warnings = fit_capture$warnings,
-    coefficients = bind_rows(
-      tibble(component = "latency", term = stage7_standardize_term_name(names(stats::coef(fit))), estimate = as.numeric(stats::coef(fit))),
-      if (family == "exp") tibble() else tibble(component = "latency_auxiliary", term = "log_shape_or_sigma", estimate = aux_log)
-    ),
+    coefficients = coef_tbl,
     predictions = list(
       lp = lp,
       aux_log = aux_log,
@@ -2266,11 +2602,14 @@ stage7_fit_nocure_coxph <- function(df, latency_rhs) {
   fit <- fit_capture$value
   basehaz_df <- survival::basehaz(fit, centered = FALSE)
   lp <- stats::predict(fit, newdata = df, type = "lp")
+  coef_tbl <- tibble(component = "latency", term = stage7_standardize_term_name(names(stats::coef(fit))), estimate = as.numeric(stats::coef(fit))) %>%
+    stage7_attach_coefficient_uncertainty(stage7_extract_coxph_uncertainty(fit, ci_level = stage7_coefficient_ci_level))
+
   list(
     success = TRUE,
     fit_object = fit,
     warnings = fit_capture$warnings,
-    coefficients = tibble(component = "latency", term = stage7_standardize_term_name(names(stats::coef(fit))), estimate = as.numeric(stats::coef(fit))),
+    coefficients = coef_tbl,
     predictions = list(basehaz = basehaz_df, lp = lp),
     loglik = if (!is.null(fit$loglik) && length(fit$loglik) >= 2L) as.numeric(fit$loglik[[2]]) else NA_real_,
     n_parameters = length(stats::coef(fit)),
@@ -2354,16 +2693,31 @@ stage7_fit_parametric_cure <- function(df, incidence_rhs, latency_rhs, family) {
   uncured_prob <- stage7_clamp_prob(plogis(drop(X_inc %*% gamma_hat)))
   lp_lat <- drop(X_lat %*% beta_hat)
 
+  hessian_capture <- stage7_capture_with_warnings(stats::optimHess(par_hat, neg_loglik))
+  hessian_mat <- if (!is.null(hessian_capture$value)) suppressWarnings(as.matrix(hessian_capture$value)) else NULL
+
   coef_tbl <- bind_rows(
     tibble(component = "incidence_uncured_logit", term = stage7_standardize_term_name(colnames(X_inc)), estimate = as.numeric(gamma_hat)),
     tibble(component = "latency", term = stage7_standardize_term_name(colnames(X_lat)), estimate = as.numeric(beta_hat)),
     if (family == "exp") tibble() else tibble(component = "latency_auxiliary", term = "log_shape_or_sigma", estimate = aux_log_hat)
-  )
+  ) %>%
+    stage7_attach_coefficient_uncertainty(
+      stage7_extract_parametric_cure_uncertainty(
+        par_hat = par_hat,
+        X_inc = X_inc,
+        X_lat = X_lat,
+        family = family,
+        hessian = hessian_mat,
+        ci_level = stage7_coefficient_ci_level
+      )
+    )
+
+  all_warnings <- unique(c(fit_capture$warnings, hessian_capture$warnings))
 
   list(
     success = TRUE,
-    fit_object = list(par = par_hat, family = family, X_inc = X_inc, X_lat = X_lat, opt = opt),
-    warnings = fit_capture$warnings,
+    fit_object = list(par = par_hat, family = family, X_inc = X_inc, X_lat = X_lat, opt = opt, hessian = hessian_mat),
+    warnings = all_warnings,
     coefficients = coef_tbl,
     predictions = list(gamma = gamma_hat, beta = beta_hat, aux_log = aux_log_hat, family = family, uncured_prob = uncured_prob, lp_lat = lp_lat),
     loglik = -opt$value,
@@ -2475,17 +2829,27 @@ stage7_fit_smcure_model <- function(df, incidence_rhs, latency_rhs, model_type) 
 
   surv_formula <- stage7_make_surv_formula(latency_rhs)
   cure_formula <- stage7_make_rhs_formula(incidence_rhs)
+  compute_variance <- isTRUE(as.integer(stage7_smcure_uncertainty_boot_reps) > 1L)
+  smcure_nboot <- if (compute_variance) as.integer(stage7_smcure_uncertainty_boot_reps) else 0L
   fit_capture <- stage7_capture_with_warnings(
-    smcure::smcure(
-      formula = surv_formula,
-      cureform = cure_formula,
-      data = df,
-      model = ifelse(model_type == "ph", "ph", "aft"),
-      link = "logit",
-      Var = FALSE,
-      emmax = 200,
-      eps = 1e-07
-    )
+    {
+      captured_output <- capture.output(
+        fit_obj <- smcure::smcure(
+          formula = surv_formula,
+          cureform = cure_formula,
+          data = df,
+          model = ifelse(model_type == "ph", "ph", "aft"),
+          link = "logit",
+          Var = compute_variance,
+          emmax = 200,
+          eps = 1e-07,
+          nboot = smcure_nboot
+        ),
+        type = "output"
+      )
+      invisible(captured_output)
+      fit_obj
+    }
   )
   if (is.null(fit_capture$value)) {
     return(list(success = FALSE, error_message = fit_capture$error_message, warnings = fit_capture$warnings))
@@ -2496,7 +2860,14 @@ stage7_fit_smcure_model <- function(df, incidence_rhs, latency_rhs, model_type) 
   coef_tbl <- bind_rows(
     tibble(component = "incidence_uncured_logit", term = stage7_standardize_term_name(b_names), estimate = as.numeric(fit$b)),
     tibble(component = "latency", term = stage7_standardize_term_name(beta_names), estimate = as.numeric(fit$beta))
-  )
+  ) %>%
+    stage7_attach_coefficient_uncertainty(
+      stage7_extract_smcure_uncertainty(
+        fit,
+        ci_level = stage7_coefficient_ci_level,
+        nboot = if (compute_variance) smcure_nboot else NA_real_
+      )
+    )
   loglik_capture <- stage7_capture_with_warnings(
     stage7_compute_smcure_loglik(df, fit, incidence_rhs, latency_rhs, model_type)
   )
@@ -2935,13 +3306,10 @@ stage7_fit_core_outputs <- function(run_root_dir, stage1_inputs) {
           stage = model_meta$stage,
           branch = model_meta$branch,
           incidence_link = model_meta$incidence_link,
-          dataset_key = make_stage6_join_key(model_meta$dataset, site_branch = model_meta$site_branch),
-          boot_n_success_estimate = NA_real_,
-          boot_success_rate_estimate = NA_real_,
-          estimate_ci_lower = NA_real_,
-          estimate_ci_upper = NA_real_
+          dataset_key = make_stage6_join_key(model_meta$dataset, site_branch = model_meta$site_branch)
         ) %>%
-        select(dataset, formula_variant, site_branch, interaction_branch, model_id, model_class, model_block, model_family, latency_type, component, term, estimate, boot_n_success_estimate, boot_success_rate_estimate, estimate_ci_lower, estimate_ci_upper, formula_label, formula_scope, site_term_interpretation, uses_site, uses_age_sex_interaction, site_placement_label, incidence_uses_site, latency_uses_site, stage, branch, incidence_link, matched_nocure_model_id, dataset_key)
+        stage7_finalize_coefficient_export() %>%
+        select(dataset, formula_variant, site_branch, interaction_branch, model_id, model_class, model_block, model_family, latency_type, component, term, estimate, std_error, test_statistic_z, p_value, boot_n_success_estimate, boot_success_rate_estimate, estimate_ci_lower, estimate_ci_upper, estimate_ci_level, uncertainty_method, uncertainty_available_flag, formula_label, formula_scope, site_term_interpretation, uses_site, uses_age_sex_interaction, site_placement_label, incidence_uses_site, latency_uses_site, stage, branch, incidence_link, matched_nocure_model_id, dataset_key)
     } else {
       tibble()
     }
@@ -3651,7 +4019,7 @@ stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5
     family_pair = character(), cure_model_id = character(), matched_noncure_model_id = character(),
     logLik_noncure = double(), logLik_cure = double(), delta_logLik_cure_minus_noncure = double(),
     LR_2delta_logLik = double(), delta_AIC_cure_minus_noncure = double(), delta_BIC_cure_minus_noncure = double(),
-    lrt_calibration_status = character(), lrt_pvalue_bootstrap = double(), same_family_fit_gain_signal = character(),
+    lrt_reference_df = double(), lrt_calibration_status = character(), lrt_pvalue_bootstrap = double(), lrt_pvalue_method = character(), same_family_fit_gain_signal = character(),
     convergence_pair_flag = logical(), risk_scale = character()
   )
 
@@ -3674,16 +4042,17 @@ stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5
     filter(.is_cure_model) %>%
     mutate(matched_noncure_model_id = stage7_v9_trim_na_char(matched_nocure_model_id)) %>%
     filter(!is.na(matched_noncure_model_id), matched_noncure_model_id != '') %>%
-    select(dataset_key, dataset, formula_variant, site_branch, risk_scale, model_id, matched_noncure_model_id, family_pair, std_logLik, std_AIC, std_BIC, std_convergence_status)
+    select(dataset_key, dataset, formula_variant, site_branch, risk_scale, model_id, matched_noncure_model_id, family_pair, std_logLik, std_AIC, std_BIC, std_n_parameters, std_convergence_status)
 
   noncure_df <- fit_registry_tbl %>%
     filter(std_model_role == 'no_cure') %>%
-    select(dataset_key, formula_variant, model_id, std_logLik, std_AIC, std_BIC, std_convergence_status) %>%
+    select(dataset_key, formula_variant, model_id, std_logLik, std_AIC, std_BIC, std_n_parameters, std_convergence_status) %>%
     rename(
       matched_noncure_model_id = model_id,
       logLik_noncure = std_logLik,
       AIC_noncure = std_AIC,
       BIC_noncure = std_BIC,
+      n_parameters_noncure = std_n_parameters,
       convergence_status_noncure = std_convergence_status
     )
 
@@ -3698,17 +4067,34 @@ stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5
       LR_2delta_logLik = if_else(is.finite(logLik_cure) & is.finite(logLik_noncure), 2 * delta_logLik_cure_minus_noncure, NA_real_),
       delta_AIC_cure_minus_noncure = std_AIC - AIC_noncure,
       delta_BIC_cure_minus_noncure = std_BIC - BIC_noncure,
+      convergence_pair_flag = is_success_status(std_convergence_status) & is_success_status(convergence_status_noncure),
+      lrt_reference_df = if_else(
+        is.finite(std_n_parameters) & is.finite(n_parameters_noncure),
+        pmax(std_n_parameters - n_parameters_noncure, 1),
+        NA_real_
+      ),
+      lrt_pvalue_bootstrap = dplyr::case_when(
+        !convergence_pair_flag ~ NA_real_,
+        is.finite(LR_2delta_logLik) & is.finite(lrt_reference_df) ~ stats::pchisq(pmax(LR_2delta_logLik, 0), df = lrt_reference_df, lower.tail = FALSE),
+        TRUE ~ NA_real_
+      ),
       lrt_calibration_status = dplyr::case_when(
         is.na(logLik_cure) | is.na(logLik_noncure) ~ 'missing_likelihood_metrics',
+        !convergence_pair_flag ~ 'not_reported_pair_not_fully_converged',
+        is.finite(lrt_pvalue_bootstrap) ~ paste0(stage7_family_contrast_pvalue_method, '_nonregular_caution'),
         TRUE ~ 'not_reported_nonregular_problem'
+      ),
+      lrt_pvalue_method = dplyr::case_when(
+        is.finite(lrt_pvalue_bootstrap) ~ stage7_family_contrast_pvalue_method,
+        !convergence_pair_flag ~ 'not_reported_pair_not_fully_converged',
+        TRUE ~ 'not_available'
       ),
       same_family_fit_gain_signal = dplyr::case_when(
         is.na(delta_logLik_cure_minus_noncure) ~ 'cannot_assess',
         delta_logLik_cure_minus_noncure > 0 & !is.na(delta_AIC_cure_minus_noncure) & delta_AIC_cure_minus_noncure < 0 ~ 'partial_cure_fit_gain',
         delta_logLik_cure_minus_noncure > 0 ~ 'likelihood_only_cure_fit_gain',
         TRUE ~ 'no_cure_fit_gain'
-      ),
-      convergence_pair_flag = is_success_status(std_convergence_status) & is_success_status(convergence_status_noncure)
+      )
     ) %>%
     transmute(
       dataset_key,
@@ -3724,8 +4110,10 @@ stage7_v9_build_family_matched_fit_contrast <- function(fit_registry_tbl, stage5
       LR_2delta_logLik,
       delta_AIC_cure_minus_noncure,
       delta_BIC_cure_minus_noncure,
+      lrt_reference_df,
       lrt_calibration_status,
-      lrt_pvalue_bootstrap = NA_real_,
+      lrt_pvalue_bootstrap,
+      lrt_pvalue_method,
       same_family_fit_gain_signal,
       convergence_pair_flag,
       risk_scale = dplyr::coalesce(risk_scale, main_risk_scale)

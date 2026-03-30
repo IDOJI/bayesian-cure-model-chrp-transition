@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage 9 — Remission sensitivity</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.75;
+    font-size:15px;
+  }
+  .container{
+    max-width:1040px;
+    margin:0 auto;
+    padding:36px 24px 84px;
+  }
+
+  .hero{
+    position:relative;
+    overflow:hidden;
+    padding:34px 32px 30px;
+    border-radius:var(--radius-xl);
+    background:
+      radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%),
+      linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;
+    box-shadow:0 24px 60px rgba(15,23,42,.18);
+    margin-bottom:18px;
+  }
+  .hero::after{
+    content:'';
+    position:absolute;
+    right:-48px;
+    top:-42px;
+    width:200px;
+    height:200px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(255,255,255,.10), transparent 68%);
+    pointer-events:none;
+  }
+  .hero .label{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:#bfdbfe;
+    padding:7px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.06);
+    border:1px solid var(--line-dark);
+    margin-bottom:14px;
+  }
+  .hero h1{
+    font-size:clamp(30px, 4vw, 42px);
+    line-height:1.12;
+    letter-spacing:-.03em;
+    margin-bottom:12px;
+    max-width:900px;
+  }
+  .hero .sub{
+    max-width:860px;
+    font-size:15px;
+    color:#d1d5db;
+  }
+
+  .tab-shell{
+    position:sticky;
+    top:16px;
+    z-index:12;
+    margin-bottom:18px;
+  }
+  .tabs{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:14px;
+    border-radius:22px;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:blur(16px);
+    border:1px solid rgba(229,231,235,.9);
+    box-shadow:0 18px 40px rgba(15,23,42,.08);
+  }
+  .tabs button{
+    appearance:none;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--text-soft);
+    padding:10px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    font-size:14px;
+    font-weight:700;
+    transition:.18s ease;
+    box-shadow:0 1px 0 rgba(15,23,42,.02);
+  }
+  .tabs button:hover{
+    transform:translateY(-1px);
+    color:var(--text);
+    border-color:#cbd5e1;
+  }
+  .tabs button.active{
+    background:linear-gradient(180deg,#eff6ff,#dbeafe);
+    color:var(--accent-strong);
+    border-color:#bfdbfe;
+    box-shadow:0 8px 18px rgba(37,99,235,.14);
+  }
+
+  .panel{display:none}
+  .panel.active{
+    display:block;
+    animation:fadeIn .18s ease;
+  }
+  @keyframes fadeIn{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:none}
+  }
+
+  .panel-head{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .panel-kicker{
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--accent-strong);
+    margin-bottom:6px;
+  }
+  .panel-title{
+    font-size:26px;
+    line-height:1.2;
+    letter-spacing:-.02em;
+  }
+  .panel-sub{
+    color:var(--text-soft);
+    max-width:780px;
+    margin-top:8px;
+  }
+
+  .panel-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow);
+    padding:28px;
+    margin-bottom:18px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12, 1fr);
+    gap:16px;
+  }
+  .card{
+    grid-column:1/-1;
+    background:linear-gradient(180deg, var(--surface), var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    padding:22px 20px;
+  }
+  .eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.03em;
+    margin-bottom:12px;
+    background:var(--accent-soft);
+    color:var(--accent-strong);
+  }
+  .eyebrow.green{background:var(--green-bg); color:var(--green)}
+  .eyebrow.amber{background:var(--amber-bg); color:var(--amber)}
+  .eyebrow.purple{background:var(--purple-bg); color:var(--purple)}
+  .card h3{
+    font-size:19px;
+    line-height:1.3;
+    margin-bottom:10px;
+    letter-spacing:-.01em;
+  }
+  .card p, .card li{
+    color:var(--text-soft);
+  }
+  .card strong{color:var(--text)}
+  .callout{
+    padding:18px 20px;
+    border-radius:18px;
+    border:1px solid var(--border);
+    background:#fafcff;
+    color:var(--text);
+    margin-top:18px;
+  }
+  .callout strong{color:var(--accent-strong)}
+
+  .summary-strip{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:12px;
+    margin-top:18px;
+  }
+  .summary-item{
+    border:1px solid var(--border);
+    background:var(--surface-2);
+    border-radius:16px;
+    padding:16px;
+  }
+  .summary-item .label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-bottom:6px;
+  }
+  .summary-item .value{
+    font-size:15px;
+    color:var(--text);
+    font-weight:700;
+  }
+
+  .metric-strip{
+    display:grid;
+    grid-template-columns:repeat(4, minmax(0,1fr));
+    gap:12px;
+    margin-top:4px;
+  }
+  .metric-card{
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,#ffffff,#f8fafc);
+    border-radius:18px;
+    padding:16px;
+    box-shadow:var(--card-shadow);
+  }
+  .metric-label{
+    font-size:12px;
+    font-weight:700;
+    color:var(--text-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-bottom:6px;
+  }
+  .metric-value{
+    font-size:24px;
+    line-height:1.2;
+    font-weight:800;
+    color:var(--text);
+    letter-spacing:-.02em;
+  }
+  .metric-note{
+    margin-top:8px;
+    font-size:13px;
+    color:var(--text-soft);
+    line-height:1.5;
+  }
+
+  .table-wrap{
+    margin-top:14px;
+    overflow:auto;
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+  }
+  .data-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    min-width:760px;
+  }
+  .data-table thead th{
+    position:sticky;
+    top:0;
+    background:#f8fafc;
+    color:#334155;
+    font-size:13px;
+    font-weight:800;
+    text-align:left;
+    border-bottom:1px solid var(--border);
+    padding:12px 14px;
+    white-space:nowrap;
+  }
+  .data-table tbody td{
+    padding:12px 14px;
+    border-bottom:1px solid #eef2f7;
+    vertical-align:top;
+    color:#374151;
+    font-size:14px;
+  }
+  .data-table tbody tr:nth-child(even) td{background:#fcfcfe}
+  .data-table tbody tr:last-child td{border-bottom:none}
+  .data-table th.num, .data-table td.num{text-align:right}
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:5px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+    line-height:1;
+    white-space:nowrap;
+    border:1px solid transparent;
+  }
+  .badge.primary{background:var(--green-bg); color:var(--green); border-color:#bbf7d0}
+  .badge.secondary{background:var(--amber-bg); color:var(--amber); border-color:#fde68a}
+  .badge.projection{background:var(--purple-bg); color:var(--purple); border-color:#ddd6fe}
+
+  .table-guide{
+    color:var(--text-soft);
+    font-size:14px;
+  }
+  .guide-list{
+    display:grid;
+    gap:10px;
+    margin-top:14px;
+  }
+  .guide-list div{
+    padding:12px 14px;
+    border-radius:14px;
+    background:#f8fafc;
+    border:1px solid var(--border);
+    color:var(--text-soft);
+  }
+  .point-note{
+    margin-top:14px;
+    padding:14px 16px;
+    border-radius:14px;
+    background:#eff6ff;
+    border:1px solid #bfdbfe;
+    color:#1e3a8a;
+    font-size:14px;
+  }
+
+  .ordered-list{
+    margin-left:22px;
+    color:var(--text-soft);
+  }
+  .ordered-list li + li{margin-top:10px}
+  .bullet-list{
+    margin-left:18px;
+  }
+  .bullet-list li + li{margin-top:10px}
+
+  .boundary-list{
+    display:grid;
+    gap:12px;
+    margin-top:14px;
+  }
+  .boundary-row{
+    display:grid;
+    grid-template-columns:120px 1fr;
+    gap:12px;
+    align-items:start;
+    padding:14px 16px;
+    border-radius:16px;
+    background:#f8fafc;
+    border:1px solid var(--border);
+  }
+  .boundary-dataset{
+    font-weight:800;
+    color:var(--text);
+  }
+  .boundary-text{
+    color:var(--text-soft);
+  }
+
+  .dataset-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:12px;
+    margin-top:14px;
+  }
+  .dataset-card{
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+    padding:16px;
+    box-shadow:var(--card-shadow);
+  }
+  .dataset-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .dataset-name{
+    font-weight:800;
+    font-size:18px;
+    color:var(--text);
+  }
+  .dataset-n{
+    font-size:13px;
+    color:var(--text-soft);
+    font-weight:700;
+  }
+  .seg-track{
+    width:100%;
+    height:16px;
+    border-radius:999px;
+    overflow:hidden;
+    background:#e5e7eb;
+    display:flex;
+    margin-bottom:10px;
+  }
+  .seg{height:100%}
+  .seg.trans{background:#2563eb}
+  .seg.rem{background:#7c3aed}
+  .seg.cen{background:#cbd5e1}
+  .seg-legend{
+    display:grid;
+    gap:6px;
+    font-size:13px;
+    color:var(--text-soft);
+  }
+  .dot{
+    display:inline-block;
+    width:10px;height:10px;border-radius:50%;
+    margin-right:6px;vertical-align:middle;
+  }
+  .dot.trans{background:#2563eb}
+  .dot.rem{background:#7c3aed}
+  .dot.cen{background:#cbd5e1}
+  .mini-meta{
+    margin-top:10px;
+    font-size:13px;
+    color:var(--text-soft);
+  }
+
+  .status-preview-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:16px;
+    margin-top:18px;
+  }
+  .status-preview-card{
+    border:1px solid var(--border);
+    border-radius:24px;
+    background:linear-gradient(180deg,#fcfcfe,#f8fafc);
+    padding:22px 20px;
+    box-shadow:var(--card-shadow);
+  }
+  .status-preview-kicker{
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#6b7280;
+    margin-bottom:10px;
+  }
+  .status-preview-dataset{
+    font-size:18px;
+    font-weight:800;
+    color:var(--text);
+    margin-bottom:8px;
+  }
+  .status-preview-big{
+    font-size:26px;
+    line-height:1.15;
+    letter-spacing:-.02em;
+    font-weight:800;
+    color:var(--text);
+    margin-bottom:18px;
+  }
+  .status-row + .status-row{margin-top:12px}
+  .status-row-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:6px;
+  }
+  .status-row-top span{
+    font-size:14px;
+    font-weight:700;
+    color:var(--text-soft);
+  }
+  .status-row-top strong{
+    font-size:14px;
+    font-weight:800;
+    color:var(--text);
+  }
+  .status-track{
+    width:100%;
+    height:14px;
+    border-radius:999px;
+    overflow:hidden;
+    background:#e5e7eb;
+  }
+  .status-fill{
+    height:100%;
+    border-radius:999px;
+  }
+  .status-fill.transition{background:linear-gradient(90deg,#60a5fa,#2563eb)}
+  .status-fill.remission{background:linear-gradient(90deg,#4ade80,#22c55e)}
+  .status-fill.censor{background:linear-gradient(90deg,#cbd5e1,#94a3b8)}
+  .status-preview-foot{
+    margin-top:18px;
+    font-size:14px;
+    font-weight:700;
+    color:var(--text-soft);
+  }
+
+  .compare-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:12px;
+    margin-top:14px;
+  }
+  .compare-card{
+    border:1px solid var(--border);
+    border-radius:18px;
+    background:#fff;
+    padding:16px;
+    box-shadow:var(--card-shadow);
+  }
+  .compare-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .compare-title{
+    font-weight:800;
+    color:var(--text);
+  }
+  .bar-row{margin-top:10px}
+  .bar-label{
+    font-size:13px;
+    font-weight:700;
+    color:var(--text-soft);
+    margin-bottom:4px;
+  }
+  .bar-value{
+    font-size:14px;
+    font-weight:800;
+    color:var(--text);
+    margin-bottom:4px;
+  }
+  .bar-track{
+    width:100%;
+    height:12px;
+    border-radius:999px;
+    background:#edf2f7;
+    overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;
+    border-radius:999px;
+  }
+  .bar-fill.main{background:#2563eb}
+  .bar-fill.trans{background:#16a34a}
+  .bar-fill.rem{background:#7c3aed}
+
+  .ref-list{
+    margin-left:22px;
+  }
+  .ref-list li + li{
+    margin-top:12px;
+  }
+
+  .footer-note{
+    margin-top:28px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+  }
+
+  @media (max-width:980px){
+    .metric-strip{grid-template-columns:repeat(2, minmax(0,1fr))}
+    .dataset-grid{grid-template-columns:1fr}
+    .status-preview-grid{grid-template-columns:1fr}
+    .compare-grid{grid-template-columns:1fr}
+    .summary-strip{grid-template-columns:1fr}
+    .boundary-row{grid-template-columns:1fr}
+  }
+
+  @media (max-width:640px){
+    .container{padding:22px 16px 64px}
+    .hero{padding:26px 22px 24px}
+    .panel-card{padding:20px}
+    .tabs{padding:10px}
+    .tabs button{width:100%; text-align:left}
+    .metric-strip{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="label">Stage 9</div>
+      <h1>Stage 9 — Remission sensitivity</h1>
+      <p class="sub">이 단계는 remission을 censoring 안에 숨긴 main transition-only 해석과, remission을 별도 competing event로 둔 sensitivity 해석을 같은 horizon과 threshold 위에서 다시 비교해, transition risk와 분류 결과가 얼마나 달라지는지를 확인합니다.</p>
+    </header>
+
+    <div class="tab-shell">
+      <nav class="tabs" aria-label="Stage tabs">
+        <button class="active" data-tab="overview">개요</button>
+        <button data-tab="results-overview">결과 개요</button>
+        <button data-tab="result-1">결과 1</button>
+        <button data-tab="result-2">결과 2</button>
+        <button data-tab="result-3">결과 3</button>
+        <button data-tab="synthesis">종합 해석</button>
+        <button data-tab="references">References</button>
+      </nav>
+    </div>
+
+    
+<section class="panel active" data-panel="overview">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Overview</div>
+        <h2 class="panel-title">이 단계는 무엇을 하는가</h2>
+        <p class="panel-sub">Stage 9는 remission을 censoring 안에 숨겨 둔 main transition-only 해석과, remission을 별도 competing event로 둔 sensitivity 해석을 같은 horizon과 threshold 위에서 다시 비교하는 단계입니다.</p>
+      </div>
+    </div>
+
+    <div class="metric-strip">
+    <div class="metric-card">
+      <div class="metric-label">Paired analysis units</div>
+      <div class="metric-value">21개</div>
+      <div class="metric-note">Benchmark 5 + cause-specific 8 + Fine–Gray 8</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Fitted / constructed estimators</div>
+      <div class="metric-value">40개</div>
+      <div class="metric-note">10 nonparametric + 14 Cox + 16 Cox/Fine–Gray</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Common grids</div>
+      <div class="metric-value">1–10년 · 4개 threshold</div>
+      <div class="metric-note">c ∈ {0.05, 0.10, 0.15, 0.20}</div>
+    </div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Stage role</div>
+        <h3>핵심 목적</h3>
+        <p>이 Stage의 질문은 단순합니다. 같은 데이터에서 remission을 <strong>별도 사건</strong>으로 다루면, transition risk 자체가 얼마나 다시 나뉘고, 그 변화가 threshold 분류와 net benefit까지 얼마나 번지는지를 보는 것입니다. 여기서 remission은 transition 없이 회복 상태로 기록된 경쟁사건을 뜻합니다.</p>
+        <div class="callout"><strong>먼저 기억할 점</strong> 이번 Stage는 p-value로 “이겼다/졌다”를 가르는 단계가 아니라, 같은 시점과 같은 threshold에서 <strong>risk 재배치</strong>와 <strong>분류 결과 변화</strong>가 얼마나 생기는지를 직접 읽는 단계입니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Reader takeaway</div>
+        <h3>결과를 보기 전에 먼저 알아두시면 좋은 점</h3>
+        <p>PNU에서는 remission coded case가 실제로 존재했고, SNU에서는 이번 source 기준으로 0건이었습니다. 따라서 Stage 9에서 눈에 띄는 변화가 생긴다면 우선 <strong>PNU</strong>, 그리고 PNU가 섞인 <strong>merged</strong>에서 나와야 자연스럽습니다. 반대로 SNU는 변화가 거의 없어야 하는 비교축으로 읽는 편이 타당합니다.</p>
+
+        <div class="status-preview-grid">
+          <div class="status-preview-card">
+            <div class="status-preview-kicker">Status composition</div>
+            <div class="status-preview-dataset">PNU</div>
+            <div class="status-preview-big">13/54 remission</div>
+
+            <div class="status-row">
+              <div class="status-row-top"><span>Transition</span><strong>22.22%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill transition" style="width:22.22%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Remission</span><strong>24.07%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill remission" style="width:24.07%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Right-censor</span><strong>53.70%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill censor" style="width:53.70%"></div></div>
+            </div>
+
+            <div class="status-preview-foot">중앙 follow-up 1.11년</div>
+          </div>
+
+          <div class="status-preview-card">
+            <div class="status-preview-kicker">Status composition</div>
+            <div class="status-preview-dataset">SNU</div>
+            <div class="status-preview-big">0/208 remission</div>
+
+            <div class="status-row">
+              <div class="status-row-top"><span>Transition</span><strong>18.27%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill transition" style="width:18.27%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Remission</span><strong>0.00%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill remission" style="width:0%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Right-censor</span><strong>81.73%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill censor" style="width:81.73%"></div></div>
+            </div>
+
+            <div class="status-preview-foot">중앙 follow-up 3.80년</div>
+          </div>
+
+          <div class="status-preview-card">
+            <div class="status-preview-kicker">Status composition</div>
+            <div class="status-preview-dataset">Merged</div>
+            <div class="status-preview-big">13/262 remission</div>
+
+            <div class="status-row">
+              <div class="status-row-top"><span>Transition</span><strong>19.08%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill transition" style="width:19.08%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Remission</span><strong>4.96%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill remission" style="width:4.96%"></div></div>
+            </div>
+            <div class="status-row">
+              <div class="status-row-top"><span>Right-censor</span><strong>75.95%</strong></div>
+              <div class="status-track" aria-hidden="true"><div class="status-fill censor" style="width:75.95%"></div></div>
+            </div>
+
+            <div class="status-preview-foot">중앙 follow-up 2.07년</div>
+          </div>
+        </div>
+
+        <div class="point-note">즉, 뒤 결과표를 볼 때는 먼저 <strong>PNU에서 remission-sensitive 변화가 실제로 커지는지</strong>, 그다음 <strong>merged가 그 방향을 부분적으로 따라가는지</strong>, 마지막으로 <strong>SNU가 거의 변하지 않는지</strong>를 확인하면 됩니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Interpretation boundary</div>
+        <h3>어디까지 직접 읽고, 어디부터 조심해야 하는가</h3>
+        <p>이 Stage는 late horizon도 함께 내보내지만, 해석 강도는 dataset마다 다릅니다. 따라서 아래 구간 구분을 먼저 보고 나서 뒤 표를 읽는 편이 안전합니다.</p>
+        
+<div class="boundary-list">
+  <div class="boundary-row">
+    <div class="boundary-dataset">PNU</div>
+    <div class="boundary-text">1년은 primary로 직접 읽고, 2년은 sensitivity로만 읽으며, 3년 이상은 projection으로 남겨 둡니다.</div>
+  </div>
+  <div class="boundary-row">
+    <div class="boundary-dataset">SNU</div>
+    <div class="boundary-text">1–2년은 primary, 3–5년은 secondary, 6년 이상은 projection으로 읽습니다.</div>
+  </div>
+  <div class="boundary-row">
+    <div class="boundary-dataset">merged</div>
+    <div class="boundary-text">1–2년은 primary, 3–5년은 secondary, 6년 이상은 projection으로 읽습니다.</div>
+  </div>
+</div>
+
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">Modeling table</div>
+        <h3>모델링 표</h3>
+        <p class="table-guide">아래 표는 코드 문법이 아니라, 보고서에서 바로 읽을 수 있는 통계적 표기로 Stage 9의 분석 블록을 다시 정리한 것입니다. Main risk는 remission을 censoring 안에 둔 transition-only 위험이고, sensitivity risk는 remission을 별도 competing event로 본 해석입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>분석 블록</th><th>무엇을 했는가</th><th>명시적 설정</th><th>주요 산출물</th></tr></thead><tbody><tr><td>상태 요약</td><td>세 dataset에서 transition, remission, right censoring 수와 follow-up 범위를 먼저 정리했습니다.</td><td>상태코드: 0=right censoring, 1=transition, 2=remission</td><td>stage9_status_summary.csv</td></tr><tr><td>Overall benchmark</td><td>전체 집단에 같은 값을 주는 group-assigned benchmark로 main risk와 remission-sensitive risk를 비교했습니다.</td><td>Main: Ŝ(t), R̂_main(t)=1−Ŝ(t) · Sensitivity: F̂_transition(t), F̂_remission(t), P̂_0(t)</td><td>benchmark state probabilities, classification, delta</td></tr><tr><td>Merged site-adjusted benchmark</td><td>merged 내부에서 site별로 다시 같은 group-assigned benchmark를 계산했습니다.</td><td>Ŝ(t | site=s), F̂_transition(t | site=s), F̂_remission(t | site=s)</td><td>site-adjusted benchmark rows</td></tr><tr><td>Individualized main mirror</td><td>개인별 transition-only 기준선을 Cox 비례위험모형으로 계산했습니다.</td><td>λ_transition(t | X)=λ_0(t)exp(βᵀX),  R̂_main(t | X)=1−Ŝ(t | X) · tie handling: Efron</td><td>개인별 main transition risk</td></tr><tr><td>Cause-specific sensitivity</td><td>transition hazard와 remission hazard를 따로 두고 누적발생확률을 다시 계산했습니다.</td><td>λ₁(t | X), λ₂(t | X) → F̂₁(t | X), F̂₂(t | X), P̂_0(t | X)</td><td>cause-specific risk summary, classification, delta</td></tr><tr><td>Fine–Gray sensitivity</td><td>transition subdistribution hazard를 직접 모델링해 transition cumulative incidence를 다시 계산했습니다.</td><td>λ̃₁(t | X) → F̂_transition,FG(t | X) · 이 블록은 remission CIF를 별도로 내보내지 않습니다</td><td>subdistribution risk summary, classification, delta</td></tr><tr><td>Threshold 분류기</td><td>예측 transition risk가 기준값을 넘는지로 고위험 여부를 분류했습니다.</td><td>Ŷ(t;c)=1{R̂_transition(t)≥c},  c∈{0.05,0.10,0.15,0.20}</td><td>FP, FP100, PPV, TPR, net benefit, delta</td></tr></tbody></table></div>
+        <div class="point-note">즉, 이번 Stage의 핵심은 <strong>같은 자료를 다른 horizon이나 다른 환자군으로 나눈 것이 아니라</strong>, 같은 horizon·같은 threshold에서 remission 처리 규칙만 바꿨을 때 결과가 얼마나 달라지는지를 보는 데 있습니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Fitting inventory</div>
+        <h3>이번 Stage에서 실제로 몇 개의 모델링이 수행되었는가</h3>
+        <p class="table-guide">아래 표의 “실제 적합/구성 수”는 이번 Stage code와 관찰된 remission 구조를 기준으로 다시 계산한 값입니다. Benchmark는 nonparametric estimator이고, cause-specific 및 Fine–Gray block는 regression fit입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>분석 블록</th><th>분석 단위 수</th><th>실제 적합/구성 수</th></tr></thead><tbody><tr><td>Group-assigned benchmark</td><td>5 comparison groups</td><td>10 nonparametric estimators (5 KM + 5 AJ)</td></tr><tr><td>Cause-specific individualized block</td><td>8 formula rows</td><td>14 Cox fits (8 transition + 6 remission)</td></tr><tr><td>Fine–Gray individualized block</td><td>8 formula rows</td><td>16 fits (8 main Cox + 8 Fine–Gray)</td></tr><tr><td>합계</td><td>21 paired analysis units</td><td>40 fitted/constructed estimators</td></tr></tbody></table></div>
+        <div class="point-note">SNU는 remission이 0건이어서, cause-specific block 안의 remission hazard는 <strong>계획상 같은 블록 안에 있었지만 별도로 적합되지 않았고</strong>, exported output에서는 remission component가 0으로 유지됩니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">Predictor structure</div>
+        <h3>사용된 predictor 구조</h3>
+        <p class="table-guide"><strong>age_s</strong>는 entry age를 dataset 내부 평균과 표준편차로 다시 스케일한 값으로, age_s=(age−평균)/(2×SD)입니다. merged에서만 site가 추가 branch로 들어갑니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>Formula branch</th><th>선형 예측식</th></tr></thead><tbody><tr><td>PNU</td><td>Base</td><td>age_s + sex_num</td></tr><tr><td>PNU</td><td>Interaction</td><td>age_s + sex_num + age_s×sex_num</td></tr><tr><td>SNU</td><td>Base</td><td>age_s + sex_num</td></tr><tr><td>SNU</td><td>Interaction</td><td>age_s + sex_num + age_s×sex_num</td></tr><tr><td>merged</td><td>Base</td><td>age_s + sex_num</td></tr><tr><td>merged</td><td>Interaction</td><td>age_s + sex_num + age_s×sex_num</td></tr><tr><td>merged</td><td>Site-added</td><td>age_s + sex_num + site</td></tr><tr><td>merged</td><td>Site + interaction</td><td>age_s + sex_num + age_s×sex_num + site</td></tr></tbody></table></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Statistical testing</div>
+        <h3>이번 Stage에서 보고되는 검정과 보고되지 않는 검정</h3>
+        <p>이번 결과물에는 coefficient table, p-value, confidence interval, likelihood-based model comparison 표가 포함되어 있지 않습니다. 따라서 이번 보고서는 유의성 검정 중심이 아니라, horizon별 <strong>risk 차이</strong>, <strong>added remission risk</strong>, <strong>FP100 change</strong>, <strong>net benefit change</strong>를 직접 비교하는 형식으로 읽는 것이 맞습니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="results-overview">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Results overview</div>
+        <h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+        <p class="panel-sub">이 Stage의 결과는 크게 세 묶음으로 읽으면 됩니다. 먼저 remission-sensitive 변화가 생길 수 있는 데이터 구조를 확인하고, 다음으로 benchmark에서 risk가 어떻게 재배치되는지 본 뒤, 마지막으로 individualized model과 threshold 분류 결과까지 이어서 읽으면 됩니다.</p>
+      </div>
+    </div>
+
+    <div class="summary-strip">
+      <div class="summary-item">
+        <div class="label">Result group 1</div>
+        <div class="value">자료 구조와 해석 범위</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Result group 2</div>
+        <div class="value">Benchmark risk 재배치</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Result group 3</div>
+        <div class="value">Individualized model + threshold 변화</div>
+      </div>
+    </div>
+
+    <div class="metric-strip" style="margin-top:18px">
+    <div class="metric-card">
+      <div class="metric-label">PNU remission share</div>
+      <div class="metric-value">24.1%</div>
+      <div class="metric-note">13/54</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">SNU remission share</div>
+      <div class="metric-value">0.0%</div>
+      <div class="metric-note">0/208</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">merged 2년 overall remission CIF</div>
+      <div class="metric-value">6.07%</div>
+      <div class="metric-note">Benchmark overall row</div>
+    </div></div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Reading map</div>
+        <h3>읽는 순서</h3>
+        <ol class="ordered-list">
+          <li><strong>결과 1</strong>에서는 remission이 실제로 얼마나 기록되어 있는지와, 어느 horizon까지 비교적 직접적으로 읽을 수 있는지를 먼저 확인합니다.</li>
+          <li><strong>결과 2</strong>에서는 overall benchmark와 merged site-adjusted benchmark에서 main risk가 transition CIF와 remission CIF로 어떻게 다시 나뉘는지 봅니다.</li>
+          <li><strong>결과 3</strong>에서는 cause-specific, Fine–Gray, threshold 10% 분류표를 함께 보면서, 이 변화가 개인별 모델과 실제 분류 결과까지 이어지는지 확인합니다.</li>
+        </ol>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Three numbers to look at first</div>
+        <h3>가장 먼저 봐야 하는 숫자 3개</h3>
+        <div class="metric-strip">
+          
+    <div class="metric-card">
+      <div class="metric-label">PNU 1년 remission CIF</div>
+      <div class="metric-value">7.37%</div>
+      <div class="metric-note">Benchmark overall</div>
+    </div>
+          
+    <div class="metric-card">
+      <div class="metric-label">PNU 2년 FP100 change</div>
+      <div class="metric-value">+22.2</div>
+      <div class="metric-note">Benchmark overall · threshold 10% · sensitivity</div>
+    </div>
+          
+    <div class="metric-card">
+      <div class="metric-label">merged 2년 overall remission CIF</div>
+      <div class="metric-value">6.07%</div>
+      <div class="metric-note">Benchmark overall</div>
+    </div>
+        </div>
+        <div class="point-note">세 숫자를 먼저 보면 이번 Stage의 방향이 거의 보입니다. remission-sensitive 변화는 <strong>PNU에서 크고</strong>, <strong>SNU에서는 거의 없으며</strong>, <strong>merged에서는 PNU가 섞인 만큼만 나타납니다.</strong></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-1">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 1</div>
+        <h2 class="panel-title">어디에서 remission-sensitive 변화가 실제로 생길 수 있는가</h2>
+        <p class="panel-sub">이 결과는 Stage 9가 왜 PNU와 merged에서 더 크게 흔들릴 수 있고, 왜 SNU에서는 거의 안 흔들릴 수 있는지를 데이터 구조만으로 먼저 보여줍니다.</p>
+      </div>
+    </div>
+
+    <div class="metric-strip">
+      
+    <div class="metric-card">
+      <div class="metric-label">PNU remission</div>
+      <div class="metric-value">13/54 · 24.1%</div>
+      <div class="metric-note">Median follow-up 1.11년</div>
+    </div>
+      
+    <div class="metric-card">
+      <div class="metric-label">SNU remission</div>
+      <div class="metric-value">0/208 · 0.0%</div>
+      <div class="metric-note">Median follow-up 3.80년</div>
+    </div>
+      
+    <div class="metric-card">
+      <div class="metric-label">merged remission</div>
+      <div class="metric-value">13/262 · 5.0%</div>
+      <div class="metric-note">Median follow-up 2.07년</div>
+    </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>Remission-sensitive 재분석은 <strong>remission이 실제로 존재하고</strong>, 동시에 <strong>그 시점까지 outcome을 어느 정도 직접 볼 수 있어야</strong> 의미가 있습니다. 따라서 먼저 remission 비중과 follow-up 길이를 함께 봐야 합니다. remission 비중이 높을수록 Stage 9 변화가 생길 여지가 커지고, follow-up이 짧을수록 late horizon은 더 조심해서 읽어야 합니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">대표 비교</div>
+        <h3>Dataset별 상태 구성</h3>
+        <p class="table-guide">아래 막대는 각 dataset에서 transition, remission, right censoring이 차지하는 비중을 보여줍니다. 보라색 remission 구간이 클수록 remission-sensitive 재해석이 생길 여지가 크고, 회색 censoring 구간이 크면 late horizon에서 직접 읽을 수 있는 정보가 상대적으로 적습니다.</p>
+        <div class="dataset-grid">
+    <div class="dataset-card">
+      <div class="dataset-top">
+        <div class="dataset-name">PNU</div>
+        <div class="dataset-n">N=54</div>
+      </div>
+      <div class="seg-track" aria-hidden="true">
+        <div class="seg trans" style="width:22.22%"></div>
+        <div class="seg rem" style="width:24.07%"></div>
+        <div class="seg cen" style="width:53.70%"></div>
+      </div>
+      <div class="seg-legend">
+        <span><i class="dot trans"></i>Transition 22.2%</span>
+        <span><i class="dot rem"></i>Remission 24.1%</span>
+        <span><i class="dot cen"></i>Right censoring 53.7%</span>
+      </div>
+      <div class="mini-meta">Median follow-up 1.11년 · Max 2.67년</div>
+    </div>
+    
+    <div class="dataset-card">
+      <div class="dataset-top">
+        <div class="dataset-name">SNU</div>
+        <div class="dataset-n">N=208</div>
+      </div>
+      <div class="seg-track" aria-hidden="true">
+        <div class="seg trans" style="width:18.27%"></div>
+        <div class="seg rem" style="width:0.00%"></div>
+        <div class="seg cen" style="width:81.73%"></div>
+      </div>
+      <div class="seg-legend">
+        <span><i class="dot trans"></i>Transition 18.3%</span>
+        <span><i class="dot rem"></i>Remission 0.0%</span>
+        <span><i class="dot cen"></i>Right censoring 81.7%</span>
+      </div>
+      <div class="mini-meta">Median follow-up 3.80년 · Max 10.11년</div>
+    </div>
+    
+    <div class="dataset-card">
+      <div class="dataset-top">
+        <div class="dataset-name">merged</div>
+        <div class="dataset-n">N=262</div>
+      </div>
+      <div class="seg-track" aria-hidden="true">
+        <div class="seg trans" style="width:19.08%"></div>
+        <div class="seg rem" style="width:4.96%"></div>
+        <div class="seg cen" style="width:75.95%"></div>
+      </div>
+      <div class="seg-legend">
+        <span><i class="dot trans"></i>Transition 19.1%</span>
+        <span><i class="dot rem"></i>Remission 5.0%</span>
+        <span><i class="dot cen"></i>Right censoring 76.0%</span>
+      </div>
+      <div class="mini-meta">Median follow-up 2.07년 · Max 10.11년</div>
+    </div>
+    </div>
+        <div class="point-note">즉, Stage 9는 구조적으로 <strong>PNU에서 가장 민감하고</strong>, <strong>SNU에서는 remission 자체가 거의 없어서 변화가 작을 가능성이 높습니다.</strong></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">표</div>
+        <h3>Dataset coverage와 해석 가능 구간</h3>
+        <p class="table-guide">이 표는 각 dataset의 표본수, 사건 구성, follow-up 길이, 그리고 어느 horizon까지를 primary 혹은 sensitivity로 읽어야 하는지를 한 번에 보여줍니다. remission 비중은 Stage 9 변화의 잠재적 크기를, follow-up은 그 변화를 얼마나 직접적으로 읽을 수 있는지를 뜻합니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th class="num">N</th><th>Transition</th><th>Remission</th><th>Right censoring</th><th class="num">Median follow-up (y)</th><th class="num">Max follow-up (y)</th><th>Main readable window</th></tr></thead><tbody><tr><td>PNU</td><td class="num">54</td><td>12 (22.2%)</td><td>13 (24.1%)</td><td>29 (53.7%)</td><td class="num">1.11</td><td class="num">2.67</td><td>1년 primary · 2년 sensitivity · 3년 이상 projection</td></tr><tr><td>SNU</td><td class="num">208</td><td>38 (18.3%)</td><td>0 (0.0%)</td><td>170 (81.7%)</td><td class="num">3.80</td><td class="num">10.11</td><td>1–2년 primary · 3–5년 secondary · 6년 이상 projection</td></tr><tr><td>merged</td><td class="num">262</td><td>50 (19.1%)</td><td>13 (5.0%)</td><td>199 (76.0%)</td><td class="num">2.07</td><td class="num">10.11</td><td>1–2년 primary · 3–5년 secondary · 6년 이상 projection</td></tr></tbody></table></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">이 표를 어떻게 읽는지</div>
+        <h3>읽는 법</h3>
+        <div class="guide-list">
+          <div><strong>Transition</strong>은 해당 dataset에서 실제 transition으로 기록된 수와 비율입니다.</div>
+          <div><strong>Remission</strong>은 transition과 다른 경쟁경로로 기록된 수와 비율입니다.</div>
+          <div><strong>Median follow-up</strong>은 가운데 환자가 얼마나 오래 관찰되었는지를 뜻합니다.</div>
+          <div><strong>Main readable window</strong>는 이 Stage code가 정한 해석 강도 구간입니다.</div>
+        </div>
+        <div class="point-note">먼저 볼 포인트는 두 가지입니다. <strong>PNU는 remission이 많지만 follow-up이 짧고</strong>, <strong>SNU는 follow-up이 길지만 remission이 없습니다.</strong> merged는 이 둘의 구조를 함께 품고 있습니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Interpretation</div>
+        <h3>해석</h3>
+        <p>PNU에서는 remission이 24.1%로 적지 않고 median follow-up은 1.11년이라, remission-sensitive 변화가 생길 수 있으면서도 late horizon은 조심해서 읽어야 합니다. SNU는 remission이 0건이라 remission-sensitive Stage에서 바뀌는 부분이 작을 가능성이 높습니다. merged는 remission 비중 자체는 5.0%로 크지 않지만, PNU 구성요소가 들어 있기 때문에 benchmark나 individualized block에서 작은 변화가 남을 수 있습니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-2">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 2</div>
+        <h2 class="panel-title">Group-assigned benchmark에서 risk가 어떻게 다시 나뉘는가</h2>
+        <p class="panel-sub">이 결과는 전체 집단에 같은 값을 주는 benchmark 수준에서, main transition-only risk가 transition CIF와 remission CIF로 얼마나 다시 나뉘는지를 보여줍니다.</p>
+      </div>
+    </div>
+
+    <div class="metric-strip">
+      
+    <div class="metric-card">
+      <div class="metric-label">PNU 1년 remission CIF</div>
+      <div class="metric-value">7.37%</div>
+      <div class="metric-note">Primary-supported</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">PNU 2년 remission CIF</div>
+      <div class="metric-value">39.91%</div>
+      <div class="metric-note">Sensitivity-only</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">merged 2년 remission CIF</div>
+      <div class="metric-value">6.07%</div>
+      <div class="metric-note">Primary-supported</div>
+    </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>Main benchmark는 remission을 censoring 안에 둔 채 transition risk만 계산합니다. 반대로 remission-sensitive benchmark는 같은 시점까지의 경로를 <strong>transition</strong>, <strong>remission</strong>, <strong>event-free</strong>로 나눠서 봅니다. 따라서 main risk와 transition CIF의 차이가 작더라도, remission CIF가 크면 “transition이 안 일어난 부분”의 해석이 달라집니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">HTML-native comparison</div>
+        <h3>Overall benchmark risk 비교</h3>
+        <p class="table-guide">아래 카드는 1년과 2년 시점에서 main risk, remission-sensitive transition CIF, remission CIF를 한 줄씩 보여줍니다. 같은 카드 안에서 보라색 remission CIF가 커질수록, main transition-only 해석에서 보이지 않던 remission 경로가 커진다는 뜻입니다.</p>
+        <div class="compare-grid">
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">PNU · 1년</div>
+        <span class="badge primary">Primary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">16.99%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:16.99%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">16.73%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:16.73%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">7.37%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:7.37%"></div></div>
+      </div>
+    </div>
+    
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">PNU · 2년</div>
+        <span class="badge secondary">Sensitivity/Secondary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">29.88%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:29.88%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">27.93%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:27.93%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">39.91%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:39.91%"></div></div>
+      </div>
+    </div>
+    
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">SNU · 1년</div>
+        <span class="badge primary">Primary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">7.28%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:7.28%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">7.28%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:7.28%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">0.00%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:0.00%"></div></div>
+      </div>
+    </div>
+    
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">SNU · 2년</div>
+        <span class="badge primary">Primary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">12.15%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:12.15%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">12.15%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:12.15%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">0.00%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:0.00%"></div></div>
+      </div>
+    </div>
+    
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">merged · 1년</div>
+        <span class="badge primary">Primary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">9.15%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:9.15%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">9.13%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:9.13%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">1.34%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:1.34%"></div></div>
+      </div>
+    </div>
+    
+    <div class="compare-card">
+      <div class="compare-head">
+        <div class="compare-title">merged · 2년</div>
+        <span class="badge primary">Primary</span>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Main risk</div>
+        <div class="bar-value">15.34%</div>
+        <div class="bar-track"><div class="bar-fill main" style="width:15.34%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Transition CIF</div>
+        <div class="bar-value">15.14%</div>
+        <div class="bar-track"><div class="bar-fill trans" style="width:15.14%"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Remission CIF</div>
+        <div class="bar-value">6.07%</div>
+        <div class="bar-track"><div class="bar-fill rem" style="width:6.07%"></div></div>
+      </div>
+    </div>
+    </div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">표</div>
+        <h3>Overall benchmark: 1–2년 핵심 수치</h3>
+        <p class="table-guide">이 표는 각 dataset의 overall benchmark에서 1년과 2년 값을 직접 비교한 것입니다. Main risk는 remission을 censoring으로 둔 transition-only 위험이고, Transition CIF와 Remission CIF는 remission-sensitive benchmark에서의 누적발생확률입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>Horizon</th><th>Main risk</th><th>Transition CIF</th><th>Remission CIF</th><th>Support</th></tr></thead><tbody><tr><td>PNU</td><td>1년</td><td>16.99%</td><td>16.73%</td><td>7.37%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>2년</td><td>29.88%</td><td>27.93%</td><td>39.91%</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>SNU</td><td>1년</td><td>7.28%</td><td>7.28%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>2년</td><td>12.15%</td><td>12.15%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>1년</td><td>9.15%</td><td>9.13%</td><td>1.34%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>2년</td><td>15.34%</td><td>15.14%</td><td>6.07%</td><td><span class="badge primary">Primary</span></td></tr></tbody></table></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">대표 비교</div>
+        <h3>merged 내부 site-adjusted benchmark</h3>
+        <p class="table-guide">이 표는 merged 안에서 site=PNU와 site=SNU 그룹에 각각 같은 benchmark 값을 주어 다시 본 결과입니다. 이 표의 support는 <strong>merged block 규칙</strong>을 따르므로, 1–2년이 primary로 표시됩니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Site-assigned group</th><th>Horizon</th><th>Main risk</th><th>Transition CIF</th><th>Remission CIF</th><th>Support</th></tr></thead><tbody><tr><td>PNU</td><td>1년</td><td>16.99%</td><td>16.73%</td><td>7.37%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>2년</td><td>29.88%</td><td>27.93%</td><td>39.91%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>1년</td><td>7.28%</td><td>7.28%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>2년</td><td>12.15%</td><td>12.15%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr></tbody></table></div>
+        <div class="point-note">즉, merged의 remission-sensitive 신호가 어디서 오는지 보면 <strong>PNU-assigned row에서만 보라색 remission 값이 살아 있고</strong>, <strong>SNU-assigned row에서는 remission 값이 0으로 남습니다.</strong></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">이 표를 어떻게 읽는지</div>
+        <h3>읽는 법</h3>
+        <div class="guide-list">
+          <div><strong>Main risk</strong>가 크면, remission을 censoring 안에 둔 transition-only 해석에서 위험이 높다는 뜻입니다.</div>
+          <div><strong>Transition CIF</strong>는 remission을 다른 사건으로 분리한 뒤에도 transition이 얼마나 누적되는지 보여줍니다.</div>
+          <div><strong>Remission CIF</strong>가 클수록, main 해석에서 한 덩어리처럼 보였던 비전환 부분 중 일부가 remission으로 다시 설명됩니다.</div>
+          <div><strong>Support</strong>는 그 수치를 primary로 읽어도 되는지, sensitivity로만 읽어야 하는지를 알려줍니다.</div>
+        </div>
+        <div class="point-note">먼저 볼 포인트는 세 가지입니다. <strong>PNU 1년에서는 remission CIF가 7.37%</strong>로 이미 보이고, <strong>SNU 1–2년에서는 remission 값이 0%</strong>이며, <strong>merged 2년에서는 6.07%</strong> 정도의 remission 경로가 남습니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Interpretation</div>
+        <h3>해석</h3>
+        <p>PNU overall 1년에서는 main risk 16.99%와 transition CIF 16.73%의 차이는 작지만, remission CIF가 7.37%로 따로 보입니다. 즉, main transition-only 해석에서 보이지 않던 경로가 이미 1년 안에 존재합니다. PNU 2년에서는 remission CIF가 39.91%까지 커지지만, 이 값은 sensitivity 구간으로 읽어야 합니다. 반대로 SNU는 1–2년 모두 remission CIF가 0%여서 benchmark 해석이 거의 바뀌지 않습니다. merged는 overall 2년에서 remission CIF 6.07%가 남아, PNU가 섞인 만큼의 remission-sensitive 재배치가 있다는 정도로 읽는 것이 가장 무리 없습니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="result-3">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Result 3</div>
+        <h2 class="panel-title">Individualized model과 threshold 분류 결과까지 가도 같은 방향이 남는가</h2>
+        <p class="panel-sub">이 결과는 cause-specific과 Fine–Gray 같은 개인별 모델에서도 remission-sensitive 변화가 같은 방향으로 보이는지, 그리고 그 변화가 false positive와 net benefit까지 실제로 번지는지를 보여줍니다.</p>
+      </div>
+    </div>
+
+    <div class="metric-strip">
+      
+    <div class="metric-card">
+      <div class="metric-label">PNU 1년 FP100 change</div>
+      <div class="metric-value">+5.6</div>
+      <div class="metric-note">Benchmark overall · threshold 10%</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">PNU 2년 FP100 change</div>
+      <div class="metric-value">+22.2</div>
+      <div class="metric-note">Sensitivity-only · threshold 10%</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">merged 2년 added remission CIF</div>
+      <div class="metric-value">9.26–9.37%</div>
+      <div class="metric-note">Cause-specific site-adjusted formulas</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">SNU 1–2년 change</div>
+      <div class="metric-value">거의 0</div>
+      <div class="metric-note">Benchmark와 cause-specific에서 remission 영향이 거의 없습니다</div>
+    </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Question</div>
+        <h3>이 결과가 답하는 질문</h3>
+        <p>Benchmark에서 보인 차이가 집단 전체 평균에만 머무는지, 아니면 individualized model에서도 같은 방향으로 반복되는지를 보는 단계입니다. 동시에 threshold 10%를 예로 들면, remission-sensitive 해석이 high-risk 분류의 false positive burden과 net benefit을 실제로 얼마나 바꾸는지도 함께 확인할 수 있습니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">표</div>
+        <h3>Cause-specific individualized summary: 1–2년</h3>
+        <p class="table-guide">이 표는 각 formula branch에서 개인별 main transition risk의 평균과, cause-specific transition CIF 및 추가 remission CIF의 평균을 보여줍니다. Added remission CIF가 클수록, individualized model 안에서도 remission 경로가 작지 않다는 뜻입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>Formula</th><th>Horizon</th><th>Main transition risk</th><th>Cause-specific transition CIF</th><th>Added remission CIF</th><th>Support</th></tr></thead><tbody><tr><td>PNU</td><td>Base</td><td>1년</td><td>17.11%</td><td>16.77%</td><td>7.78%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>Base</td><td>2년</td><td>30.80%</td><td>28.26%</td><td>43.92%</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>PNU</td><td>Interaction</td><td>1년</td><td>18.29%</td><td>17.92%</td><td>7.95%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>Interaction</td><td>2년</td><td>32.99%</td><td>30.19%</td><td>43.04%</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>SNU</td><td>Base</td><td>1년</td><td>7.26%</td><td>7.26%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Base</td><td>2년</td><td>12.14%</td><td>12.14%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Interaction</td><td>1년</td><td>7.06%</td><td>7.06%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Interaction</td><td>2년</td><td>11.80%</td><td>11.80%</td><td>0.00%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Base</td><td>1년</td><td>9.20%</td><td>9.17%</td><td>1.43%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Base</td><td>2년</td><td>15.58%</td><td>15.29%</td><td>6.80%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Interaction</td><td>1년</td><td>9.20%</td><td>9.17%</td><td>1.44%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Interaction</td><td>2년</td><td>15.54%</td><td>15.26%</td><td>6.85%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site-added</td><td>1년</td><td>9.36%</td><td>9.29%</td><td>1.59%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site-added</td><td>2년</td><td>16.19%</td><td>15.52%</td><td>9.26%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site + interaction</td><td>1년</td><td>9.37%</td><td>9.31%</td><td>1.63%</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site + interaction</td><td>2년</td><td>16.17%</td><td>15.52%</td><td>9.37%</td><td><span class="badge primary">Primary</span></td></tr></tbody></table></div>
+        <div class="point-note">즉, cause-specific block에서는 <strong>PNU 1년에서 약 7.8–8.0%</strong>의 remission 경로가 보이고, <strong>merged 2년 site-adjusted formula에서는 약 9.3%</strong>까지 올라갑니다. SNU는 0%에 머뭅니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">표</div>
+        <h3>Fine–Gray individualized summary: 1–2년</h3>
+        <p class="table-guide">이 표는 같은 formula branch에서 main transition risk와 Fine–Gray transition risk를 비교한 것입니다. Fine–Gray block는 remission CIF를 별도로 출력하지 않으므로, 여기서는 transition risk가 얼마나 내려가거나 거의 안 변하는지를 읽으면 됩니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Dataset</th><th>Formula</th><th>Horizon</th><th>Main transition risk</th><th>Fine–Gray transition risk</th><th>Risk change</th><th>Support</th></tr></thead><tbody><tr><td>PNU</td><td>Base</td><td>1년</td><td>17.11%</td><td>16.82%</td><td>-0.29%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>Base</td><td>2년</td><td>30.80%</td><td>28.42%</td><td>-2.39%p</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>PNU</td><td>Interaction</td><td>1년</td><td>18.29%</td><td>16.99%</td><td>-1.30%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>PNU</td><td>Interaction</td><td>2년</td><td>32.99%</td><td>28.89%</td><td>-4.10%p</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>SNU</td><td>Base</td><td>1년</td><td>7.26%</td><td>7.26%</td><td>0.00%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Base</td><td>2년</td><td>12.14%</td><td>12.14%</td><td>0.00%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Interaction</td><td>1년</td><td>7.06%</td><td>7.21%</td><td>+0.15%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>SNU</td><td>Interaction</td><td>2년</td><td>11.80%</td><td>12.04%</td><td>+0.25%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Base</td><td>1년</td><td>9.20%</td><td>9.17%</td><td>-0.04%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Base</td><td>2년</td><td>15.58%</td><td>15.29%</td><td>-0.28%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Interaction</td><td>1년</td><td>9.20%</td><td>9.14%</td><td>-0.06%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Interaction</td><td>2년</td><td>15.54%</td><td>15.23%</td><td>-0.31%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site-added</td><td>1년</td><td>9.36%</td><td>9.26%</td><td>-0.10%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site-added</td><td>2년</td><td>16.19%</td><td>15.53%</td><td>-0.66%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site + interaction</td><td>1년</td><td>9.37%</td><td>9.24%</td><td>-0.13%p</td><td><span class="badge primary">Primary</span></td></tr><tr><td>merged</td><td>Site + interaction</td><td>2년</td><td>16.17%</td><td>15.47%</td><td>-0.69%p</td><td><span class="badge primary">Primary</span></td></tr></tbody></table></div>
+        <div class="point-note">Fine–Gray에서도 큰 방향은 비슷합니다. <strong>PNU에서는 transition risk가 내려가고</strong>, <strong>SNU에서는 변화가 거의 없거나 매우 작습니다.</strong></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">대표 비교</div>
+        <h3>PNU overall benchmark, threshold 10%: 왜 FP burden이 커지는가</h3>
+        <p class="table-guide">이 표는 PNU overall benchmark에서 threshold 10%를 썼을 때 main mirror와 remission-sensitive 평가가 어떻게 달라지는지 보여줍니다. 여기서 <strong>Known nonevent</strong>는 그 horizon까지 transition이 일어나지 않았다고 확실히 아는 사람 수이고, <strong>FP burden</strong>은 전체 54명 중 false positive가 차지하는 비율입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Evaluation mode</th><th>Horizon</th><th class="num">Transition by horizon</th><th class="num">Remission by horizon</th><th class="num">Known nonevent</th><th class="num">Evaluable</th><th class="num">Unknown before horizon</th><th class="num">False positives</th><th>FP burden</th><th>Net benefit</th></tr></thead><tbody><tr><td>Main mirror</td><td>1년</td><td class="num">8</td><td class="num">3</td><td class="num">28</td><td class="num">36</td><td class="num">18</td><td class="num">28</td><td>51.9%</td><td>+0.0905</td></tr><tr><td>Remission-sensitive</td><td>1년</td><td class="num">8</td><td class="num">3</td><td class="num">31</td><td class="num">39</td><td class="num">15</td><td class="num">31</td><td>57.4%</td><td>+0.0844</td></tr><tr><td>Main mirror</td><td>2년</td><td class="num">12</td><td class="num">12</td><td class="num">1</td><td class="num">13</td><td class="num">41</td><td class="num">1</td><td>1.9%</td><td>+0.2202</td></tr><tr><td>Remission-sensitive</td><td>2년</td><td class="num">12</td><td class="num">12</td><td class="num">13</td><td class="num">25</td><td class="num">29</td><td class="num">13</td><td>24.1%</td><td>+0.1955</td></tr></tbody></table></div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">이 표를 어떻게 읽는지</div>
+        <h3>읽는 법</h3>
+        <div class="guide-list">
+          <div><strong>Known nonevent</strong>가 커지면, 그 시점까지 transition하지 않았다는 사실이 확정된 사람이 늘었다는 뜻입니다.</div>
+          <div><strong>Evaluable</strong>은 그 horizon까지 outcome을 event 또는 known nonevent로 판정할 수 있는 사람 수입니다.</div>
+          <div><strong>FP burden</strong>는 전체 사람 중 false positive가 차지하는 비율입니다. 24.1%라면 100명 중 약 24명 수준입니다.</div>
+          <div><strong>Net benefit</strong>는 event를 더 잡는 이득과 불필요한 양성 분류의 손해를 함께 본 요약값으로, 같은 threshold 안에서는 값이 클수록 좋습니다.</div>
+        </div>
+        <div class="point-note">PNU 2년에서는 main mirror에서 known nonevent가 1명뿐이지만, remission-sensitive 평가에서는 remission 12명이 known nonevent로 들어와 13명으로 늘어납니다. 그래서 false positive도 1명에서 13명으로 늘고, FP burden은 1.9%에서 24.1%로 커집니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">Cross-model delta</div>
+        <h3>Threshold 10%에서 본 cross-model 변화 요약</h3>
+        <p class="table-guide">이 표는 1년과 2년에서 각 block가 main 해석 대비 얼마나 달라졌는지를 한 번에 모아 보여줍니다. <strong>Transition risk change</strong>가 음수면 remission-sensitive 쪽에서 transition risk가 내려간 것이고, <strong>FP100 change</strong>가 양수면 100명당 false positive가 늘어난 것입니다.</p>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Block</th><th>Dataset</th><th>Spec</th><th>Horizon</th><th>Transition risk change</th><th>Added remission risk</th><th>FP100 change</th><th>Net benefit change</th><th>Support</th></tr></thead><tbody><tr><td>Benchmark</td><td>PNU</td><td>Overall</td><td>1년</td><td>-0.25%p</td><td>+7.37%p</td><td>+5.6</td><td>-0.0062</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>PNU</td><td>Overall</td><td>2년</td><td>-1.95%p</td><td>+39.91%p</td><td>+22.2</td><td>-0.0247</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>Benchmark</td><td>SNU</td><td>Overall</td><td>1년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>SNU</td><td>Overall</td><td>2년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>merged</td><td>Overall</td><td>1년</td><td>-0.02%p</td><td>+1.34%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>merged</td><td>Overall</td><td>2년</td><td>-0.20%p</td><td>+6.07%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>merged</td><td>Merged site-adjusted</td><td>1년</td><td>-0.05%p</td><td>+1.52%p</td><td>+1.1</td><td>-0.0013</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Benchmark</td><td>merged</td><td>Merged site-adjusted</td><td>2년</td><td>-0.40%p</td><td>+8.23%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>PNU</td><td>Base</td><td>1년</td><td>-0.34%p</td><td>+7.78%p</td><td>+5.6</td><td>-0.0062</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>PNU</td><td>Base</td><td>2년</td><td>-2.55%p</td><td>+43.92%p</td><td>+22.2</td><td>-0.0247</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>Cause-specific</td><td>PNU</td><td>Interaction</td><td>1년</td><td>-0.37%p</td><td>+7.95%p</td><td>+3.7</td><td>-0.0041</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>PNU</td><td>Interaction</td><td>2년</td><td>-2.80%p</td><td>+43.04%p</td><td>+22.2</td><td>-0.0247</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>Cause-specific</td><td>SNU</td><td>Base</td><td>1년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>SNU</td><td>Base</td><td>2년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>SNU</td><td>Interaction</td><td>1년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>SNU</td><td>Interaction</td><td>2년</td><td>0.00%p</td><td>0.00%p</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Base</td><td>1년</td><td>-0.03%p</td><td>+1.43%p</td><td>+0.8</td><td>-0.0008</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Base</td><td>2년</td><td>-0.29%p</td><td>+6.80%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Interaction</td><td>1년</td><td>-0.03%p</td><td>+1.44%p</td><td>+0.4</td><td>-0.0004</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Interaction</td><td>2년</td><td>-0.28%p</td><td>+6.85%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Site-added</td><td>1년</td><td>-0.07%p</td><td>+1.59%p</td><td>+1.1</td><td>-0.0013</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Site-added</td><td>2년</td><td>-0.67%p</td><td>+9.26%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Site + interaction</td><td>1년</td><td>-0.06%p</td><td>+1.63%p</td><td>+1.1</td><td>-0.0013</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Cause-specific</td><td>merged</td><td>Site + interaction</td><td>2년</td><td>-0.65%p</td><td>+9.37%p</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>PNU</td><td>Base</td><td>1년</td><td>-0.29%p</td><td>—</td><td>+5.6</td><td>-0.0062</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>PNU</td><td>Base</td><td>2년</td><td>-2.39%p</td><td>—</td><td>+22.2</td><td>-0.0247</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>Fine–Gray</td><td>PNU</td><td>Interaction</td><td>1년</td><td>-1.30%p</td><td>—</td><td>+1.9</td><td>-0.0021</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>PNU</td><td>Interaction</td><td>2년</td><td>-4.10%p</td><td>—</td><td>+22.2</td><td>-0.0247</td><td><span class="badge secondary">Sensitivity/Secondary</span></td></tr><tr><td>Fine–Gray</td><td>SNU</td><td>Base</td><td>1년</td><td>0.00%p</td><td>—</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>SNU</td><td>Base</td><td>2년</td><td>0.00%p</td><td>—</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>SNU</td><td>Interaction</td><td>1년</td><td>+0.15%p</td><td>—</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>SNU</td><td>Interaction</td><td>2년</td><td>+0.25%p</td><td>—</td><td>+1.9</td><td>-0.0021</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Base</td><td>1년</td><td>-0.04%p</td><td>—</td><td>0.0</td><td>0.0000</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Base</td><td>2년</td><td>-0.28%p</td><td>—</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Interaction</td><td>1년</td><td>-0.06%p</td><td>—</td><td>-1.1</td><td>+0.0013</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Interaction</td><td>2년</td><td>-0.31%p</td><td>—</td><td>+5.7</td><td>-0.0064</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Site-added</td><td>1년</td><td>-0.10%p</td><td>—</td><td>+2.7</td><td>-0.0030</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Site-added</td><td>2년</td><td>-0.66%p</td><td>—</td><td>+4.6</td><td>-0.0051</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Site + interaction</td><td>1년</td><td>-0.13%p</td><td>—</td><td>+2.3</td><td>-0.0025</td><td><span class="badge primary">Primary</span></td></tr><tr><td>Fine–Gray</td><td>merged</td><td>Site + interaction</td><td>2년</td><td>-0.69%p</td><td>—</td><td>+10.3</td><td>+0.0038</td><td><span class="badge primary">Primary</span></td></tr></tbody></table></div>
+        <div class="point-note">먼저 볼 포인트는 세 가지입니다. <strong>PNU는 benchmark, cause-specific, Fine–Gray 모두에서 같은 방향</strong>으로 움직이고, <strong>SNU는 대부분 0 근처</strong>이며, <strong>merged는 작지만 일관된 변화</strong>가 남습니다. 다만 Fine–Gray의 몇몇 interaction row에서는 threshold-level detail이 조금 흔들립니다.</div>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow">Interpretation</div>
+        <h3>해석</h3>
+        <p>개인별 모델로 가도 큰 방향은 benchmark와 같습니다. PNU에서는 individualized model에서도 remission 경로가 분명히 보이고, threshold 10%에서 false positive burden과 net benefit이 불리한 쪽으로 움직입니다. SNU는 remission이 없기 때문에 cause-specific에서도 added remission CIF가 0%로 남고, Fine–Gray에서도 변화가 거의 없습니다. merged는 전체 effect가 크지는 않지만, site가 들어간 formula에서 2년 remission component가 약 9.3%까지 올라가며 PNU 구조가 pooled analysis 안에 남아 있음을 보여줍니다. 이번 결과물에는 coefficient, p-value, confidence interval이 없으므로, 이 섹션은 <strong>effect direction과 크기</strong>를 읽는 데 집중하는 것이 맞습니다.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="synthesis">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">Synthesis</div>
+        <h2 class="panel-title">앞 결과를 묶어서 이 Stage를 어떻게 요약할 것인가</h2>
+        <p class="panel-sub">앞선 세 결과를 함께 보면, remission-sensitive 재해석이 어디서 실질적인 차이를 만들고 어디서는 거의 차이를 만들지 않는지가 비교적 분명하게 정리됩니다.</p>
+      </div>
+    </div>
+
+    <div class="metric-strip">
+      
+    <div class="metric-card">
+      <div class="metric-label">가장 분명한 변화</div>
+      <div class="metric-value">PNU</div>
+      <div class="metric-note">1년 primary에서도 remission 경로가 보입니다</div>
+    </div>
+      
+    <div class="metric-card">
+      <div class="metric-label">가장 작은 변화</div>
+      <div class="metric-value">SNU</div>
+      <div class="metric-note">1–2년 benchmark와 individualized block 모두 거의 0입니다</div>
+    </div>
+      
+    <div class="metric-card">
+      <div class="metric-label">중간 정도 변화</div>
+      <div class="metric-value">merged</div>
+      <div class="metric-note">PNU가 섞인 만큼만 남고, site formula에서 조금 더 커집니다</div>
+    </div>
+    </div>
+
+    <div class="grid" style="margin-top:18px">
+      <article class="card full">
+        <div class="eyebrow">Conclusion</div>
+        <h3>최종 결론</h3>
+        <p>이번 Stage에서 가장 분명한 사실은 remission-sensitive 재해석이 <strong>PNU에서는 실제로 의미 있는 차이</strong>를 만들지만, <strong>SNU에서는 거의 차이를 만들지 않는다</strong>는 점입니다. merged는 그 중간에 위치하며, overall benchmark에서는 작은 변화로 보이고, site가 들어간 individualized formula에서는 그 변화가 조금 더 커집니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow green">Directly readable range</div>
+        <h3>직접 읽을 수 있는 부분</h3>
+        <p>PNU는 1년, SNU와 merged는 1–2년이 이 Stage에서 가장 직접적으로 읽을 수 있는 구간입니다. 이 범위 안에서는 PNU에서 remission 경로가 존재하고, SNU에서는 remission-sensitive 변화가 거의 없으며, merged에서는 작은 정도의 재배치가 남는다는 해석이 비교적 안정적입니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow amber">Cautious interpretation</div>
+        <h3>조심해서 읽어야 하는 부분</h3>
+        <p>PNU 2년은 sensitivity 구간이므로, remission CIF 39.91%나 FP100 +22.2 같은 숫자는 “방향과 가능성”을 보여주는 값으로 읽어야 합니다. 또한 Fine–Gray의 일부 interaction row처럼 threshold-level detail이 조금 흔들리는 부분이 있어, 세부 순위나 한 모델의 우월성으로 해석하는 것은 적절하지 않습니다.</p>
+      </article>
+
+      <article class="card full">
+        <div class="eyebrow purple">한 번에 정리하면</div>
+        <h3>이 Stage에서 독자가 가져가야 할 핵심</h3>
+        <p>Stage 9는 remission을 따로 두면 transition risk 해석이 <strong>모든 dataset에서 똑같이</strong> 바뀌는 것이 아니라는 점을 보여줍니다. 실제 차이는 remission이 존재하는 PNU에서 가장 크고, remission이 없는 SNU에서는 거의 보이지 않으며, merged는 PNU 구조가 섞인 만큼만 따라 움직입니다. 따라서 이번 Stage의 메시지는 “remission-sensitive 해석이 필요하다”가 아니라, <strong>어느 dataset에서 그것이 실제로 결과를 바꾸는지</strong>를 구분해서 봐야 한다는 것입니다.</p>
+        <div class="callout"><strong>짧게 말하면</strong> PNU에서는 remission을 따로 보면 해석이 꽤 달라지고, SNU에서는 거의 달라지지 않으며, merged에서는 그 차이가 작게 남습니다.</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+    
+<section class="panel" data-panel="references">
+  <div class="panel-card">
+    <div class="panel-head">
+      <div>
+        <div class="panel-kicker">References</div>
+        <h2 class="panel-title">사용한 참고문헌</h2>
+        <p class="panel-sub">아래 목록은 이번 Stage의 해석과 metric 설명에 직접 연결되는, source bundle 안에 포함된 학술 참고문헌만 정리한 것입니다.</p>
+      </div>
+    </div>
+
+    <ol class="ref-list">
+      <li>Gelman A. Scaling regression inputs by dividing by two standard deviations. <em>Statistics in Medicine</em>. 2008.</li>
+      <li>Park SY, Park JE, Kim H, Park SH. Review of statistical methods for evaluating the performance of survival or other time-to-event prediction models. <em>Korean Journal of Radiology</em>. 2021.</li>
+      <li>Vickers AJ, Elkin EB. Decision curve analysis: a novel method for evaluating prediction models. <em>Medical Decision Making</em>. 2006.</li>
+      <li>Vickers AJ, Cronin AM, Elkin EB, Gonen M. Extensions to decision curve analysis, a novel method for evaluating diagnostic tests, prediction models and molecular markers. <em>BMC Medical Informatics and Decision Making</em>. 2008.</li>
+    </ol>
+  </div>
+</section>
+
+
+    <div class="footer-note">Stage 9 independent HTML report • remission sensitivity</div>
+  </div>
+
+<script>
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+</script>
+</body>
+</html>

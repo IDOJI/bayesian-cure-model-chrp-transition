@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stage 8B — Bayesian remission-sensitive competing-risk extension</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7fb;
+    --surface:#ffffff;
+    --surface-2:#fbfbfd;
+    --border:#e5e7eb;
+    --text:#111827;
+    --text-soft:#6b7280;
+    --accent:#2563eb;
+    --accent-soft:#eff6ff;
+    --accent-strong:#1d4ed8;
+    --green:#16a34a;
+    --green-bg:#f0fdf4;
+    --amber:#d97706;
+    --amber-bg:#fffbeb;
+    --purple:#7c3aed;
+    --purple-bg:#f5f3ff;
+    --gray:#475569;
+    --gray-bg:#f8fafc;
+    --dark-1:#0b1220;
+    --dark-2:#111827;
+    --dark-3:#1f2937;
+    --line-dark:rgba(255,255,255,.14);
+    --shadow:0 20px 60px rgba(15,23,42,.08);
+    --card-shadow:0 12px 28px rgba(15,23,42,.05);
+    --radius-xl:28px;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Noto Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 24%),
+      radial-gradient(circle at bottom right, rgba(124,58,237,.06), transparent 20%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.8;
+    font-size:15px;
+  }
+  .container{max-width:1040px;margin:0 auto;padding:36px 24px 84px;}
+  .hero{
+    position:relative;overflow:hidden;padding:34px 32px 30px;border-radius:var(--radius-xl);
+    background:radial-gradient(circle at top right, rgba(96,165,250,.16), transparent 30%), linear-gradient(135deg, var(--dark-1), var(--dark-2) 58%, var(--dark-3));
+    color:#f9fafb;box-shadow:0 24px 60px rgba(15,23,42,.18);margin-bottom:18px;
+  }
+  .hero .label{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono', monospace;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#bfdbfe;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line-dark);margin-bottom:14px;}
+  .hero h1{font-size:clamp(28px, 4vw, 40px);line-height:1.12;letter-spacing:-.03em;margin-bottom:12px;max-width:920px;}
+  .hero .sub{max-width:860px;font-size:15px;color:#d1d5db;}
+  .tab-shell{position:sticky;top:16px;z-index:12;margin-bottom:18px;}
+  .tabs{display:flex;gap:10px;flex-wrap:wrap;padding:14px;border-radius:22px;background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(229,231,235,.9);box-shadow:0 18px 40px rgba(15,23,42,.08);}
+  .tabs button{appearance:none;border:1px solid var(--border);background:#fff;color:var(--text-soft);padding:10px 16px;border-radius:999px;cursor:pointer;font-size:14px;font-weight:700;transition:.18s ease;box-shadow:0 1px 0 rgba(15,23,42,.02);}
+  .tabs button:hover{transform:translateY(-1px);color:var(--text);border-color:#cbd5e1;}
+  .tabs button.active{background:linear-gradient(180deg,#eff6ff,#dbeafe);color:var(--accent-strong);border-color:#bfdbfe;box-shadow:0 8px 18px rgba(37,99,235,.14);}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .panel-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px;}
+  .panel-kicker{font-family:'JetBrains Mono', monospace;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-strong);margin-bottom:6px;}
+  .panel-title{font-size:26px;line-height:1.2;letter-spacing:-.02em;}
+  .panel-sub{color:var(--text-soft);max-width:820px;margin-top:8px;}
+  .panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);box-shadow:var(--shadow);padding:28px;margin-bottom:18px;}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;}
+  .card{grid-column:1/-1;background:linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--card-shadow);padding:22px 20px;}
+  .mini-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+  .stat-card{border:1px solid var(--border);background:var(--surface-2);border-radius:16px;padding:16px;}
+  .stat-label{font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+  .stat-value{font-size:20px;font-weight:800;line-height:1.2;letter-spacing:-.02em;}
+  .stat-sub{font-size:13px;color:var(--text-soft);margin-top:8px;}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.03em;margin-bottom:12px;background:var(--accent-soft);color:var(--accent-strong);}
+  .eyebrow.green{background:var(--green-bg);color:var(--green);}
+  .eyebrow.amber{background:var(--amber-bg);color:var(--amber);}
+  .eyebrow.purple{background:var(--purple-bg);color:var(--purple);}
+  .card h3{font-size:19px;line-height:1.35;margin-bottom:10px;letter-spacing:-.01em;}
+  .card p, .card li{color:var(--text-soft);}
+  .card ul{margin-left:18px;}
+  .callout{padding:18px 20px;border-radius:18px;border:1px solid var(--border);background:#fafcff;color:var(--text);margin-top:16px;}
+  .callout strong{color:var(--accent-strong);}
+  .callout + .callout{margin-top:12px;}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .badge{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-strong);font-size:12px;font-weight:700;}
+  .badge-green{background:var(--green-bg);color:var(--green);}
+  .badge-amber{background:var(--amber-bg);color:var(--amber);}
+  .badge-purple{background:var(--purple-bg);color:var(--purple);}
+  .badge-gray{background:var(--gray-bg);color:var(--gray);}
+  .report-table{width:100%;border-collapse:collapse;font-size:14px;}
+  .report-table th,.report-table td{padding:11px 12px;vertical-align:top;border-bottom:1px solid var(--border);text-align:left;}
+  .report-table th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-soft);background:#fafbff;position:sticky;top:0;}
+  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:18px;background:white;margin-top:14px;}
+  .table-guide{font-size:13px;color:var(--text-soft);margin-top:10px;}
+  .mini-note{font-size:13px;color:var(--text-soft);margin-top:10px;}
+  .mono{font-family:'JetBrains Mono', monospace;word-break:break-word;}
+  .small{font-size:12px;}
+  .formula{font-family:'JetBrains Mono', monospace;font-size:13px;color:#0f172a;background:#f8fafc;border:1px solid var(--border);padding:2px 8px;border-radius:999px;display:inline-block;margin-top:8px;}
+  .bar-stack{display:grid;gap:12px;margin-top:14px;}
+  .bar-row{padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface-2);}
+  .bar-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px;}
+  .bar-label{font-weight:700;color:var(--text);}
+  .bar-value{font-weight:800;color:var(--accent-strong);}
+  .bar-track{width:100%;height:10px;border-radius:999px;background:#e5e7eb;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:999px;}
+  .bar-fill.blue{background:linear-gradient(90deg,#60a5fa,#2563eb);}
+  .bar-fill.green{background:linear-gradient(90deg,#4ade80,#16a34a);}
+  .bar-fill.amber{background:linear-gradient(90deg,#fbbf24,#d97706);}
+  .bar-sub{font-size:13px;color:var(--text-soft);margin-top:8px;}
+  .result-list{display:grid;gap:10px;margin-top:10px;}
+  .result-item{padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);}
+  .result-item strong{color:var(--text);}
+  .summary-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px;}
+  .summary-item{border:1px solid var(--border);background:var(--surface-2);border-radius:16px;padding:16px;}
+  .summary-item .label{font-size:12px;font-weight:700;color:var(--text-soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+  .summary-item .value{font-size:15px;color:var(--text);font-weight:700;line-height:1.5;}
+  .refs{margin-left:22px;}
+  .refs li + li{margin-top:12px;}
+  .footer-note{margin-top:28px;text-align:center;color:#94a3b8;font-size:13px;}
+  @media (max-width:900px){.mini-grid,.summary-strip{grid-template-columns:1fr 1fr;}}
+  @media (max-width:640px){.container{padding:22px 16px 64px} .hero{padding:26px 22px 24px} .panel-card{padding:20px} .tabs{padding:10px} .tabs button{width:100%; text-align:left} .mini-grid,.summary-strip{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="hero">
+    <div class="label">Stage 8B Report</div>
+    <h1>Stage 8B — Bayesian remission-sensitive competing-risk extension</h1>
+    <p class="sub">remission을 competing event로 명시한 Bayesian 확장에서, 96개 후보 모델 중 30개만 admissible했고, 직접 해석은 PNU 1년과 SNU·merged 1–2년에 집중됩니다.</p>
+  </header>
+
+  <div class="tab-shell">
+    <nav class="tabs" aria-label="Stage tabs">
+      <button class="active" data-tab="overview">개요</button>
+      <button data-tab="results-overview">결과 개요</button>
+      <button data-tab="result-1">결과 1</button>
+      <button data-tab="result-2">결과 2</button>
+      <button data-tab="result-3">결과 3</button>
+      <button data-tab="result-4">결과 4</button>
+      <button data-tab="synthesis">종합 해석</button>
+      <button data-tab="references">References</button>
+    </nav>
+  </div>
+
+  <section class="panel active" data-panel="overview">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Overview</div>
+          <h2 class="panel-title">이 Stage는 무엇을 하는 단계인가</h2>
+          <p class="panel-sub">이번 Stage 8B는 remission을 단순 censoring으로 두지 않고, <strong>transition의 competing event</strong>로 명시한 Bayesian 확장입니다. 즉, “transition risk가 얼마나 남는가”를 remission까지 함께 고려한 확률 척도로 다시 계산하고, 그 변화가 risk·false positive burden·net benefit를 얼마나 바꾸는지 확인하는 단계입니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">Stage role</div>
+          <h3>핵심 역할</h3>
+          <p>이 단계는 Stage 8A의 transition-only Bayesian branch를 대체하는 것이 아니라, remission을 명시적으로 넣었을 때 결과가 얼마나 달라지는지 보여주는 <strong>remission-sensitive extension</strong>입니다. 따라서 핵심 질문은 “cure-like pattern이 보이는가” 하나가 아니라, <strong>remission을 함께 넣으면 supported horizon의 transition risk와 분류 성능이 실제로 얼마나 바뀌는가</strong>입니다.</p>
+          <div class="callout"><strong>이번 실행의 직접적인 비교</strong>는 크게 두 가지입니다. (1) Stage 8B와 Stage 8A의 차이, (2) external incidence anchor를 넣은 prior와 넣지 않은 neutral prior의 차이입니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">Reader takeaway</div>
+          <h3>독자가 먼저 알아야 할 점</h3>
+          <ul>
+            <li>이번 Stage의 최종 보고 단위는 <strong>96개 후보 Bayesian fit</strong>이며, 이 중 <strong>30개만 admissible</strong>했습니다.</li>
+            <li>직접 관찰에 가장 기대어 읽을 수 있는 구간은 <strong>PNU 1년</strong>, <strong>SNU·merged 1–2년</strong>입니다.</li>
+            <li>SNU에서는 <strong>observed remission event가 0건</strong>이므로, remission-sensitive component의 직접 식별은 매우 약합니다.</li>
+            <li>이번 Stage의 결과 언어는 p-value가 아니라 <strong>posterior mean, posterior interval, calibration, Brier, net benefit</strong> 중심으로 읽어야 합니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">Interpretation boundary</div>
+          <h3>어디까지 직접 읽고, 어디부터 조심해야 하는가</h3>
+          <p>Stage 8B는 horizon마다 해석 강도가 다릅니다. PNU는 1년만 직접 관찰 지지가 가장 강하고 2년은 sensitivity, 그 이후는 projection입니다. SNU와 merged는 1–2년이 primary-supported, 3–5년이 secondary, 6년 이후는 projection으로 읽어야 합니다.</p>
+          <div class="badges">
+            <span class="badge badge-green">PNU 1년: primary supported</span>
+            <span class="badge badge-amber">PNU 2년: sensitivity</span>
+            <span class="badge badge-green">SNU·merged 1–2년: primary supported</span>
+            <span class="badge badge-amber">3–5년: secondary 또는 sensitivity</span>
+            <span class="badge badge-gray">6년 이후: projection only / projection plus prior sensitive</span>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">Modeling summary</div>
+          <h3>이번 Stage에서 실제로 사용한 모델링과 반복 계산</h3>
+          <div class="mini-grid">
+            <div class="stat-card">
+              <div class="stat-label">후보 모델 수</div>
+              <div class="stat-value">96</div>
+              <div class="stat-sub">PNU 16, SNU 16, merged 64</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Posterior sampling</div>
+              <div class="stat-value">4 chains × 2000 iter</div>
+              <div class="stat-sub">warmup 1000, divergence 0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Posterior prediction draws</div>
+              <div class="stat-value">300</div>
+              <div class="stat-sub">prior predictive 250 draws</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Bootstrap / CV</div>
+              <div class="stat-value">없음</div>
+              <div class="stat-sub">이번 실행의 supplied code에 없음</div>
+            </div>
+          </div>
+          <div class="mini-note">Threshold는 <strong>0.05,0.10,0.15,0.20</strong>, remission interval cut은 <strong>0|1|2|5|10|100</strong>로 고정했습니다. 다중대치나 bootstrap 재표본추출은 이번 Stage 8B 코드에 명시되어 있지 않습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">모델링 표</div>
+          <h3>이 Stage에서 어떤 분석 블록을 돌렸는가</h3>
+          <div class="table-wrap">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>분석 블록</th>
+                  <th>무엇을 했는가</th>
+                  <th>명시적 설정</th>
+                  <th>주요 산출물</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Bayesian competing-risk cure core</td>
+                  <td>transition susceptibility, transition latency, remission hazard를 함께 모델링했습니다.</td>
+                  <td>πᵢ = logit⁻¹(α + Xᵢ<sup>inc</sup>β<sub>inc</sub>), mᵢ = exp(γ₀ + Xᵢ<sup>lat</sup>γ<sub>lat</sub>), h<sub>R,i</sub>(t)=exp(ξ₀+Xᵢ<sup>rem</sup>β<sub>rem</sub>)ρ<sub>j</sub></td>
+                  <td>cohort-level transition CIF, remission CIF, cure fraction, subject-level posterior summaries</td>
+                </tr>
+                <tr>
+                  <td>Latency family comparison</td>
+                  <td>susceptible transition time 분포를 4가지 family로 바꿔 적합했습니다.</td>
+                  <td>Tᵢ<sup>U</sup> ∈ {Exponential, Weibull, Lognormal, Loglogistic}</td>
+                  <td>family별 posterior summary, WAIC, LOOIC, hazard-shape table</td>
+                </tr>
+                <tr>
+                  <td>Prior branch comparison</td>
+                  <td>external incidence anchor가 있는 prior와, 외부 정보를 넣지 않은 neutral prior를 비교했습니다.</td>
+                  <td>prior ∈ {anchor-informed, neutral-no-external-information}</td>
+                  <td>anchor vs neutral delta, incidence anchor update</td>
+                </tr>
+                <tr>
+                  <td>Site-term sensitivity</td>
+                  <td>merged dataset에서는 site term의 위치를 바꾼 구조와 site prior family를 비교했습니다.</td>
+                  <td>Xᵢ에 site term을 incidence / latency / remission에 선택적으로 포함; site prior ∈ {Normal(0,1), Student-t<sub>3</sub>(0,1)}</td>
+                  <td>site placement별 admissibility, merged representative fit</td>
+                </tr>
+                <tr>
+                  <td>Threshold classifier</td>
+                  <td>posterior transition CIF를 고정 threshold에서 high-risk / low-risk로 분류했습니다.</td>
+                  <td>Ŷᵢ(t;c)=1{F̂<sub>trans,i</sub>(t)≥c}, c∈{0.05, 0.10, 0.15, 0.20}</td>
+                  <td>FP100, PPV, TPR, false-positive burden, net benefit</td>
+                </tr>
+                <tr>
+                  <td>Performance summary</td>
+                  <td>supported horizon에서 discrimination, calibration, Brier, IBS를 계산했습니다.</td>
+                  <td>AUC(t), calibration = mean F̂<sub>trans</sub>(t) − IPCW observed CIF(t), Brier<sub>IPCW</sub>(t), IBS = mean{Brier(1),…,Brier(t)}</td>
+                  <td>performance long table, posterior classification table</td>
+                </tr>
+                <tr>
+                  <td>Admissibility and diagnostics</td>
+                  <td>convergence, coherence, posterior predictive contradiction 여부를 확인한 뒤 admissible fit만 보고용으로 남겼습니다.</td>
+                  <td>R̂ &lt; 1.01, ESS ≥ 400, divergence = 0, coherence error ≤ 0.02, gross PPC contradiction 없음</td>
+                  <td>model registry, admissible models, output audit</td>
+                </tr>
+                <tr>
+                  <td>계획되었으나 이번 실행에서 미실행</td>
+                  <td>bootstrap, cross-validation, multiple imputation</td>
+                  <td>supplied Stage 8B code와 exported results에 명시적 실행 블록이 없음</td>
+                  <td>별도 산출물 없음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-guide">이 표의 수식은 코드 문법이 아니라 보고서용 통계 표기입니다. πᵢ는 transition에 취약한 확률, mᵢ는 susceptible subgroup의 중앙 time scale, h<sub>R,i</sub>(t)는 remission hazard를 뜻합니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">Formal hypothesis tests</div>
+          <h3>이번 Stage에서의 검정 언어</h3>
+          <p>이번 Stage 8B의 supplied outputs에는 coefficient-level p-value나 classical hypothesis test가 포함되어 있지 않습니다. 따라서 <strong>귀무가설 H₀ / 대립가설 H₁ 표는 만들지 않았습니다.</strong> 이 Stage는 posterior mean, posterior interval, WAIC/LOOIC, calibration, Brier, net benefit, 그리고 Stage 8B−Stage 8A / anchor−neutral delta를 중심으로 해석해야 합니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="results-overview">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Results overview</div>
+          <h2 class="panel-title">이번 Stage 결과를 어떻게 읽을 것인가</h2>
+          <p class="panel-sub">먼저 어떤 모델이 실제로 살아남았는지 보고, 그다음 어느 horizon까지 직접 읽을 수 있는지 확인한 뒤, remission-sensitive risk와 sensitivity comparison을 순서대로 읽는 것이 가장 안전합니다.</p>
+        </div>
+      </div>
+
+      <div class="summary-strip">
+        <div class="summary-item"><div class="label">후보 모델 수</div><div class="value">96</div><div class="mini-note">Bayesian Stage 8B candidate fits</div></div><div class="summary-item"><div class="label">admissible 모델</div><div class="value">30</div><div class="mini-note">해석 가능한 fit만 남긴 수</div></div><div class="summary-item"><div class="label">직접 해석 우선 구간</div><div class="value">PNU 1년 / SNU·merged 1–2년</div><div class="mini-note">support tier 기준</div></div><div class="summary-item"><div class="label">SNU remission 관찰</div><div class="value">0</div><div class="mini-note">observed remission event count</div></div>
+      </div>
+
+      <div class="grid" style="margin-top:18px">
+        <article class="card">
+          <div class="eyebrow">결과 흐름</div>
+          <h3>읽는 순서</h3>
+          <div class="result-list">
+            <div class="result-item"><strong>결과 1</strong>에서는 96개 후보 fit 중 어떤 모델들이 admissible했는지, 그리고 탈락 이유가 무엇이었는지를 봅니다.</div>
+            <div class="result-item"><strong>결과 2</strong>에서는 horizon별 직접 관찰 지지 정도를 확인합니다. 이 단계에서 어떤 숫자를 primary claim으로 쓸 수 있는지가 결정됩니다.</div>
+            <div class="result-item"><strong>결과 3</strong>에서는 representative admissible fit을 기준으로 transition CIF, remission CIF, calibration, FP100, net benefit를 읽습니다.</div>
+            <div class="result-item"><strong>결과 4</strong>에서는 Stage 8A와의 차이, 그리고 anchor-informed prior와 neutral prior의 차이를 나눠 봅니다.</div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">먼저 봐야 할 숫자</div>
+          <h3>이번 Stage의 핵심 숫자</h3>
+          <div class="mini-grid">
+            <div class="stat-card">
+              <div class="stat-label">Admissible</div>
+              <div class="stat-value">30/96</div>
+              <div class="stat-sub">66개는 보고용에서 제외되었습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Output audit</div>
+              <div class="stat-value">13/13</div>
+              <div class="stat-sub">reporting-level audit는 모두 pass였습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Main exclusion</div>
+              <div class="stat-value">65</div>
+              <div class="stat-sub">대부분 coherence 문제였습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">LOO warning</div>
+              <div class="stat-value">9</div>
+              <div class="stat-sub">admissible fit 중 일부에 Pareto-k 경고가 남았습니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">읽을 때의 기준</div>
+          <h3>이 Stage 결과를 과하게 읽지 않기 위한 기준</h3>
+          <p>이번 Stage의 수치는 모두 같은 무게로 읽을 수 없습니다. PNU는 2년부터 sensitivity이고, SNU와 merged도 5년 이후는 직접 관찰보다 model dependence가 커집니다. 따라서 5년·10년 수치는 “패턴 확인”에는 쓸 수 있지만, primary conclusion을 세울 때는 1–2년 값이 중심이어야 합니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="result-1">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Result 1</div>
+          <h2 class="panel-title">무엇을 실제로 fitting 했고, 어떤 모델이 보고용으로 남았는가</h2>
+          <p class="panel-sub">첫 번째로 확인할 것은 “모형이 돌아갔는가”가 아니라 “보고용으로 남길 만큼 안정적이었는가”입니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">1. 이 결과가 답하는 질문</div>
+          <h3>96개 후보 모델 중 실제로 해석 가능한 fit은 몇 개인가</h3>
+          <p>이번 Stage 8B는 PNU 16개, SNU 16개, merged 64개, 합계 96개 후보 Bayesian fit을 만들었습니다. 이후 convergence·coherence·posterior predictive contradiction 규칙을 통과한 fit만 admissible로 남겼습니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">2. 핵심 수치</div>
+          <h3>먼저 봐야 할 숫자 4개</h3>
+          <div class="mini-grid">
+            <div class="stat-card">
+              <div class="stat-label">후보 모델</div>
+              <div class="stat-value">96</div>
+              <div class="stat-sub">fit_status = ok는 96개였습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Admissible</div>
+              <div class="stat-value">30</div>
+              <div class="stat-sub">전체의 31.2%입니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">주된 탈락 이유</div>
+              <div class="stat-value">65</div>
+              <div class="stat-sub">66개 탈락 중 65개가 coherence였습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Hazard shape</div>
+              <div class="stat-value">30/30</div>
+              <div class="stat-sub">admissible fit의 annual hazard shape는 모두 monotone decreasing이었습니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">3. 대표 비교</div>
+          <h3>dataset별 admissible 비율</h3>
+          <p>PNU는 16개 중 2개만 남았고, SNU는 11개, merged는 17개가 남았습니다. 즉, 같은 Stage 8B라도 dataset마다 모델이 견디는 정도가 많이 달랐습니다.</p>
+          <div class="bar-stack">
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">PNU admissible rate</div>
+        <div class="bar-value">12.5%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:12.5%"></div></div>
+      <div class="bar-sub">2/16 models</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">SNU admissible rate</div>
+        <div class="bar-value">68.8%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:68.8%"></div></div>
+      <div class="bar-sub">11/16 models</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">merged admissible rate</div>
+        <div class="bar-value">26.6%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:26.6%"></div></div>
+      <div class="bar-sub">17/64 models</div>
+    </div></div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">4. 표</div>
+          <h3>dataset별 candidate와 admissible 모델 수</h3>
+          <p class="table-guide">이 표는 각 dataset에서 몇 개의 모델을 시도했고, 그중 몇 개가 보고용으로 남았는지를 보여줍니다. admissible이 높을수록 그 dataset에서 competing-risk cure 구조가 더 넓은 모델 공간에서 버텼다는 뜻입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset_key</th><th>attempted</th><th>admissible</th><th>inadmissible</th><th>admissible_rate</th><th>N</th><th>events</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>16</td><td>2</td><td>14</td><td>0.1%</td><td>54</td><td>transition 12, remission 13, censor 29</td></tr><tr><td><span class="badge">SNU</span></td><td>16</td><td>11</td><td>5</td><td>0.7%</td><td>208</td><td>transition 38, remission 0, censor 170</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>64</td><td>17</td><td>47</td><td>0.3%</td><td>262</td><td>transition 50, remission 13, censor 199</td></tr></tbody></table></div>
+          <div class="mini-note">즉, 이 표에서 먼저 봐야 할 포인트는 <strong>PNU는 candidate 대비 생존한 모델이 매우 적고</strong>, <strong>SNU와 merged는 그보다 넓은 admissible set을 가졌다는 점</strong>입니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">4. 표</div>
+          <h3>admissible 모델의 family 구성</h3>
+          <p class="table-guide">이 표는 “남은 모델이 어떤 latency family에 몰렸는지”를 보여줍니다. 특정 family에 admissible fit이 집중되면, 그 dataset에서 해당 family가 더 안정적인 구조였다는 뜻입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>E</th><th>W</th><th>LN</th><th>LL</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>2</td><td>0</td><td>0</td><td>0</td></tr><tr><td><span class="badge">SNU</span></td><td>4</td><td>2</td><td>3</td><td>2</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>16</td><td>0</td><td>1</td><td>0</td></tr></tbody></table></div>
+          <div class="mini-note">PNU는 exponential만 남았고, merged는 거의 전부 exponential이었습니다. 반면 SNU는 E, W, LN, LL이 모두 일부 남아 family uncertainty가 남아 있습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">5. 이 표를 어떻게 읽는지</div>
+          <h3>admissible, coherence, Pareto-k가 뜻하는 것</h3>
+          <ul>
+            <li><strong>admissible</strong>: 보고용으로 남긴 fit입니다. “모형이 돌아갔다”보다 더 엄격한 기준입니다.</li>
+            <li><strong>coherence</strong>: transition CIF + remission CIF + all-event-free survival의 분해가 수치적으로 잘 맞는지 보는 규칙입니다. 이번 탈락의 대부분이 이 문제였습니다.</li>
+            <li><strong>Pareto-k warning</strong>: LOOIC를 읽을 때 과하게 자신하지 말라는 신호입니다. admissible fit 중에도 9개에서 남았습니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">6. 해석</div>
+          <h3>그래서 이 결과는 어떻게 읽어야 하는가</h3>
+          <p>이번 Stage 8B는 계산 자체는 96개 모두 완료됐지만, 실제로 논문 보조결과처럼 읽을 수 있는 fit은 30개뿐이었습니다. 특히 PNU는 2개만 남아 구조적 불안정성이 컸고, merged도 64개 중 17개만 남았습니다. 따라서 이후 결과에서는 <strong>admissible subset만을 실제 보고 단위로 읽어야 하며</strong>, low-LOOIC 한 모델이 있다고 해서 자동으로 “이겼다”고 읽으면 안 됩니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="result-2">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Result 2</div>
+          <h2 class="panel-title">어느 horizon까지 직접 읽을 수 있는가</h2>
+          <p class="panel-sub">두 번째로 중요한 것은 “숫자가 있는가”가 아니라 “그 숫자가 얼마나 직접 관찰을 받쳐 주는가”입니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">1. 이 결과가 답하는 질문</div>
+          <h3>1년, 2년, 5년, 10년 값을 같은 강도로 읽어도 되는가</h3>
+          <p>아닙니다. Stage 8B는 horizon-support governance를 그대로 따르므로, 각 dataset에서 직접 관찰이 충분한 구간과 모델 의존이 커지는 구간을 나눠 읽어야 합니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">2. 핵심 수치</div>
+          <h3>직접 관찰 지지를 보여주는 대표 숫자</h3>
+          <div class="bar-stack">
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">PNU 1년</div>
+        <div class="bar-value">51.9%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:51.9%"></div></div>
+      <div class="bar-sub">28/54명이 1년 시점 이상 직접 관찰</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">PNU 2년</div>
+        <div class="bar-value">1.9%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:1.9%"></div></div>
+      <div class="bar-sub">1/54명이 2년 시점 이상 직접 관찰</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">SNU 2년</div>
+        <div class="bar-value">64.4%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:64.4%"></div></div>
+      <div class="bar-sub">134/208명이 2년 시점 이상 직접 관찰</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-top">
+        <div class="bar-label">merged 2년</div>
+        <div class="bar-value">51.5%</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill blue" style="width:51.5%"></div></div>
+      <div class="bar-sub">135/262명이 2년 시점 이상 직접 관찰</div>
+    </div></div>
+          <div class="mini-note">PNU는 2년 시점 이상 직접 관찰된 사람이 54명 중 1명뿐이었습니다. 반면 SNU와 merged는 2년까지는 절반 이상이 직접 관찰 범위 안에 남아 있습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">3. 대표 비교</div>
+          <h3>PNU 2년과 merged 2년은 같은 “2년”이지만 근거의 무게가 다릅니다</h3>
+          <p>PNU 2년은 risk-set fraction이 <strong>1.9%</strong>에 불과해 sensitivity 구간입니다. 반대로 merged 2년은 <strong>51.5%</strong>가 2년 이상 직접 관찰되어 primary-supported입니다. 같은 2년 값이라도 이 차이를 먼저 봐야 합니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">4. 표</div>
+          <h3>dataset별 horizon support 요약</h3>
+          <p class="table-guide">이 표는 각 horizon에서 얼마나 많은 사람이 그 시점 이상 직접 관찰되었는지, 그리고 그 결과가 primary-supported인지 secondary인지 projection인지 보여줍니다. <strong>n observed at or beyond horizon</strong>가 클수록 직접 관찰 지지가 크고, <strong>risk set fraction</strong>이 작아질수록 model dependence가 커집니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset_key</th><th>horizon</th><th>support_tier</th><th>horizon_evidence_class</th><th>claim_restriction_flag</th><th>n_observed_at_or_beyond_horizon</th><th>n_total</th><th>risk_set_fraction_display</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>1년</td><td><span class="badge badge-green">primary supported</span></td><td>directly observed data supported</td><td>primary claim allowed</td><td>28</td><td>54</td><td>51.9%</td></tr><tr><td><span class="badge">PNU</span></td><td>2년</td><td><span class="badge badge-amber">sensitivity</span></td><td>partly model dependent</td><td>secondary or sensitivity only</td><td>1</td><td>54</td><td>1.9%</td></tr><tr><td><span class="badge">PNU</span></td><td>5년</td><td><span class="badge badge-gray">projection</span></td><td>mostly extrapolated</td><td>projection plus prior sensitive</td><td>0</td><td>54</td><td>0.0%</td></tr><tr><td><span class="badge">PNU</span></td><td>10년</td><td><span class="badge badge-gray">projection</span></td><td>mostly extrapolated</td><td>projection plus prior sensitive</td><td>0</td><td>54</td><td>0.0%</td></tr><tr><td><span class="badge">SNU</span></td><td>1년</td><td><span class="badge badge-green">primary supported</span></td><td>directly observed data supported</td><td>primary claim allowed</td><td>163</td><td>208</td><td>78.4%</td></tr><tr><td><span class="badge">SNU</span></td><td>2년</td><td><span class="badge badge-green">primary supported</span></td><td>directly observed data supported</td><td>primary claim allowed</td><td>134</td><td>208</td><td>64.4%</td></tr><tr><td><span class="badge">SNU</span></td><td>5년</td><td><span class="badge badge-amber">secondary</span></td><td>partly model dependent</td><td>secondary or sensitivity only</td><td>64</td><td>208</td><td>30.8%</td></tr><tr><td><span class="badge">SNU</span></td><td>10년</td><td><span class="badge badge-gray">projection</span></td><td>mostly extrapolated</td><td>projection only / projection plus prior sensitive</td><td>1</td><td>208</td><td>0.5%</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>1년</td><td><span class="badge badge-green">primary supported</span></td><td>directly observed data supported</td><td>primary claim allowed</td><td>191</td><td>262</td><td>72.9%</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>2년</td><td><span class="badge badge-green">primary supported</span></td><td>directly observed data supported</td><td>primary claim allowed</td><td>135</td><td>262</td><td>51.5%</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>5년</td><td><span class="badge badge-amber">secondary</span></td><td>partly model dependent</td><td>secondary or sensitivity only</td><td>64</td><td>262</td><td>24.4%</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>10년</td><td><span class="badge badge-gray">projection</span></td><td>mostly extrapolated</td><td>projection only / projection plus prior sensitive</td><td>1</td><td>262</td><td>0.4%</td></tr></tbody></table></div>
+          <div class="mini-note">즉, 이 표에서 먼저 봐야 할 포인트는 <strong>PNU는 1년까지만 직접 읽기 좋고</strong>, <strong>SNU와 merged는 1–2년이 가장 읽기 좋다</strong>는 점입니다. 5년과 10년은 패턴 확인에는 쓸 수 있지만 primary claim의 중심이 되어서는 안 됩니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">5. 이 표를 어떻게 읽는지</div>
+          <h3>support tier와 claim restriction의 쉬운 뜻</h3>
+          <ul>
+            <li><strong>primary supported</strong>: 그 horizon을 본문 주결론에 가장 자신 있게 쓸 수 있는 구간입니다.</li>
+            <li><strong>sensitivity / secondary</strong>: 값은 읽을 수 있지만, 주결론보다는 보조 해석에 더 가깝습니다.</li>
+            <li><strong>projection only / projection plus prior sensitive</strong>: 그 이후는 직접 관찰보다 모형과 prior의 영향이 더 커질 수 있다는 뜻입니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">6. 해석</div>
+          <h3>이번 Stage에서 primary claim을 놓을 수 있는 자리</h3>
+          <p>이번 Stage 8B는 숫자가 10년까지 모두 나와 있어도, primary claim은 PNU 1년과 SNU·merged 1–2년에 두는 것이 맞습니다. PNU 2년부터는 이미 sensitivity이고, 5년과 10년은 특히 PNU에서 projection입니다. 따라서 이후 결과 표에서는 1년과 2년이 중심이 되고, 5년·10년은 “어떤 방향으로 drift하는가”를 보여주는 보조 자료로 읽는 것이 안전합니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="result-3">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Result 3</div>
+          <h2 class="panel-title">대표 admissible fit에서 remission-sensitive risk와 분류 성능은 어떻게 보였는가</h2>
+          <p class="panel-sub">이 결과 묶음은 dataset별로 대표 admissible fit 하나를 골라, Stage 8B가 실제로 어떤 posterior risk 구조를 내놓았는지 보여줍니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">1. 이 결과가 답하는 질문</div>
+          <h3>Stage 8B가 실제로 얼마의 transition CIF와 remission CIF를 보고했는가</h3>
+          <p>여기서는 dataset별 대표 admissible fit을 하나씩 골라, remission을 competing event로 넣은 뒤 1·2·5·10년의 transition risk, remission risk, calibration, FP100, net benefit를 같이 봅니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">2. 핵심 수치</div>
+          <h3>대표 fit에서 먼저 눈에 들어오는 숫자</h3>
+          <div class="mini-grid">
+            <div class="stat-card">
+              <div class="stat-label">PNU 대표 fit</div>
+              <div class="stat-value">1년 transition 0.198</div>
+              <div class="stat-sub">모델 기준 약 100명 중 20명 수준의 1년 transition risk입니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">SNU 대표 fit</div>
+              <div class="stat-value">1년 remission 0.001</div>
+              <div class="stat-sub">SNU observed remission이 0건이므로 매우 작게 나옵니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">merged 대표 fit</div>
+              <div class="stat-value">2년 transition 0.144</div>
+              <div class="stat-sub">약 100명 중 14명 수준의 2년 transition risk입니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Calibration drift</div>
+              <div class="stat-value">late horizon에서 증가</div>
+              <div class="stat-sub">5년과 10년으로 갈수록 predicted minus observed 차이가 커집니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">3. 대표 비교</div>
+          <h3>dataset별 대표 admissible fit</h3>
+          <p>PNU는 interaction + exponential 구조의 anchor-informed fit, SNU는 base + loglogistic 구조의 neutral fit, merged는 site-added + exponential 구조의 neutral fit을 대표 उदाहरण으로 제시했습니다. 아래 표는 이 대표 fit들의 LOOIC, WAIC, Pareto-k, cohort mean cure fraction을 요약합니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>representative_model</th><th>structure</th><th>family</th><th>prior</th><th>site_prior</th><th>looic</th><th>waic</th><th>pareto_k_max</th><th>cure_fraction_mean</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td><span class="mono small">PNU-L1R1__<wbr>E__<wbr>anchor_informed__<wbr>not_applicable</span></td><td>interaction</td><td>exponential</td><td>anchor informed</td><td>not applicable</td><td>124.96</td><td>124.07</td><td>0.780</td><td>0.476</td></tr><tr><td><span class="badge">SNU</span></td><td><span class="mono small">SNU-L0R0__<wbr>LL__<wbr>neutral_no_external_info__<wbr>not_applicable</span></td><td>base</td><td>loglogistic</td><td>neutral no external info</td><td>not applicable</td><td>304.79</td><td>304.74</td><td>0.338</td><td>0.144</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td><span class="mono small">MERGED-L0S1-R0S1__<wbr>E__<wbr>neutral_no_external_info__<wbr>student_t3_0_1_sensitivity</span></td><td>site_added</td><td>exponential</td><td>neutral no external info</td><td>student t3 0 1 sensitivity</td><td>430.70</td><td>429.80</td><td>0.860</td><td>0.356</td></tr></tbody></table></div>
+          <div class="mini-note">이 표는 “대표 fit이 어떤 성격인지”를 보여주는 표입니다. LOOIC와 WAIC는 모델 비교 보조지표일 뿐, 이 수치 하나로 최종 해석을 결정하지는 않습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">4. 표</div>
+          <h3>대표 fit의 horizon별 posterior summary</h3>
+          <p class="table-guide">이 표는 1·2·5·10년에서 transition CIF와 remission CIF가 얼마였는지, observed CIF와의 차이가 얼마였는지, 그리고 10% threshold에서 FP100과 net benefit가 얼마였는지를 보여줍니다. <strong>transition CIF</strong>와 <strong>remission CIF</strong>는 커질수록 해당 event probability가 커짐을 뜻합니다. <strong>calibration diff</strong>는 predicted − observed이므로, 양수면 모델이 더 높게 예측한 것입니다. <strong>FP100</strong>은 100명 기준 false positive burden입니다. <strong>NB</strong>는 net benefit로, 클수록 분류기가 더 유리하다는 뜻입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>horizon</th><th>transition_cif_mean</th><th>remission_cif_mean</th><th>observed_transition_cif</th><th>observed_remission_cif</th><th>calibration_diff</th><th>FP100</th><th>NB</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>1년</td><td>0.198</td><td>0.081</td><td>0.148</td><td>0.056</td><td>+0.050</td><td>67.7</td><td>+0.064</td></tr><tr><td><span class="badge">PNU</span></td><td>2년</td><td>0.269</td><td>0.357</td><td>0.222</td><td>0.225</td><td>+0.046</td><td>75.9</td><td>+0.124</td></tr><tr><td><span class="badge">PNU</span></td><td>5년</td><td>0.306</td><td>0.599</td><td>0.222</td><td>0.244</td><td>+0.084</td><td>77.0</td><td>+0.129</td></tr><tr><td><span class="badge">PNU</span></td><td>10년</td><td>0.312</td><td>0.652</td><td>0.222</td><td>0.244</td><td>+0.090</td><td>77.1</td><td>+0.130</td></tr><tr><td><span class="badge">SNU</span></td><td>1년</td><td>0.080</td><td>0.001</td><td>0.067</td><td>0.000</td><td>+0.012</td><td>17.2</td><td>-0.007</td></tr><tr><td><span class="badge">SNU</span></td><td>2년</td><td>0.127</td><td>0.003</td><td>0.106</td><td>0.000</td><td>+0.021</td><td>68.9</td><td>+0.007</td></tr><tr><td><span class="badge">SNU</span></td><td>5년</td><td>0.222</td><td>0.005</td><td>0.165</td><td>0.000</td><td>+0.057</td><td>82.8</td><td>+0.071</td></tr><tr><td><span class="badge">SNU</span></td><td>10년</td><td>0.316</td><td>0.012</td><td>0.186</td><td>0.000</td><td>+0.130</td><td>81.4</td><td>+0.095</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>1년</td><td>0.086</td><td>0.017</td><td>0.084</td><td>0.012</td><td>+0.001</td><td>17.3</td><td>+0.012</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>2년</td><td>0.144</td><td>0.075</td><td>0.131</td><td>0.047</td><td>+0.013</td><td>51.2</td><td>+0.040</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>5년</td><td>0.252</td><td>0.120</td><td>0.179</td><td>0.051</td><td>+0.073</td><td>81.4</td><td>+0.087</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>10년</td><td>0.356</td><td>0.133</td><td>0.196</td><td>0.051</td><td>+0.160</td><td>80.1</td><td>+0.106</td></tr></tbody></table></div>
+          <div class="mini-note">즉, 이 표에서 먼저 봐야 할 포인트는 <strong>PNU와 merged는 2년에서 remission component가 눈에 띄게 커지고</strong>, <strong>SNU는 remission이 거의 0에 가까워 Stage 8B가 구조적으로만 확장된 모습</strong>이라는 점입니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">5. 이 표를 어떻게 읽는지</div>
+          <h3>대표 수치를 쉬운 말로 바꾸면</h3>
+          <ul>
+            <li><strong>PNU 1년 transition CIF 0.198</strong>: remission을 경쟁 사건으로 고려한 뒤에도, 대표 fit은 1년 transition risk를 약 100명 중 20명 수준으로 봤다는 뜻입니다. 다만 observed 1년 transition CIF는 0.148이라 model mean이 조금 더 높습니다.</li>
+            <li><strong>SNU 1년 remission CIF 0.001</strong>: 사실상 remission component가 직접 관찰에서 거의 배운 것이 없다는 뜻입니다.</li>
+            <li><strong>merged 2년 transition CIF 0.144</strong>: merged 대표 fit은 2년 transition risk를 약 100명 중 14명 수준으로 계산했습니다. 같은 시점의 observed transition CIF는 0.131이어서 calibration diff는 +0.013입니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">4. 표</div>
+          <h3>선택된 posterior coefficient snapshot</h3>
+          <p class="table-guide">이 표는 full coefficient table 전체가 아니라, 해석에 도움이 되는 대표 계수만 뽑은 것입니다. coefficient는 p-value가 아니라 posterior mean과 95% posterior interval로 읽습니다. interval이 넓으면 방향은 보이더라도 불확실성이 크다는 뜻입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>representative_model</th><th>parameter</th><th>mean</th><th>q025</th><th>q975</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Incidence susceptibility: 남성</td><td>0.411</td><td>0.160</td><td>0.669</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Incidence susceptibility: 20–29세</td><td>0.915</td><td>0.572</td><td>1.249</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Incidence susceptibility: 30세 이상</td><td>0.613</td><td>0.252</td><td>0.969</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Incidence susceptibility: 남성×20–29세</td><td>0.400</td><td>-0.126</td><td>0.923</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Incidence susceptibility: 남성×30세 이상</td><td>0.076</td><td>-0.506</td><td>0.653</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Latency: 표준화 연령</td><td>0.272</td><td>-0.763</td><td>1.318</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Latency: 남성</td><td>0.808</td><td>-0.400</td><td>1.966</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Latency: 연령×남성</td><td>-0.448</td><td>-1.998</td><td>1.158</td></tr><tr><td><span class="badge">PNU</span></td><td>PNU-L1R1 / exponential / anchor-informed</td><td>Remission baseline log-hazard</td><td>-1.026</td><td>-2.963</td><td>0.940</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>MERGED-L0S1-R0S1 / exponential / neutral / Student-t site prior</td><td>Latency: site = SNU</td><td>1.236</td><td>0.399</td><td>2.074</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>MERGED-L0S1-R0S1 / exponential / neutral / Student-t site prior</td><td>Remission: site = SNU</td><td>-8.446</td><td>-20.565</td><td>-4.233</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>MERGED-L0S1-R0S1 / exponential / neutral / Student-t site prior</td><td>Remission baseline log-hazard</td><td>-1.274</td><td>-3.194</td><td>0.668</td></tr></tbody></table></div>
+          <div class="mini-note">PNU 대표 fit에서는 incidence part의 연령대 계수들이 주로 양수였고, merged 대표 fit에서는 <strong>latency의 site=SNU 계수는 양수</strong>, <strong>remission의 site=SNU 계수는 크게 음수</strong>였습니다. 즉, merged에서 site term은 biology보다 remission capture나 구조 차이를 반영하는 <strong>context proxy</strong>로 읽는 것이 더 안전합니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">6. 해석</div>
+          <h3>그래서 무엇이 보였는가</h3>
+          <p>대표 admissible fit을 기준으로 보면, PNU와 merged에서는 remission을 함께 모델링했을 때 2년까지의 competing-risk structure가 실제로 수치에 반영됩니다. 반면 SNU는 observed remission이 없어서 Stage 8B의 remission component가 매우 작습니다. 또한 5년과 10년으로 갈수록 calibration diff가 커져 late horizon은 보조 해석에 머물러야 합니다. 따라서 이 Stage의 본문 메시지는 <strong>remission-sensitive branch가 특히 PNU와 merged에서 의미 있는 구조 변화</strong>를 보여준다는 점이지, 10년 수치까지 자신 있게 말할 수 있다는 뜻은 아닙니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="result-4">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Result 4</div>
+          <h2 class="panel-title">Stage 8A와의 차이, 그리고 anchor-informed prior의 영향은 얼마나 컸는가</h2>
+          <p class="panel-sub">이 결과 묶음은 remission-sensitive 확장이 실제로 수치를 얼마나 바꾸는지, 그리고 external incidence anchor가 supported horizon 결론을 얼마나 움직이는지 보여줍니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">1. 이 결과가 답하는 질문</div>
+          <h3>Stage 8B는 Stage 8A와 얼마나 달라졌고, prior는 그 차이를 얼마나 움직였는가</h3>
+          <p>아래 첫 표는 <strong>Stage 8B − Stage 8A</strong>를, 두 번째 표는 <strong>anchor-informed − neutral</strong>를 보여줍니다. 둘 다 risk scale과 classification scale이 함께 바뀌는지를 보는 sensitivity comparison입니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">2. 핵심 수치</div>
+          <h3>supported horizon에서 가장 먼저 봐야 할 변화</h3>
+          <div class="mini-grid">
+            <div class="stat-card">
+              <div class="stat-label">PNU 2년</div>
+              <div class="stat-value">Δrisk median −0.033</div>
+              <div class="stat-sub">Stage 8B가 Stage 8A보다 낮게 계산했습니다. 단, 이 구간은 sensitivity입니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">merged 2년</div>
+              <div class="stat-value">Δrisk median −0.006</div>
+              <div class="stat-sub">risk는 낮아졌지만 FP100은 median +2.33이었습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">SNU 1–2년</div>
+              <div class="stat-value">Δrisk near 0</div>
+              <div class="stat-sub">remission-sensitive extension의 직접 영향이 매우 작았습니다.</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">anchor paired fits</div>
+              <div class="stat-value">PNU 1 / SNU 4 / merged 2</div>
+              <div class="stat-sub">anchor sensitivity는 paired retained-fit subset에서 읽습니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">3. 대표 비교</div>
+          <h3>Stage 8B − Stage 8A median delta</h3>
+          <p class="table-guide">이 표는 admissible 모델 전체에서 dataset별로 1년과 2년의 median change를 요약한 것입니다. <strong>Δrisk</strong>가 음수면 remission-sensitive Stage 8B가 transition risk를 더 낮게 계산한 것입니다. <strong>ΔFP100</strong>이 양수면 false positive burden이 100명당 그만큼 늘어난 것입니다. <strong>ΔNB</strong>가 음수면 net benefit가 줄어든 것입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>horizon</th><th>n_models</th><th>support_tier</th><th>claim_restriction</th><th>delta_risk_median</th><th>delta_risk_range</th><th>delta_FP100_median</th><th>delta_FP100_range</th><th>delta_NB_median</th><th>delta_NB_range</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>1년</td><td>2</td><td><span class="badge badge-green">primary supported</span></td><td>primary claim allowed</td><td>-0.001</td><td>-0.002 to 0.000</td><td>+1.47</td><td>1.43 to 1.52</td><td>-0.022</td><td>-0.023 to -0.021</td></tr><tr><td><span class="badge">PNU</span></td><td>2년</td><td>2</td><td><span class="badge badge-amber">sensitivity</span></td><td>secondary or sensitivity only</td><td>-0.033</td><td>-0.035 to -0.031</td><td>+6.03</td><td>5.99 to 6.08</td><td>-0.084</td><td>-0.084 to -0.083</td></tr><tr><td><span class="badge">SNU</span></td><td>1년</td><td>11</td><td><span class="badge badge-green">primary supported</span></td><td>primary claim allowed</td><td>-0.001</td><td>-0.003 to 0.003</td><td>-0.37</td><td>-3.74 to 4.10</td><td>-0.000</td><td>-0.003 to 0.000</td></tr><tr><td><span class="badge">SNU</span></td><td>2년</td><td>11</td><td><span class="badge badge-green">primary supported</span></td><td>primary claim allowed</td><td>-0.001</td><td>-0.003 to 0.004</td><td>+0.30</td><td>-1.72 to 3.64</td><td>-0.012</td><td>-0.014 to -0.008</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>1년</td><td>17</td><td><span class="badge badge-green">primary supported</span></td><td>primary claim allowed</td><td>-0.001</td><td>-0.003 to 0.002</td><td>+0.74</td><td>-0.64 to 1.83</td><td>-0.004</td><td>-0.006 to -0.002</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>2년</td><td>17</td><td><span class="badge badge-green">primary supported</span></td><td>primary claim allowed</td><td>-0.006</td><td>-0.011 to -0.001</td><td>+2.33</td><td>0.28 to 6.51</td><td>-0.022</td><td>-0.025 to -0.021</td></tr></tbody></table></div>
+          <div class="mini-note">즉, 이 표에서 먼저 봐야 할 포인트는 <strong>PNU와 merged에서는 Stage 8B가 risk를 낮추는 방향</strong>으로 움직였지만, <strong>같은 10% threshold에서는 FP100이 늘고 NB가 줄어드는 경우가 많았다</strong>는 점입니다. SNU는 1–2년 변화가 거의 0에 가까웠습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow">4. 표</div>
+          <h3>anchor-informed − neutral median delta</h3>
+          <p class="table-guide">이 표는 external incidence anchor를 넣은 prior와 neutral prior의 차이를 보여줍니다. 이 비교는 구조가 완전히 같은 retained-fit pair에서만 가능하므로, dataset마다 n pairs가 다릅니다. Δrisk가 작을수록 supported horizon 결과가 prior에 덜 흔들린다는 뜻입니다.</p>
+          <div class="table-wrap"><table class="report-table"><thead><tr><th>dataset</th><th>horizon</th><th>n_pairs</th><th>delta_risk_median</th><th>delta_risk_range</th><th>delta_FP100_median</th><th>delta_FP100_range</th><th>delta_NB_median</th><th>delta_NB_range</th></tr></thead><tbody><tr><td><span class="badge">PNU</span></td><td>1년</td><td>1</td><td>-0.009</td><td>-0.009 to -0.009</td><td>+2.45</td><td>2.45 to 2.45</td><td>+0.004</td><td>0.004 to 0.004</td></tr><tr><td><span class="badge">PNU</span></td><td>2년</td><td>1</td><td>-0.033</td><td>-0.033 to -0.033</td><td>+2.71</td><td>2.71 to 2.71</td><td>-0.004</td><td>-0.004 to -0.004</td></tr><tr><td><span class="badge">SNU</span></td><td>1년</td><td>4</td><td>+0.001</td><td>0.001 to 0.003</td><td>+2.04</td><td>0.79 to 3.47</td><td>-0.001</td><td>-0.001 to -0.000</td></tr><tr><td><span class="badge">SNU</span></td><td>2년</td><td>4</td><td>+0.002</td><td>0.001 to 0.004</td><td>-0.67</td><td>-1.68 to 2.26</td><td>+0.001</td><td>0.001 to 0.003</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>1년</td><td>2</td><td>+0.001</td><td>-0.000 to 0.002</td><td>+5.53</td><td>4.79 to 6.27</td><td>+0.002</td><td>0.002 to 0.003</td></tr><tr><td><span class="badge badge-purple">merged</span></td><td>2년</td><td>2</td><td>+0.001</td><td>-0.000 to 0.003</td><td>-5.10</td><td>-5.90 to -4.30</td><td>+0.004</td><td>0.004 to 0.004</td></tr></tbody></table></div>
+          <div class="mini-note">PNU는 paired fit이 1개뿐이라 그 값 자체를 그대로 읽어야 하고, SNU는 4개, merged는 2개의 paired retained fit에서 median을 냈습니다. SNU와 merged의 supported horizon Δrisk median은 대체로 매우 작았습니다.</div>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">5. 이 표를 어떻게 읽는지</div>
+          <h3>같은 risk 변화와 분류 변화가 왜 같이 보이는가</h3>
+          <ul>
+            <li><strong>Δrisk</strong>는 remission을 explicit competing event로 넣었을 때 transition probability 자체가 얼마나 움직였는지 보여줍니다.</li>
+            <li><strong>ΔFP100</strong>은 같은 cutoff를 썼을 때 고위험으로 잘못 분류된 사람이 100명당 얼마나 바뀌는지를 뜻합니다.</li>
+            <li><strong>ΔNB</strong>는 risk가 바뀌는 것과 분류 손익이 항상 같은 방향이 아님을 보여줍니다. risk는 조금 낮아져도, threshold 분류의 실용성은 더 나빠질 수 있습니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">6. 해석</div>
+          <h3>이번 sensitivity 결과가 남기는 메시지</h3>
+          <p>Stage 8B와 Stage 8A의 차이는 PNU와 merged에서 더 컸고, 특히 2년에서 remission-sensitive handling이 transition risk를 낮추는 방향으로 작동했습니다. 하지만 같은 10% threshold에서는 false positive burden이 오히려 늘고 net benefit는 줄어드는 패턴이 흔했습니다. 반대로 SNU는 Stage 8B−Stage 8A 변화가 매우 작아, SNU에서는 remission-sensitive extension의 직접 효과가 약하다고 읽는 것이 맞습니다. anchor-informed prior의 영향은 supported horizon에서 SNU와 merged에서는 대체로 작았고, PNU에서는 상대적으로 조금 더 눈에 띄었지만 이 역시 2년부터는 sensitivity 범위를 넘지 않아야 합니다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="synthesis">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">Synthesis</div>
+          <h2 class="panel-title">앞 결과를 묶어서 보면 무엇이 남는가</h2>
+          <p class="panel-sub">이 Stage의 결론은 “Stage 8B가 존재했다”가 아니라, remission-sensitive extension이 실제로 어떤 dataset과 horizon에서 의미 있었는지를 정리하는 것입니다.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <div class="eyebrow">Final conclusion</div>
+          <h3>최종적으로 가장 분명하게 보이는 점</h3>
+          <p>첫째, Stage 8B는 96개 후보 fit을 모두 계산했지만, 실제 보고용으로 남은 admissible fit은 30개뿐이었습니다. 둘째, primary-supported horizon은 PNU 1년, SNU·merged 1–2년으로 분명히 제한되었습니다. 셋째, remission-sensitive extension의 실제 수치 변화는 PNU와 merged에서 더 컸고, SNU에서는 작았습니다. 넷째, risk가 낮아졌다고 해서 분류 utility가 자동으로 좋아지지는 않았습니다.</p>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow green">Directly readable range</div>
+          <h3>직접 읽을 수 있는 부분</h3>
+          <ul>
+            <li>PNU는 1년, SNU·merged는 1–2년 risk와 calibration을 이번 Stage의 중심 결과로 읽을 수 있습니다.</li>
+            <li>SNU에서 observed remission이 0건이라는 사실은 직접적입니다. 따라서 SNU의 remission-sensitive component는 매우 작게 읽히는 것이 자연스럽습니다.</li>
+            <li>Stage 8B−Stage 8A 변화가 PNU와 merged에서 더 크고, SNU에서 작다는 패턴은 supported horizon에서도 반복됩니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow amber">Cautious interpretation</div>
+          <h3>조심해서 읽어야 하는 부분</h3>
+          <ul>
+            <li>PNU 2년 이후 수치는 sensitivity 또는 projection입니다. 값이 나와 있어도 primary claim의 중심이 되어서는 안 됩니다.</li>
+            <li>LOOIC와 WAIC는 유용하지만, 일부 admissible fit에는 Pareto-k warning이 남아 있으므로 ranking을 과장하면 안 됩니다.</li>
+            <li>merged의 site term은 구조 차이를 흡수하는 proxy로 읽어야 하며, causal effect처럼 읽으면 안 됩니다.</li>
+            <li>coefficient table에는 posterior interval이 있지만 p-value는 없습니다. 따라서 significance language는 쓰지 않는 것이 맞습니다.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <div class="eyebrow purple">짧은 정리</div>
+          <h3>그래서 이 Stage는 무엇을 보여주었는가</h3>
+          <p>이번 Stage 8B는 remission을 explicit competing event로 넣으면, 특히 PNU와 merged에서 transition risk와 threshold-based utility가 실제로 달라질 수 있음을 보여주었습니다. 다만 이 결과는 모든 horizon에서 똑같이 강한 것이 아니며, 직접 관찰 지지가 충분한 구간에 한해 읽어야 합니다. 따라서 이번 Stage의 가장 안전한 결론은 <strong>remission-sensitive Bayesian extension이 PNU와 merged에서는 의미 있는 sensitivity 정보를 주지만, 그 해석의 중심은 1–2년 supported horizon에 머물러야 한다</strong>는 것입니다.</p>
+        </article>
+
+        <div class="callout"><strong>한 줄 요약</strong> remission을 competing event로 넣자 PNU와 merged의 transition risk는 일부 낮아졌지만, 그 효과는 horizon과 dataset에 따라 다르고, 직접 해석은 PNU 1년·SNU·merged 1–2년에 한정하는 것이 안전했습니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="references">
+    <div class="panel-card">
+      <div class="panel-head">
+        <div>
+          <div class="panel-kicker">References</div>
+          <h2 class="panel-title">사용한 참고문헌</h2>
+          <p class="panel-sub">이번 HTML은 내부 source document와 supplied methodological references를 바탕으로 작성했습니다.</p>
+        </div>
+      </div>
+
+      <ol class="refs">
+        <li>Bayesian Modeling Specification — Stage 8A main branch and Stage 8B / Stage 8-CR extension (Revised v5). Internal project specification.</li>
+        <li>Integrated Modeling Master Specification, English Revised v5. Internal project specification.</li>
+        <li>Peng Y, Yu B. Bayesian cure model. In: <em>Cure Models: Methods, Applications, and Implementation</em>. CRC Press; 2021–2022.</li>
+        <li>Vickers AJ, Elkin EB. Decision curve analysis: a novel method for evaluating prediction models. <em>Med Decis Making</em>. 2006.</li>
+        <li>Vickers AJ, Cronin AM, Elkin EB, Gonen M. Extensions to decision curve analysis. <em>BMC Med Inform Decis Mak</em>. 2008.</li>
+        <li>McLernon DJ, Giardiello D, Van Calster B, et al. Assessing performance and clinical usefulness in prediction models with survival outcomes. <em>Ann Intern Med</em>. 2023.</li>
+        <li>Park SY, Park JE, Kim H, Park SH. Review of statistical methods for evaluating the performance of survival or other time-to-event prediction models. <em>Korean J Radiol</em>. 2021.</li>
+        <li>Gelman A, Jakulin A, Pittau MG, Su Y-S. A weakly informative default prior distribution for logistic and other regression models. 2008.</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="footer-note">Stage 8B independent HTML report • remission-sensitive Bayesian competing-risk extension</div>
+</div>
+
+<script>
+  const buttons = document.querySelectorAll('.tabs button');
+  const panels = document.querySelectorAll('.panel');
+  buttons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.tab;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      panels.forEach(panel => panel.classList.remove('active'));
+      button.classList.add('active');
+      document.querySelector(`.panel[data-panel="${target}"]`)?.classList.add('active');
+      window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+  });
+</script>
+</body>
+</html>

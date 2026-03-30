@@ -344,6 +344,35 @@ normalize_dataset_key <- function(x) {
   out
 }
 
+derive_merged_dataset_key <- function(dataset_key, stage_name, site_branch = NA_character_, site_placement = NA_character_, retained_fit_id = NA_character_) {
+  out <- as.character(dataset_key)
+  merged_idx <- !is.na(out) & out == 'merged'
+  
+  if (!any(merged_idx)) {
+    return(out)
+  }
+  
+  site_branch_norm <- trim_lower(site_branch)
+  site_placement_norm <- trim_lower(site_placement)
+  retained_fit_norm <- trim_lower(retained_fit_id)
+  
+  inferred_key <- dplyr::case_when(
+    site_branch_norm %in% c('site_adjusted') ~ 'merged__site_adjusted',
+    site_branch_norm %in% c('site_free', 'benchmark') ~ 'merged__site_free',
+    site_placement_norm == 'site_in_neither' ~ 'merged__site_free',
+    site_placement_norm %in% c('site_in_incidence_only', 'site_in_latency_only', 'site_in_both') ~ 'merged__site_adjusted',
+    stage_name == 'Stage8' & str_detect(retained_fit_norm, '^merged-l[01]s0-r[01]s0__') ~ 'merged__site_free',
+    stage_name == 'Stage8' & str_detect(retained_fit_norm, 'nosite') ~ 'merged__site_free',
+    stage_name == 'Stage8' & str_detect(retained_fit_norm, '^merged') ~ 'merged__site_adjusted',
+    str_detect(retained_fit_norm, 'site_added|site_interaction|siteadjusted') ~ 'merged__site_adjusted',
+    str_detect(retained_fit_norm, '__base__|__interaction__|sitefree') ~ 'merged__site_free',
+    TRUE ~ NA_character_
+  )
+  
+  out[merged_idx & !is.na(inferred_key)] <- inferred_key[merged_idx & !is.na(inferred_key)]
+  out
+}
+
 dataset_parent_from_key <- function(dataset_key) {
   dplyr::case_when(
     dataset_key %in% c('PNU', 'SNU', 'merged') ~ dataset_key,
@@ -593,6 +622,20 @@ categorize_csv <- function(file_name, headers) {
   fn <- tolower(basename(file_name))
   hd <- tolower(headers)
   
+  # Mixed-content exports should keep their metric role even if they also
+  # carry Stage 6 flags or decomposition summaries.
+  if (name_has_any(fn, c('performance_classification'))) {
+    return('classification')
+  }
+  
+  if (name_has_any(fn, c('prediction_long', 'subject_horizon', 'subject_prediction', 'subject_predictions'))) {
+    return('prediction')
+  }
+  
+  if (name_has_any(fn, c('risk_summary', 'cohort_yearly'))) {
+    return('performance')
+  }
+  
   if (header_has_any(hd, c('delta_risk_anchor_minus_neutral', 'delta_cure_fraction_anchor_minus_neutral', 'delta_fp100_anchor_minus_neutral', 'delta_anchor_minus_neutral'))) {
     return('anchor_delta')
   }
@@ -607,14 +650,6 @@ categorize_csv <- function(file_name, headers) {
   
   if (header_has_any(hd, c('lr_2delta_loglik', 'delta_aic_cure_minus_noncure', 'delta_bic_cure_minus_noncure', 'lrt_calibration_status'))) {
     return('fit_contrast')
-  }
-  
-  if (header_has_any(hd, c('cure_model_eligibility_flag', 'receus_primary_class', 'followup_not_contradicted_flag', 'final_decision_flag'))) {
-    return('carryforward')
-  }
-  
-  if (header_has_any(hd, c('susceptible_fraction', 'cure_fraction', 'uncured_mean_support_flag', 'mstu', 'shape_class', 'merged_site_placement_label'))) {
-    return('decomposition')
   }
   
   if (header_has_any(hd, c('percentage_method', 'cci', 'spt', 'late_horizon_instability_flag', 'risk_set_size')) &&
@@ -659,6 +694,14 @@ categorize_csv <- function(file_name, headers) {
     return('prediction')
   }
   
+  if (header_has_any(hd, c('cure_model_eligibility_flag', 'receus_primary_class', 'followup_not_contradicted_flag', 'final_decision_flag'))) {
+    return('carryforward')
+  }
+  
+  if (header_has_any(hd, c('susceptible_fraction', 'cure_fraction', 'uncured_mean_support_flag', 'mstu', 'shape_class', 'merged_site_placement_label'))) {
+    return('decomposition')
+  }
+  
   if (name_has_any(fn, c('prediction'))) return('prediction')
   if (name_has_any(fn, c('classification', 'false_positive', 'burden'))) return('classification')
   if (name_has_any(fn, c('performance', 'brier', 'auc', 'calibration'))) return('performance')
@@ -698,12 +741,12 @@ scan_stage_directory <- function(stage_dir, override_list = NULL) {
     )
   } else {
     scanned <- purrr::map_dfr(csv_files, function(path) {
-      headers <- safe_csv_header(path)
+      header_vec <- safe_csv_header(path)
       tibble::tibble(
         path = normalize_existing_path(path),
         file_name = basename(path),
-        headers = list(headers),
-        category = categorize_csv(path, headers)
+        headers = list(header_vec),
+        category = categorize_csv(path, header_vec)
       )
     })
   }
@@ -783,11 +826,36 @@ add_support_metadata <- function(df, horizon_registry) {
 
 standardize_base_fields <- function(df, stage_name, source_file) {
   branch_default_source <- if (stage_name == 'Stage8') basename(source_file) else infer_default_branch_from_stage(stage_name)
+  raw_dataset_key <- normalize_dataset_key(
+    coalesce_cols(
+      df,
+      c('dataset_key', 'dataset_key.x', 'dataset_key.y', 'dataset_key ', 'stage6_join_key', 'stage6__dataset_key', 'dataset', 'dataset_name', 'analysis_dataset', 'cohort', 'analysis_scope'),
+      default = NA_character_
+    )
+  )
+  raw_retained_fit_id <- as.character(
+    coalesce_cols(
+      df,
+      c('retained_fit_id', 'fit_id', 'model_id', 'analysis_id', 'family_id', 'benchmark_id', 'variant_id', 'comparison_id', 'benchmark_core_id', 'structural_model_id'),
+      default = NA_character_
+    )
+  )
+  raw_site_branch <- as.character(coalesce_cols(df, c('site_branch'), default = NA_character_))
+  raw_site_placement <- as.character(
+    coalesce_cols(df, c('site_placement', 'site_placement_label', 'merged_site_placement_label', 'site_structure_label', 'site_structure'), default = NA_character_)
+  )
+  resolved_dataset_key <- derive_merged_dataset_key(
+    dataset_key = raw_dataset_key,
+    stage_name = stage_name,
+    site_branch = raw_site_branch,
+    site_placement = raw_site_placement,
+    retained_fit_id = raw_retained_fit_id
+  )
   
   out <- tibble::tibble(
     source_stage = stage_name,
     source_file = basename(source_file),
-    dataset_key = normalize_dataset_key(coalesce_cols(df, c('dataset_key', 'dataset', 'dataset_name', 'analysis_dataset', 'cohort', 'analysis_scope'), default = NA_character_)),
+    dataset_key = resolved_dataset_key,
     horizon_year = coerce_horizon_year(df),
     threshold = coerce_numeric_text(coalesce_cols(df, c('threshold', 'risk_threshold', 'threshold_value', 'c'), default = NA)),
     model_class = normalize_model_class(
@@ -805,7 +873,7 @@ standardize_base_fields <- function(df, stage_name, source_file) {
     ),
     prior_branch = normalize_prior_branch(coalesce_cols(df, c('prior_branch', 'prior_sensitivity_branch', 'anchor_branch'), default = NA_character_)),
     site_prior_family = normalize_site_prior_family(coalesce_cols(df, c('site_prior_family', 'site_prior', 'prior_family_site'), default = NA_character_)),
-    retained_fit_id = as.character(coalesce_cols(df, c('retained_fit_id', 'fit_id', 'model_id', 'analysis_id', 'family_id', 'benchmark_id', 'comparison_id', 'variant_id', 'benchmark_core_id', 'structural_model_id'), default = NA_character_)),
+    retained_fit_id = raw_retained_fit_id,
     support_tier = as.character(coalesce_cols(df, c('support_tier', 'support_tier_standard'), default = NA_character_)),
     horizon_evidence_class = as.character(coalesce_cols(df, c('horizon_evidence_class'), default = NA_character_)),
     claim_restriction_flag = as.character(coalesce_cols(df, c('claim_restriction_flag'), default = NA_character_)),
@@ -2123,7 +2191,12 @@ reporting_metadata_table <- long_classification_performance_table %>%
 ## 🟠 Create: main common-scale comparison table ===============================
 main_common_scale_comparison_table <- long_classification_performance_table %>%
   filter(risk_scale == main_risk_scale) %>%
-  filter(model_class %in% c('KM_benchmark', 'no_cure', 'frequentist_cure', 'bayesian_cure')) %>%
+  filter(
+    (source_stage == 'Stage3' & model_class == 'KM_benchmark') |
+      (source_stage == 'Stage5' & model_class == 'no_cure') |
+      (source_stage == 'Stage7' & model_class == 'frequentist_cure') |
+      (source_stage == 'Stage8' & branch == 'Stage8A' & model_class == 'bayesian_cure')
+  ) %>%
   mutate(
     remission_reporting_status = 'primary_common_scale',
     merged_site_interpretation_note = ifelse(
@@ -2137,12 +2210,53 @@ main_common_scale_comparison_table <- long_classification_performance_table %>%
 ## 🟠 Create: remission-aware comparison table ===============================
 remission_aware_comparison_table <- long_classification_performance_table %>%
   filter(risk_scale == supplementary_risk_scale) %>%
-  filter(model_class %in% c('bayesian_cure', 'remission_sensitive_frequentist')) %>%
+  filter(
+    (source_stage == 'Stage8' & branch == 'Stage8B' & model_class == 'bayesian_cure') |
+      (source_stage == 'Stage9' & model_class == 'remission_sensitive_frequentist')
+  ) %>%
   mutate(
     remission_reporting_status = 'supplementary_competing_risk_scale',
     cross_scale_ranking_forbidden_note = 'Cross-scale Stage8A-versus-Stage8B differences are remission-aware change summaries, not fair within-scale rankings.'
   ) %>%
   arrange(dataset_sort_num(dataset_key, dataset_order), horizon_year, threshold, model_display_group, model_family, branch, prior_branch)
+
+## 🟠 Create: CIF-focused comparison table ===============================
+cif_comparison_table <- remission_aware_comparison_table %>%
+  mutate(
+    comparison_layer = 'remission_aware_competing_risk_scale',
+    cif_interpretation_note = 'This table is restricted to the remission-aware competing-risk layer, where transition_cif is a true competing-risk cumulative incidence summary for transition.'
+  ) %>%
+  transmute(
+    comparison_layer,
+    source_stage,
+    dataset_key,
+    dataset_parent,
+    analysis_structure,
+    reporting_priority,
+    horizon_year,
+    model_class,
+    model_family,
+    branch,
+    risk_scale,
+    prior_branch,
+    site_prior_family,
+    retained_fit_id,
+    fit_key,
+    row_key,
+    support_tier,
+    horizon_evidence_class,
+    claim_restriction_flag,
+    prior_tail_sensitive,
+    admissibility_flag,
+    cure_model_eligibility_flag,
+    transition_cif,
+    lower_interval,
+    upper_interval,
+    prediction_rows,
+    cif_interpretation_note
+  ) %>%
+  distinct() %>%
+  arrange(dataset_sort_num(dataset_key, dataset_order), comparison_layer, horizon_year, model_class, model_family, branch, prior_branch)
 
 ## 🟠 Create: cure-model-only supporting decomposition block ===============================
 cure_model_only_supporting_decomposition_table <- bind_rows(stage7_decomposition_table, stage8_decomposition_table) %>%
@@ -2335,6 +2449,7 @@ readr::write_csv(long_classification_performance_table, file.path(export_path, '
 readr::write_csv(reporting_metadata_table, file.path(export_path, 'stage10_reporting_metadata_table.csv'))
 readr::write_csv(main_common_scale_comparison_table, file.path(export_path, 'stage10_main_common_scale_comparison_table.csv'))
 readr::write_csv(remission_aware_comparison_table, file.path(export_path, 'stage10_remission_aware_comparison_table.csv'))
+readr::write_csv(cif_comparison_table, file.path(export_path, 'stage10_cif_comparison_table.csv'))
 readr::write_csv(cure_model_only_supporting_decomposition_table, file.path(export_path, 'stage10_cure_model_only_supporting_decomposition_table.csv'))
 readr::write_csv(remission_aware_delta_table, file.path(export_path, 'stage10_remission_aware_delta_table.csv'))
 readr::write_csv(external_anchor_value_table, file.path(export_path, 'stage10_external_anchor_value_table.csv'))
@@ -2375,6 +2490,7 @@ stage10_bundle <- list(
     reporting_metadata_table = reporting_metadata_table,
     main_common_scale_comparison_table = main_common_scale_comparison_table,
     remission_aware_comparison_table = remission_aware_comparison_table,
+    cif_comparison_table = cif_comparison_table,
     cure_model_only_supporting_decomposition_table = cure_model_only_supporting_decomposition_table,
     remission_aware_delta_table = remission_aware_delta_table,
     external_anchor_value_table = external_anchor_value_table,
@@ -2396,6 +2512,7 @@ cat(' - stage10_long_classification_performance_table.csv\n')
 cat(' - stage10_reporting_metadata_table.csv\n')
 cat(' - stage10_main_common_scale_comparison_table.csv\n')
 cat(' - stage10_remission_aware_comparison_table.csv\n')
+cat(' - stage10_cif_comparison_table.csv\n')
 cat(' - stage10_cure_model_only_supporting_decomposition_table.csv\n')
 cat(' - stage10_remission_aware_delta_table.csv\n')
 cat(' - stage10_external_anchor_value_table.csv\n')
