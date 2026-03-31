@@ -373,7 +373,10 @@
     background:#f8fafc;
     color:#0f172a;
     margin:2px 4px 2px 0;
+    overflow-x:auto;
   }
+  .math mjx-container{font-size:112%}
+  .math mjx-container[display="true"]{margin:0 !important;text-align:left !important}
   .inline-link{
     color:var(--accent-strong);
     text-decoration:none;
@@ -567,6 +570,17 @@
     .tabs button{width:100%; text-align:left}
   }
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
   <div class="container">
@@ -2342,6 +2356,42 @@
     <div class="footer-note">Stage independent HTML template • dark header • Stage 5 completed report</div>
   </div>
 
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('T = days_followup / 365.25'), String.raw`\[T=\frac{\text{days\_followup}}{365.25}\]`],
+      [normalize('event = 1{status_num = 1}'), String.raw`\[\delta=\mathbf{1}\{\text{status\_num}=1\}\]`],
+      [normalize('censor = 1{status_num ∈ {0,2}}'), String.raw`\[C=\mathbf{1}\{\text{status\_num}\in\{0,2\}\}\]`],
+      [normalize('age<sub>s</sub> = (age − ̄age) / (2·sd(age))'), String.raw`\[age_s=\frac{\text{age}-\overline{\text{age}}}{2\,\mathrm{sd}(\text{age})}\]`],
+      [normalize('Ŝ(t|X)'), String.raw`\[\hat S(t\mid X)\]`],
+      [normalize('X = (age<sub>s</sub>, sex)'), String.raw`\[X=(age_s,\ \mathrm{sex})\]`],
+      [normalize('X = (age<sub>s</sub>, sex, site)'), String.raw`\[X=(age_s,\ \mathrm{sex},\ \mathrm{site})\]`],
+      [normalize('R̂(t|X) = 1 − Ŝ(t|X)'), String.raw`\[\hat R(t\mid X)=1-\hat S(t\mid X)\]`],
+      [normalize('t ∈ {1,2,…,10} years'), String.raw`\[t\in\{1,2,\dots,10\}\ \text{years}\]`],
+      [normalize('AUC(t)'), String.raw`\[\mathrm{AUC}(t)\]`],
+      [normalize('Brier(t)'), String.raw`\[\mathrm{Brier}(t)\]`],
+      [normalize('IBS'), String.raw`\[\mathrm{IBS}\]`],
+      [normalize('Harrell’s C / Uno’s C'), String.raw`\[\text{Harrell’s C / Uno’s C}\]`],
+      [normalize('mean[R̂(t|X)]'), String.raw`\[\operatorname{mean}[\hat R(t\mid X)]\]`],
+      [normalize('observed risk(t)'), String.raw`\[\text{observed risk}(t)\]`],
+      [normalize('intercept / slope'), String.raw`\[\text{intercept / slope}\]`],
+      [normalize('Ŷ(t;c)=1{R̂(t|X) ≥ c}'), String.raw`\[\hat Y(t;c)=\mathbf{1}\{\hat R(t\mid X)\ge c\}\]`],
+      [normalize('c ∈ {0.05,0.10,0.15,0.20}'), String.raw`\[c\in\{0.05,0.10,0.15,0.20\}\]`],
+      [normalize('B = ?'), String.raw`\[\text{B = ?}\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('.math').forEach(node => {
+      const tex = replacements.get(normalize(node.innerHTML));
+      if (!tex) return;
+      node.innerHTML = tex;
+      touched.push(node);
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

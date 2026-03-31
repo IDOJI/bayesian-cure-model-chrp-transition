@@ -87,9 +87,32 @@
   .ref-list{margin-left:22px}
   .ref-list li + li{margin-top:12px}
   .footer-note{margin-top:28px;text-align:center;color:#94a3b8;font-size:13px}
+  .formula-math{
+    display:inline-block;
+    max-width:100%;
+    padding:6px 10px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    background:#f8fafc;
+    color:#0f172a;
+    overflow-x:auto;
+  }
+  .formula-math mjx-container{font-size:112%}
+  .formula-math mjx-container[display="true"]{margin:0 !important;text-align:left !important}
   @media (max-width:900px){ .summary-strip{grid-template-columns:1fr} }
   @media (max-width:640px){ .container{padding:22px 16px 64px} .hero{padding:26px 22px 24px} .panel-card{padding:20px} .tabs{padding:10px} .tabs button{width:100%;text-align:left} .hr-head{flex-direction:column} }
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 <div class="container">
@@ -493,6 +516,30 @@
 </section>
 <div class="footer-note">Stage 4 independent HTML report • based on supplied Stage 4 source code and CSV exports</div>
 </div>
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('Ŝ_d(t), R̂_d(t)=1−Ŝ_d(t), d∈{PNU,SNU,merged}'), String.raw`\[\hat S_d(t),\quad \hat R_d(t)=1-\hat S_d(t),\quad d\in\{\text{PNU},\text{SNU},\text{merged}\}\]`],
+      [normalize('Δ_obs(h)=R̂_PNU(h)−R̂_SNU(h), h∈{1,2}'), String.raw`\[\Delta_{\mathrm{obs}}(h)=\hat R_{\mathrm{PNU}}(h)-\hat R_{\mathrm{SNU}}(h),\quad h\in\{1,2\}\]`],
+      [normalize('R̂(h|site=s), s∈{PNU,SNU}; Δ_adj(h)=R̂_PNU(h)−R̂_SNU(h)'), String.raw`\[\begin{aligned}\hat R(h\mid \text{site}=s),\quad s &\in \{\text{PNU},\text{SNU}\},\\ \Delta_{\mathrm{adj}}(h) &= \hat R_{\mathrm{PNU}}(h)-\hat R_{\mathrm{SNU}}(h)\end{aligned}\]`],
+      [normalize('h_j(t|X)=h_0j(t)exp(β_site,j·site + β_age·age_s + β_sex·sex + β_int·age_s×sex)'), String.raw`\[h_j(t\mid X)=h_{0j}(t)\exp(\beta_{\text{site},j}\,\text{site}+\beta_{\text{age}}\,age_s+\beta_{\text{sex}}\,\text{sex}+\beta_{\text{int}}\,age_s\times \text{sex})\]`],
+      [normalize('hazard_j = events_j / person-years_j × 100; conditional risk_j = 1−Ŝ(t_end)/Ŝ(t_start)'), String.raw`\[\begin{aligned}\mathrm{hazard}_j &= \frac{\mathrm{events}_j}{\mathrm{person\text{-}years}_j}\times 100,\\ \mathrm{conditional\ risk}_j &= 1-\frac{\hat S(t_{\mathrm{end}})}{\hat S(t_{\mathrm{start}})}\end{aligned}\]`],
+      [normalize('HR_j = 1'), String.raw`\[\mathrm{HR}_j=1\]`],
+      [normalize('HR_j ≠ 1'), String.raw`\[\mathrm{HR}_j\ne 1\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('td').forEach(node => {
+      const tex = replacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = `<span class="formula-math">${tex}</span>`;
+      touched.push(node.querySelector('.formula-math'));
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

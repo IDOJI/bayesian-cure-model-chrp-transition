@@ -1862,6 +1862,51 @@ stage7_core_outputs_exist <- function(root_dir) {
   all(file.exists(file.path(root_dir, stage7_core_required_files)))
 }
 
+stage7_expected_core_formula_keys <- function(stage1_inputs) {
+  formula_plan_obj <- stage7_prepare_formula_plan(stage1_inputs)
+
+  bind_rows(
+    formula_plan_obj$model_plan %>%
+      select(dataset, formula_variant, site_branch, interaction_branch),
+    formula_plan_obj$benchmark_plan %>%
+      select(dataset, formula_variant, site_branch, interaction_branch)
+  ) %>%
+    mutate(
+      dataset = as.character(dataset),
+      formula_variant = as.character(formula_variant),
+      site_branch = as.character(site_branch),
+      interaction_branch = as.character(interaction_branch)
+    ) %>%
+    distinct()
+}
+
+stage7_core_outputs_match_formula_plan <- function(root_dir, stage1_inputs) {
+  if (!stage7_core_outputs_exist(root_dir)) {
+    return(FALSE)
+  }
+
+  fit_registry_tbl <- tryCatch(
+    safe_read_csv(file.path(root_dir, "stage7_fit_registry.csv")),
+    error = function(e) NULL
+  )
+  if (is.null(fit_registry_tbl) || nrow(fit_registry_tbl) == 0L) {
+    return(FALSE)
+  }
+
+  existing_keys <- fit_registry_tbl %>%
+    transmute(
+      dataset = as.character(dataset),
+      formula_variant = as.character(formula_variant),
+      site_branch = as.character(site_branch),
+      interaction_branch = as.character(interaction_branch)
+    ) %>%
+    distinct()
+
+  expected_keys <- stage7_expected_core_formula_keys(stage1_inputs)
+  missing_keys <- dplyr::anti_join(expected_keys, existing_keys, by = c("dataset", "formula_variant", "site_branch", "interaction_branch"))
+  nrow(missing_keys) == 0L
+}
+
 resolve_stage7_run_root_or_create <- function(root_dir) {
   root_dir <- normalizePath(root_dir, winslash = "/", mustWork = FALSE)
 
@@ -1940,35 +1985,85 @@ stage7_formula_label_from_variant <- function(formula_variant) {
   dplyr::case_when(
     formula_variant %in% c("base", "base_sitefree") ~ "Base",
     formula_variant %in% c("interaction", "interaction_sitefree") ~ "Interaction",
-    formula_variant == "base_siteadjusted" ~ "Site-adjusted",
-    formula_variant == "interaction_siteadjusted" ~ "Site + interaction",
+    formula_variant == "base_siteadjusted" ~ "Site-adjusted (latency only)",
+    formula_variant == "interaction_siteadjusted" ~ "Site + interaction (latency only)",
+    formula_variant == "base_siteadjusted_incidenceonly" ~ "Site-adjusted (incidence only)",
+    formula_variant == "interaction_siteadjusted_incidenceonly" ~ "Site + interaction (incidence only)",
+    formula_variant == "base_siteadjusted_both" ~ "Site-adjusted (incidence + latency)",
+    formula_variant == "interaction_siteadjusted_both" ~ "Site + interaction (incidence + latency)",
     formula_variant == "benchmark" ~ "Benchmark KM",
     TRUE ~ as.character(formula_variant)
   )
 }
 
 stage7_prepare_formula_plan <- function(stage1_inputs) {
-  formula_tbl <- stage1_inputs$formula_registry %>%
+  formula_registry_tbl <- stage1_inputs$formula_registry %>%
+    mutate(
+      dataset = as.character(dataset),
+      formula_name = as.character(formula_name),
+      formula_rhs = stage7_trim_rhs(formula_rhs)
+    )
+
+  base_formula_tbl <- formula_registry_tbl %>%
     mutate(
       formula_variant = dplyr::case_when(
         dataset != "merged" & formula_name == "base" ~ "base",
         dataset != "merged" & formula_name == "interaction" ~ "interaction",
         dataset == "merged" & formula_name == "base" ~ "base_sitefree",
         dataset == "merged" & formula_name == "interaction" ~ "interaction_sitefree",
-        dataset == "merged" & formula_name %in% c("site_added", "site-added") ~ "base_siteadjusted",
-        dataset == "merged" & formula_name %in% c("site_interaction", "site-interaction") ~ "interaction_siteadjusted",
-        TRUE ~ as.character(formula_name)
+        TRUE ~ NA_character_
       ),
-      incidence_rhs = dplyr::case_when(
-        dataset == "merged" & formula_name %in% c("site_added", "site-added", "site_interaction", "site-interaction") ~ stage7_remove_site_term_rhs(formula_rhs),
-        TRUE ~ stage7_trim_rhs(formula_rhs)
+      incidence_rhs = formula_rhs,
+      latency_rhs = formula_rhs
+    ) %>%
+    filter(!is.na(formula_variant)) %>%
+    select(dataset, formula_variant, incidence_rhs, latency_rhs)
+
+  merged_site_source_tbl <- formula_registry_tbl %>%
+    filter(dataset == "merged", formula_name %in% c("site_added", "site-added", "site_interaction", "site-interaction")) %>%
+    mutate(
+      formula_variant_latencyonly = dplyr::case_when(
+        formula_name %in% c("site_added", "site-added") ~ "base_siteadjusted",
+        formula_name %in% c("site_interaction", "site-interaction") ~ "interaction_siteadjusted",
+        TRUE ~ NA_character_
       ),
-      latency_rhs = stage7_trim_rhs(formula_rhs),
+      formula_variant_incidenceonly = paste0(formula_variant_latencyonly, "_incidenceonly"),
+      formula_variant_both = paste0(formula_variant_latencyonly, "_both"),
+      rhs_with_site = formula_rhs,
+      rhs_without_site = stage7_remove_site_term_rhs(formula_rhs)
+    )
+
+  merged_site_variant_tbl <- bind_rows(
+    merged_site_source_tbl %>%
+      transmute(
+        dataset,
+        formula_variant = formula_variant_latencyonly,
+        incidence_rhs = rhs_without_site,
+        latency_rhs = rhs_with_site
+      ),
+    merged_site_source_tbl %>%
+      transmute(
+        dataset,
+        formula_variant = formula_variant_incidenceonly,
+        incidence_rhs = rhs_with_site,
+        latency_rhs = rhs_without_site
+      ),
+    merged_site_source_tbl %>%
+      transmute(
+        dataset,
+        formula_variant = formula_variant_both,
+        incidence_rhs = rhs_with_site,
+        latency_rhs = rhs_with_site
+      )
+  )
+
+  formula_tbl <- bind_rows(base_formula_tbl, merged_site_variant_tbl) %>%
+    mutate(
       incidence_uses_site = stage7_has_site_term(incidence_rhs),
       latency_uses_site = stage7_has_site_term(latency_rhs),
       uses_site = incidence_uses_site | latency_uses_site,
       uses_age_sex_interaction = stage7_has_age_sex_interaction(incidence_rhs) | stage7_has_age_sex_interaction(latency_rhs),
-      site_branch = if_else(latency_uses_site, "site_adjusted", "site_free"),
+      site_branch = if_else(uses_site, "site_adjusted", "site_free"),
       interaction_branch = if_else(uses_age_sex_interaction, "age_sex_interaction", "no_age_sex_interaction"),
       formula_label = stage7_formula_label_from_variant(formula_variant),
       formula_scope = "main_transition_only_scale",
@@ -1983,10 +2078,6 @@ stage7_prepare_formula_plan <- function(stage1_inputs) {
       stage = "Stage 7",
       branch = "Stage7",
       incidence_link = "logit"
-    ) %>%
-    filter(
-      (dataset != "merged" & formula_variant %in% c("base", "interaction")) |
-        (dataset == "merged" & formula_variant %in% c("base_sitefree", "base_siteadjusted", "interaction_sitefree", "interaction_siteadjusted"))
     ) %>%
     select(
       dataset, formula_variant, formula_label,
@@ -3426,11 +3517,16 @@ stage7_fit_core_outputs <- function(run_root_dir, stage1_inputs) {
 
 ensure_stage7_core_outputs <- function(run_root_dir, stage1_inputs) {
   resolved_run_root_dir <- resolve_stage7_run_root_or_create(run_root_dir)
-  if (stage7_core_outputs_exist(resolved_run_root_dir) && isTRUE(skip_stage7_core_refit_if_outputs_exist) && !isTRUE(force_stage7_core_refit)) {
+  if (
+    stage7_core_outputs_exist(resolved_run_root_dir) &&
+    isTRUE(skip_stage7_core_refit_if_outputs_exist) &&
+    !isTRUE(force_stage7_core_refit) &&
+    stage7_core_outputs_match_formula_plan(resolved_run_root_dir, stage1_inputs = stage1_inputs)
+  ) {
     message(sprintf("ℹ️  Reusing existing Stage 7 core outputs in: %s", resolved_run_root_dir))
     return(list(resolved_run_root_dir = resolved_run_root_dir, reused_existing = TRUE))
   }
-  message(sprintf("ℹ️  Stage 7 core outputs were not fully available; fitting core models into: %s", resolved_run_root_dir))
+  message(sprintf("ℹ️  Stage 7 core outputs were not fully aligned with the current model plan; fitting core models into: %s", resolved_run_root_dir))
   stage7_fit_core_outputs(resolved_run_root_dir, stage1_inputs = stage1_inputs)
   list(resolved_run_root_dir = resolved_run_root_dir, reused_existing = FALSE)
 }
@@ -4010,6 +4106,12 @@ stage7_v9_formula_label_fallback <- function(formula_variant, site_branch, inter
   ib <- tolower(stage7_v9_trim_na_char(interaction_branch))
   need <- is.na(out) | out == ''
   out[need & stringr::str_detect(fv, 'benchmark')] <- 'Benchmark'
+  out[need & fv == 'interaction_siteadjusted'] <- 'Site + interaction (latency only)'
+  out[need & fv == 'base_siteadjusted'] <- 'Site-adjusted (latency only)'
+  out[need & fv == 'interaction_siteadjusted_incidenceonly'] <- 'Site + interaction (incidence only)'
+  out[need & fv == 'base_siteadjusted_incidenceonly'] <- 'Site-adjusted (incidence only)'
+  out[need & fv == 'interaction_siteadjusted_both'] <- 'Site + interaction (incidence + latency)'
+  out[need & fv == 'base_siteadjusted_both'] <- 'Site-adjusted (incidence + latency)'
   out[need & sb == 'site_adjusted' & (ib == 'age_sex_interaction' | stringr::str_detect(fv, 'interaction'))] <- 'Site + interaction'
   out[need & sb == 'site_adjusted'] <- 'Site-added'
   out[need & (ib == 'age_sex_interaction' | stringr::str_detect(fv, 'interaction'))] <- 'Interaction'
@@ -4102,7 +4204,7 @@ stage7_v9_patch_metadata <- function(df) {
     mutate(
       dataset = stage7_v9_trim_na_char(dataset),
       formula_variant = stage7_v9_trim_na_char(formula_variant),
-      site_branch = dplyr::coalesce(stage7_v9_trim_na_char(site_branch), dplyr::if_else(dataset == 'merged' & stage7_v9_detect_site_term(latency_rhs), 'site_adjusted', 'site_free', missing = NA_character_)),
+      site_branch = dplyr::coalesce(stage7_v9_trim_na_char(site_branch), dplyr::if_else(dataset == 'merged' & (inc_site | lat_site), 'site_adjusted', 'site_free', missing = NA_character_)),
       interaction_branch = dplyr::coalesce(stage7_v9_trim_na_char(interaction_branch), dplyr::if_else(uses_interaction, 'age_sex_interaction', 'no_age_sex_interaction', missing = NA_character_)),
       incidence_uses_site = inc_site,
       latency_uses_site = lat_site,

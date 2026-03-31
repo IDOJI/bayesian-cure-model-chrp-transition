@@ -313,11 +313,13 @@
     border:1px solid #dbeafe;
     background:#f8fbff;
     color:#1e3a8a;
-    font-family:'JetBrains Mono', monospace;
     font-size:12.5px;
     line-height:1.6;
     white-space:normal;
+    overflow-x:auto;
   }
+  .formula mjx-container{font-size:112%}
+  .formula mjx-container[display="true"]{margin:0 !important;text-align:left !important}
 
   .table-guide{
     margin-top:8px;
@@ -497,6 +499,17 @@
     table.report-table{font-size:13px}
   }
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 
@@ -601,7 +614,7 @@
           <strong>이 표를 어떻게 읽나요?</strong><br/>
           “분석 블록”은 어떤 묶음을 비교했는지, “명시적 설정”은 어떤 생존함수·위험함수·분류식을 썼는지, “주요 산출물”은 뒤 결과 탭에서 실제로 보게 될 표를 뜻합니다.
         </div>
-        <div class="table-wrap"><table class="report-table"><thead><tr><th>분석 블록</th><th>무엇을 했는가</th><th>명시적 설정</th><th>주요 산출물</th></tr></thead><tbody><tr><td>KM 기준선</td><td>코호트 전체의 기준 위험을 잡는 출발점입니다.</td><td><div class="formula">\hat S(t), \; \hat R(t)=1-\hat S(t), \; t\in\{1,2,\dots,10\}</div></td><td>전체 위험 요약, 기준 위험표</td></tr><tr><td>no-cure 모형 묶음</td><td>cure를 두지 않고 하나의 위험 과정으로 transition 위험을 추정합니다. 지수형, 와이블, 로그정규, 로그로지스틱을 포함합니다.</td><td><div class="formula">\hat R(t\mid X)=1-\hat S(t\mid X), \; X=(age_s, sex) \text{ 또는 } (age_s, sex, age_s\times sex)</div></td><td>개인별 예측위험, 전체 평균위험, 위험 기준 지표</td></tr><tr><td>no-cure Cox</td><td>기저 위험을 좀 더 유연하게 둔 no-cure 비교 모형입니다.</td><td><div class="formula">h(t\mid X)=h_0(t)\exp(X^\top\beta)</div></td><td>개인별 예측위험, 전체 평균위험, 위험 기준 지표</td></tr><tr><td>cure 모형 묶음</td><td>일부 환자가 장기적으로는 덜 취약할 수 있다는 가능성을 허용합니다. 지수형, 와이블, 로그정규, 로그로지스틱 cure 모형을 포함합니다.</td><td><div class="formula">p_u(Z)=P(U=1\mid Z)=\mathrm{logit}^{-1}(Z^\top\gamma),<br/>S(t\mid X,Z)=1-p_u(Z)+p_u(Z)S_u(t\mid X)</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>cure Cox-latency</td><td>시간 관련 식을 Cox 쪽에 둔 cure 비교 모형입니다.</td><td><div class="formula">S(t\mid X,Z)=1-p_u(Z)+p_u(Z)S_u(t\mid X),<br/>h_u(t\mid X)=h_{u0}(t)\exp(X^\top\beta)</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>cure AFT-latency</td><td>시간 관련 식을 AFT 쪽에 둔 감도분석 cure 모형입니다.</td><td><div class="formula">S(t\mid X,Z)=1-p_u(Z)+p_u(Z)S_u(t\mid X),<br/>\log T_u = X^\top\beta + \varepsilon</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>위험 기준 분류</td><td>예측위험이 미리 정한 기준값 이상이면 고위험으로 분류합니다.</td><td><div class="formula">\hat Y(t;c)=\mathbf{1}\{\hat R(t)\ge c\}, \; c\in\{0.05,0.10,0.15,0.20\}</div></td><td>민감도, PPV, 잘못 고위험으로 분류되는 부담, 불필요한 고위험 /100명, 순이익</td></tr><tr><td>같은 종류 안 직접 비교</td><td>같은 종류의 cure와 no-cure를 1:1로 놓고 맞춤 정도를 비교합니다.</td><td><div class="formula">\Delta \log L = \log L_{cure}-\log L_{no-cure}, \; \Delta AIC, \; \Delta BIC</div></td><td>같은 종류 안 적합도 비교 표</td></tr><tr><td>반복 재적합 정보</td><td>결과의 흔들림을 재는 반복 재적합은 이번 실행에서 시행되지 않았습니다.</td><td><div class="formula">\text{expected reps}=0, \; \text{observed reps}=0</div></td><td>반복 재적합 횟수 0, 범위 정보 없음</td></tr></tbody></table></div>
+        <div class="table-wrap"><table class="report-table"><thead><tr><th>분석 블록</th><th>무엇을 했는가</th><th>명시적 설정</th><th>주요 산출물</th></tr></thead><tbody><tr><td>KM 기준선</td><td>코호트 전체의 기준 위험을 잡는 출발점입니다.</td><td><div class="formula">\[\hat S(t), \qquad \hat R(t)=1-\hat S(t), \qquad t\in\{1,2,\dots,10\}\]</div></td><td>전체 위험 요약, 기준 위험표</td></tr><tr><td>no-cure 모형 묶음</td><td>cure를 두지 않고 하나의 위험 과정으로 transition 위험을 추정합니다. 지수형, 와이블, 로그정규, 로그로지스틱을 포함합니다.</td><td><div class="formula">\[\hat R(t\mid X)=1-\hat S(t\mid X), \qquad X=(age_s,\ \mathrm{sex}) \text{ 또는 } (age_s,\ \mathrm{sex},\ age_s\times \mathrm{sex})\]</div></td><td>개인별 예측위험, 전체 평균위험, 위험 기준 지표</td></tr><tr><td>no-cure Cox</td><td>기저 위험을 좀 더 유연하게 둔 no-cure 비교 모형입니다.</td><td><div class="formula">\[h(t\mid X)=h_0(t)\exp(X^\top\beta)\]</div></td><td>개인별 예측위험, 전체 평균위험, 위험 기준 지표</td></tr><tr><td>cure 모형 묶음</td><td>일부 환자가 장기적으로는 덜 취약할 수 있다는 가능성을 허용합니다. 지수형, 와이블, 로그정규, 로그로지스틱 cure 모형을 포함합니다.</td><td><div class="formula">\[\begin{aligned}p_u(Z) &= P(U=1\mid Z)=\operatorname{logit}^{-1}(Z^\top\gamma),\\ S(t\mid X,Z) &= 1-p_u(Z)+p_u(Z)S_u(t\mid X)\end{aligned}\]</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>cure Cox-latency</td><td>시간 관련 식을 Cox 쪽에 둔 cure 비교 모형입니다.</td><td><div class="formula">\[\begin{aligned}S(t\mid X,Z) &= 1-p_u(Z)+p_u(Z)S_u(t\mid X),\\ h_u(t\mid X) &= h_{u0}(t)\exp(X^\top\beta)\end{aligned}\]</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>cure AFT-latency</td><td>시간 관련 식을 AFT 쪽에 둔 감도분석 cure 모형입니다.</td><td><div class="formula">\[\begin{aligned}S(t\mid X,Z) &= 1-p_u(Z)+p_u(Z)S_u(t\mid X),\\ \log T_u &= X^\top\beta + \varepsilon\end{aligned}\]</div></td><td>평균 위험, cure 비율, 위험 기준 지표</td></tr><tr><td>위험 기준 분류</td><td>예측위험이 미리 정한 기준값 이상이면 고위험으로 분류합니다.</td><td><div class="formula">\[\hat Y(t;c)=\mathbf{1}\{\hat R(t)\ge c\}, \qquad c\in\{0.05,0.10,0.15,0.20\}\]</div></td><td>민감도, PPV, 잘못 고위험으로 분류되는 부담, 불필요한 고위험 /100명, 순이익</td></tr><tr><td>같은 종류 안 직접 비교</td><td>같은 종류의 cure와 no-cure를 1:1로 놓고 맞춤 정도를 비교합니다.</td><td><div class="formula">\[\Delta \log L = \log L_{\text{cure}}-\log L_{\text{no-cure}}, \qquad \Delta \mathrm{AIC}, \qquad \Delta \mathrm{BIC}\]</div></td><td>같은 종류 안 적합도 비교 표</td></tr><tr><td>반복 재적합 정보</td><td>결과의 흔들림을 재는 반복 재적합은 이번 실행에서 시행되지 않았습니다.</td><td><div class="formula">\[\text{expected reps}=0, \qquad \text{observed reps}=0\]</div></td><td>반복 재적합 횟수 0, 범위 정보 없음</td></tr></tbody></table></div>
         <div class="point-note">즉, 이번 Stage는 <strong>같은 환자군에 여러 구조의 생존 모형을 똑같은 시점과 똑같은 위험 기준으로 맞춰 비교</strong>하는 단계입니다. 나이는 <strong>age_s = (age − 평균 나이) / (2×SD)</strong>로 스케일을 맞춘 값이 사용됐습니다.</div>
       </article>
 

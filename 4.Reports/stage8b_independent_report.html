@@ -99,7 +99,9 @@
   .mini-note{font-size:13px;color:var(--text-soft);margin-top:10px;}
   .mono{font-family:'JetBrains Mono', monospace;word-break:break-word;}
   .small{font-size:12px;}
-  .formula{font-family:'JetBrains Mono', monospace;font-size:13px;color:#0f172a;background:#f8fafc;border:1px solid var(--border);padding:2px 8px;border-radius:999px;display:inline-block;margin-top:8px;}
+  .formula{font-family:'JetBrains Mono', monospace;font-size:13px;color:#0f172a;background:#f8fafc;border:1px solid var(--border);padding:8px 10px;border-radius:12px;display:block;margin-top:0;overflow-x:auto;max-width:100%;}
+  .formula mjx-container{font-size:112%}
+  .formula mjx-container[display="true"]{margin:0 !important;text-align:left !important}
   .bar-stack{display:grid;gap:12px;margin-top:14px;}
   .bar-row{padding:14px;border:1px solid var(--border);border-radius:16px;background:var(--surface-2);}
   .bar-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px;}
@@ -124,6 +126,17 @@
   @media (max-width:900px){.mini-grid,.summary-strip{grid-template-columns:1fr 1fr;}}
   @media (max-width:640px){.container{padding:22px 16px 64px} .hero{padding:26px 22px 24px} .panel-card{padding:20px} .tabs{padding:10px} .tabs button{width:100%; text-align:left} .mini-grid,.summary-strip{grid-template-columns:1fr;}}
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 <div class="container">
@@ -795,6 +808,29 @@
   <div class="footer-note">Stage 8B independent HTML report • remission-sensitive Bayesian competing-risk extension</div>
 </div>
 
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('πᵢ = logit⁻¹(α + Xᵢ<sup>inc</sup>β<sub>inc</sub>), mᵢ = exp(γ₀ + Xᵢ<sup>lat</sup>γ<sub>lat</sub>), h<sub>R,i</sub>(t)=exp(ξ₀+Xᵢ<sup>rem</sup>β<sub>rem</sub>)ρ<sub>j</sub>'), String.raw`\[\begin{aligned}\pi_i &= \operatorname{logit}^{-1}(\alpha + X_i^{\mathrm{inc}}\beta_{\mathrm{inc}}),\\ m_i &= \exp(\gamma_0 + X_i^{\mathrm{lat}}\gamma_{\mathrm{lat}}),\\ h_{R,i}(t) &= \exp(\xi_0 + X_i^{\mathrm{rem}}\beta_{\mathrm{rem}})\rho_j\end{aligned}\]`],
+      [normalize('Tᵢ<sup>U</sup> ∈ {Exponential, Weibull, Lognormal, Loglogistic}'), String.raw`\[T_i^{U}\in\{\text{Exponential},\ \text{Weibull},\ \text{Lognormal},\ \text{Loglogistic}\}\]`],
+      [normalize('prior ∈ {anchor-informed, neutral-no-external-information}'), String.raw`\[\text{prior}\in\{\text{anchor-informed},\ \text{neutral-no-external-information}\}\]`],
+      [normalize('Xᵢ에 site term을 incidence / latency / remission에 선택적으로 포함; site prior ∈ {Normal(0,1), Student-t<sub>3</sub>(0,1)}'), String.raw`\[\begin{aligned}X_i &: \text{optional site term in incidence / latency / remission},\\ \text{site prior} &\in \{\mathcal{N}(0,1),\ \mathrm{Student}\text{-}t_3(0,1)\}\end{aligned}\]`],
+      [normalize('Ŷᵢ(t;c)=1{F̂<sub>trans,i</sub>(t)≥c}, c∈{0.05, 0.10, 0.15, 0.20}'), String.raw`\[\hat Y_i(t;c)=\mathbf{1}\{\hat F_{\mathrm{trans},i}(t)\ge c\},\quad c\in\{0.05,0.10,0.15,0.20\}\]`],
+      [normalize('AUC(t), calibration = mean F̂<sub>trans</sub>(t) − IPCW observed CIF(t), Brier<sub>IPCW</sub>(t), IBS = mean{Brier(1),…,Brier(t)}'), String.raw`\[\begin{aligned}\mathrm{AUC}(t),\quad \text{calibration} &= \operatorname{mean}\hat F_{\mathrm{trans}}(t)-\text{IPCW observed CIF}(t),\\ \mathrm{Brier}_{\mathrm{IPCW}}(t),\quad \mathrm{IBS} &= \operatorname{mean}\{\mathrm{Brier}(1),\dots,\mathrm{Brier}(t)\}\end{aligned}\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('td').forEach(node => {
+      const tex = replacements.get(normalize(node.innerHTML));
+      if (!tex) return;
+      node.innerHTML = `<span class="formula">${tex}</span>`;
+      touched.push(node.querySelector('.formula'));
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

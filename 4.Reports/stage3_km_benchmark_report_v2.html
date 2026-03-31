@@ -350,7 +350,10 @@
     padding:2px 6px;
     border-radius:8px;
     color:#0f172a;
+    overflow-x:auto;
   }
+  .math-inline mjx-container{font-size:108%}
+  .math-inline mjx-container[display="true"]{margin:0 !important;text-align:left !important}
   .math-block{
     display:inline-block;
     font-family:'JetBrains Mono', monospace;
@@ -362,7 +365,10 @@
     border-radius:12px;
     color:#0f172a;
     white-space:normal;
+    overflow-x:auto;
   }
+  .math-block mjx-container{font-size:112%}
+  .math-block mjx-container[display="true"]{margin:0 !important;text-align:left !important}
 
   .mini-badge{
     display:inline-flex;
@@ -500,6 +506,17 @@
     .tabs button{width:100%; text-align:left}
   }
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
   <div class="container">
@@ -1896,6 +1913,42 @@
     <div class="footer-note">Stage 3 independent HTML report • template structure preserved • report-ready summary</div>
   </div>
 
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const blockReplacements = new Map([
+      [normalize('Ŝ(t), R̂(t)=1−Ŝ(t); event = 1{transition}; main censoring = 1{right censoring 또는 remission}; t∈{1,2,…,10}'), String.raw`\[\begin{aligned}\hat S(t),\quad \hat R(t) &= 1-\hat S(t),\\ \delta &= \mathbf{1}\{\text{transition}\},\\ C &= \mathbf{1}\{\text{right censoring or remission}\},\\ t &\in \{1,2,\dots,10\}\end{aligned}\]`],
+      [normalize('Ŝ(t|site=s), R̂(t|site=s)=1−Ŝ(t|site=s), s∈{PNU,SNU}'), String.raw`\[\hat S(t\mid \text{site}=s),\quad \hat R(t\mid \text{site}=s)=1-\hat S(t\mid \text{site}=s),\quad s\in\{\text{PNU},\text{SNU}\}\]`],
+      [normalize('Ŷ(t;c)=1{R̂(t) ≥ c}, c∈{0.05, 0.10, 0.15, 0.20}'), String.raw`\[\hat Y(t;c)=\mathbf{1}\{\hat R(t)\ge c\},\quad c\in\{0.05,0.10,0.15,0.20\}\]`],
+      [normalize('evaluable = event by t 또는 observed event-free through t; early censoring before t는 outcome metric에서 제외'), String.raw`\[\begin{aligned}\text{evaluable} &= \text{event by }t \text{ or observed event-free through } t,\\ \text{exclude} &= \text{early censoring before } t \text{ from outcome metrics}\end{aligned}\]`],
+      [normalize('Ŝ(t|G=g), R̂(t|G=g); 성별 subgroup; 최소 stratum n≥30'), String.raw`\[\begin{aligned}\hat S(t\mid G=g),\quad \hat R(t\mid G=g),\\ \text{sex subgroup},\quad \text{minimum stratum } n\ge 30\end{aligned}\]`],
+      [normalize('저장된 KM benchmark variant 4개; group risk trajectory 5개; common horizon 10개; threshold 4개'), String.raw`\[\text{stored KM benchmark variants}=4,\quad \text{group risk trajectories}=5,\quad \text{common horizons}=10,\quad \text{thresholds}=4\]`]
+    ]);
+    const inlineReplacements = new Map([
+      [normalize('Ŝ(t|X)'), String.raw`\(\hat S(t\mid X)\)`],
+      [normalize('R̂(t|X)'), String.raw`\(\hat R(t\mid X)\)`],
+      [normalize('Ŷ(t;c)=1{R̂(t) ≥ c}'), String.raw`\(\hat Y(t;c)=\mathbf{1}\{\hat R(t)\ge c\}\)`],
+      [normalize('H₀'), String.raw`\(\mathrm{H}_0\)`],
+      [normalize('H₁'), String.raw`\(\mathrm{H}_1\)`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('.math-block').forEach(node => {
+      const tex = blockReplacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = tex;
+      touched.push(node);
+    });
+    document.querySelectorAll('.math-inline').forEach(node => {
+      const tex = inlineReplacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = tex;
+      touched.push(node);
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

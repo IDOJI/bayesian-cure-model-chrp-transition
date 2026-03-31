@@ -98,7 +98,21 @@
   .ref-list li + li{margin-top:12px;}
   @media (max-width:900px){.summary-strip,.summary-strip.four{grid-template-columns:1fr;}}
   @media (max-width:640px){.container{padding:22px 16px 64px} .hero{padding:26px 22px 24px} .panel-card{padding:20px} .tabs{padding:10px} .tabs button{width:100%; text-align:left} .pair-bar-row{grid-template-columns:78px 1fr 56px;}}
+  .formula-math{display:inline-block;max-width:100%;padding:6px 10px;border-radius:12px;border:1px solid var(--border);background:#f8fafc;color:#0f172a;overflow-x:auto}
+  .formula-math mjx-container{font-size:112%}
+  .formula-math mjx-container[display="true"]{margin:0 !important;text-align:left !important}
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
   <div class="container">
@@ -690,6 +704,29 @@
     <div class="footer-note">Stage 8A independent HTML report • Bayesian transition-only cure • source-based summary</div>
   </div>
 
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('시간축 t = days_followup / 365.25, 사건 δᵢ = 1{statusᵢ = 1}, censoring = 1{statusᵢ ∈ {0,2}}, horizon t ∈ {1,…,10}'), String.raw`\[\begin{aligned}t &= \frac{\text{days\_followup}}{365.25},\\ \delta_i &= \mathbf{1}\{\text{status}_i = 1\},\\ C_i &= \mathbf{1}\{\text{status}_i \in \{0,2\}\},\\ t &\in \{1,\dots,10\}\end{aligned}\]`],
+      [normalize('πᵢ = logit⁻¹(α_inc + βᵀX_inc,i), X_inc = 성별 + 연령 band(<20, 20–29, 30+) + 성별×연령 band, 일부 merged 구조에서는 site term 추가'), String.raw`\[\begin{aligned}\pi_i &= \operatorname{logit}^{-1}(\alpha_{\mathrm{inc}} + \beta^\top X_{\mathrm{inc},i}),\\ X_{\mathrm{inc}} &= \text{sex} + \text{age band}(<20,\ 20\text{--}29,\ 30+) + \text{sex}\times\text{age band},\\ &\text{with an optional site term in some merged branches}\end{aligned}\]`],
+      [normalize('Tᵢ | Uᵢ=1 ∼ Exp / Weibull / Lognormal / Loglogistic, median(Tᵢ|Uᵢ=1)=exp(γ₀ + γᵀWᵢ)'), String.raw`\[\begin{aligned}T_i \mid U_i = 1 &\sim \text{Exp / Weibull / Lognormal / Loglogistic},\\ \operatorname{median}(T_i\mid U_i=1) &= \exp(\gamma_0 + \gamma^\top W_i)\end{aligned}\]`],
+      [normalize('Rᵢ(t)=1−{(1−πᵢ)+πᵢS_u(t|Wᵢ)}, Ŷᵢ(t;c)=1{Rᵢ(t)≥c}, c∈{0.05,0.10,0.15,0.20}'), String.raw`\[\begin{aligned}R_i(t) &= 1-\{(1-\pi_i)+\pi_i S_u(t\mid W_i)\},\\ \hat Y_i(t;c) &= \mathbf{1}\{R_i(t)\ge c\},\quad c\in\{0.05,0.10,0.15,0.20\}\end{aligned}\]`],
+      [normalize('R̂ < 1.01, bulk/tail ESS ≥ 400, divergence = 0, treedepth exceedance = 0, gross PPC contradiction 없음'), String.raw`\[\widehat{R}<1.01,\quad \text{bulk/tail ESS}\ge 400,\quad \text{divergence}=0,\quad \text{treedepth exceedance}=0,\quad \text{no gross PPC contradiction}\]`],
+      [normalize('Δ = anchor − neutral, 요약 대상은 risk, cure fraction, FP100, net benefit'), String.raw`\[\Delta=\text{anchor}-\text{neutral},\quad \text{summary targets: risk, cure fraction, FP100, net benefit}\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('td').forEach(node => {
+      const tex = replacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = `<span class="formula-math">${tex}</span>`;
+      touched.push(node.querySelector('.formula-math'));
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

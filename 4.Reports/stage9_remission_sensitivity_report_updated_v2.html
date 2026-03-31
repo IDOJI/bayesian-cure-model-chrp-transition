@@ -632,7 +632,30 @@
     .tabs button{width:100%; text-align:left}
     .metric-strip{grid-template-columns:1fr}
   }
+  .formula-math{
+    display:inline-block;
+    max-width:100%;
+    padding:6px 10px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    background:#f8fafc;
+    color:#0f172a;
+    overflow-x:auto;
+  }
+  .formula-math mjx-container{font-size:112%}
+  .formula-math mjx-container[display="true"]{margin:0 !important;text-align:left !important}
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
   <div class="container">
@@ -1420,6 +1443,30 @@
     <div class="footer-note">Stage 9 independent HTML report • remission sensitivity</div>
   </div>
 
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('상태코드: 0=right censoring, 1=transition, 2=remission'), String.raw`\[\text{state code: }0=\text{right censoring},\quad 1=\text{transition},\quad 2=\text{remission}\]`],
+      [normalize('Main: Ŝ(t), R̂_main(t)=1−Ŝ(t) · Sensitivity: F̂_transition(t), F̂_remission(t), P̂_0(t)'), String.raw`\[\begin{aligned}\text{main: } &\hat S(t),\quad \hat R_{\mathrm{main}}(t)=1-\hat S(t),\\ \text{sensitivity: } &\hat F_{\mathrm{transition}}(t),\ \hat F_{\mathrm{remission}}(t),\ \hat P_0(t)\end{aligned}\]`],
+      [normalize('Ŝ(t | site=s), F̂_transition(t | site=s), F̂_remission(t | site=s)'), String.raw`\[\hat S(t\mid \text{site}=s),\quad \hat F_{\mathrm{transition}}(t\mid \text{site}=s),\quad \hat F_{\mathrm{remission}}(t\mid \text{site}=s)\]`],
+      [normalize('λ_transition(t | X)=λ_0(t)exp(βᵀX), R̂_main(t | X)=1−Ŝ(t | X) · tie handling: Efron'), String.raw`\[\begin{aligned}\lambda_{\mathrm{transition}}(t\mid X) &= \lambda_0(t)\exp(\beta^\top X),\\ \hat R_{\mathrm{main}}(t\mid X) &= 1-\hat S(t\mid X),\quad \text{tie handling: Efron}\end{aligned}\]`],
+      [normalize('λ₁(t | X), λ₂(t | X) → F̂₁(t | X), F̂₂(t | X), P̂_0(t | X)'), String.raw`\[\lambda_1(t\mid X),\ \lambda_2(t\mid X)\ \longrightarrow\ \hat F_1(t\mid X),\ \hat F_2(t\mid X),\ \hat P_0(t\mid X)\]`],
+      [normalize('λ̃₁(t | X) → F̂_transition,FG(t | X) · 이 블록은 remission CIF를 별도로 내보내지 않습니다'), String.raw`\[\tilde{\lambda}_1(t\mid X)\ \longrightarrow\ \hat F_{\mathrm{transition},FG}(t\mid X),\quad \text{no separate remission CIF in this block}\]`],
+      [normalize('Ŷ(t;c)=1{R̂_transition(t)≥c}, c∈{0.05,0.10,0.15,0.20}'), String.raw`\[\hat Y(t;c)=\mathbf{1}\{\hat R_{\mathrm{transition}}(t)\ge c\},\quad c\in\{0.05,0.10,0.15,0.20\}\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('td').forEach(node => {
+      const tex = replacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = `<span class="formula-math">${tex}</span>`;
+      touched.push(node.querySelector('.formula-math'));
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');

@@ -112,7 +112,16 @@
   .column-guide{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px;margin-top:12px}
   .guide-item{padding:12px 14px;border:1px solid var(--border);background:var(--surface-2);border-radius:14px;color:var(--text-soft);font-size:13px;line-height:1.65}
   .guide-item strong{color:var(--text)}
-  .formula{font-family:'JetBrains Mono', monospace;font-size:12px;color:#0f172a;line-height:1.7;display:block;white-space:normal;word-break:break-word}
+  .formula{
+    display:block;
+    color:#0f172a;
+    line-height:1.7;
+    white-space:normal;
+    word-break:break-word;
+    overflow-x:auto;
+  }
+  .formula mjx-container{font-size:112%}
+  .formula mjx-container[display="true"]{margin:0 !important;text-align:left !important}
   .metric-block + .metric-block{margin-top:20px}
   .metric-head h4{font-size:17px;line-height:1.3;margin-bottom:4px}
   .metric-head p{color:var(--text-soft);font-size:14px}
@@ -166,6 +175,17 @@
     .metric-value{font-size:14px}
   }
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 <div class="container">
@@ -246,55 +266,55 @@
 <tr>
 <td><strong>Observed 뒤쪽 추적 구간 summary</strong></td>
 <td>4 자료셋 분석 버전들의 뒤쪽 추적 구간 구조를 요약했습니다.</td>
-<td><span class="formula">Tᵢ = 추적관찰 time, Δᵢ = 1{transition}; τ_d = max(Tᵢ), latest event = max(Tᵢ | Δᵢ=1), plateau = τ_d − latest event</span></td>
+<td><span class="formula">\[\begin{aligned}T_i &= \text{추적관찰 time}, & \Delta_i &= \mathbf{1}\{\text{transition}\},\\ \tau_d &= \max(T_i), & t_{\text{latest}} &= \max\{T_i : \Delta_i = 1\},\\ \text{plateau} &= \tau_d - t_{\text{latest}}\end{aligned}\]</span></td>
 <td>추적관찰 summary 4행</td>
 </tr>
 <tr>
 <td><strong>Maller–Zhou d_n / α_n / q_n</strong></td>
 <td>보조 단서와 뒤쪽 추적 구간 요약을 계산했습니다.</td>
-<td><span class="formula">d_n: exponential mixture-cure 작업용 모형; α_n, q_n: upper-뒤쪽 추적 구간 descriptive summary</span></td>
+<td><span class="formula">\[d_n:\ \text{exponential mixture-cure 작업용 모형}, \qquad \alpha_n,\ q_n:\ \text{upper-뒤쪽 추적 구간 descriptive summary}\]</span></td>
 <td>method 결과 행 8행 (4×2)</td>
 </tr>
 <tr>
 <td><strong>Xie sufficient-추적관찰 test</strong></td>
 <td>no-covariate extremes statistic T_n으로 모순 신호 여부를 점검했습니다.</td>
-<td><span class="formula">T_n with centered 반복 계산; 999 반복표본 그룹마다; project 모순 신호 rule: p_Xie &lt; 0.05; merged site-adjusted는 관찰 말단 구간을 상속</span></td>
+<td><span class="formula">\[\begin{aligned}T_n &:\ \text{centered extremes statistic},\\ B &= 999\ \text{반복표본/group},\\ \text{contradictory signal} &:\ p_{\text{Xie}} &lt; 0.05,\\ \text{merged site-adjusted} &:\ \text{관찰 말단 구간 상속}\end{aligned}\]</span></td>
 <td>observed method 결과 행 4행, 반복 계산 개 그룹 3개</td>
 </tr>
 <tr>
 <td><strong>RECeUS fixed Weibull</strong></td>
 <td>고정 Weibull 분포 가정로 sensitivity 기준을 계산했습니다.</td>
-<td><span class="formula">Estimate π̂_d and r̂_d at τ_d under Weibull mixture-cure 작업용 모형</span></td>
+<td><span class="formula">\[(\widehat{\pi}_d,\ \widehat{r}_d)\ \text{evaluated at }\tau_d \quad \text{under a Weibull mixture-cure working model}\]</span></td>
 <td>method 결과 행 4행</td>
 </tr>
 <tr>
 <td><strong>RECeUS-AIC 가장 먼저 적용한 판정 기준</strong></td>
 <td>4개 후보 분포 가정 중 AIC 최소 분포 가정를 선택한 뒤 공식 1차 게이트를 부여했습니다.</td>
-<td><span class="formula">f ∈ {exponential, weibull, gamma, loglogistic}, f* = argmin AIC_f, 분류ify by π̂_{d,f*} and r̂_{d,f*}</span></td>
+<td><span class="formula">\[\begin{aligned}f &\in \{\text{exponential},\ \text{weibull},\ \text{gamma},\ \text{loglogistic}\},\\ f^\ast &= \operatorname*{argmin}_f \mathrm{AIC}_f,\\ \text{classify by } &\widehat{\pi}_{d,f^\ast} \text{ and } \widehat{r}_{d,f^\ast}\end{aligned}\]</span></td>
 <td>primary 행 4행 + 후보 분포 가정 fits 16행</td>
 </tr>
 <tr>
 <td><strong>HSU 분포 가정별 작업용 모형s</strong></td>
 <td>3개 작업용 분포 가정 각각에서 cure fraction 보조 단서를 점검했습니다.</td>
-<td><span class="formula">g ∈ {weibull, lognormal, loglogistic}, AFT 작업용 latency 분포 가정, 999 parametric 반복 계산 반복표본 per 자료셋-분포 가정 조합</span></td>
+<td><span class="formula">\[\begin{aligned}g &\in \{\text{weibull},\ \text{lognormal},\ \text{loglogistic}\},\\ \text{latency model} &:\ \text{AFT},\\ B &= 999\ \text{parametric bootstrap replicates per dataset-distribution pair}\end{aligned}\]</span></td>
 <td>분포 가정별 행 12행, 반복 계산 개 그룹 12개</td>
 </tr>
 <tr>
 <td><strong>HSU 분포 가정 묶음 종합 결과</strong></td>
 <td>분포 가정별 p-value를 분포 가정 전체 수준의 수준으로 집계했습니다.</td>
-<td><span class="formula">Holm-adjusted 분포 가정 전체 수준의 aggre기준 over {weibull, lognormal, loglogistic}</span></td>
+<td><span class="formula">\[\text{Holm-adjusted aggregate over }\{\text{weibull},\ \text{lognormal},\ \text{loglogistic}\}\]</span></td>
 <td>aggre기준 행 4행</td>
 </tr>
 <tr>
 <td><strong>Final Stage 6 분류</strong></td>
 <td>RECeUS-AIC 가장 먼저 적용한 판정 기준, 보조 단서에 따른 완화, Xie 모순 신호를 합쳐 최종 분류를 만들었습니다.</td>
-<td><span class="formula">R = RECeUS-AIC 분류, P = 1{MZ 양성 or HSU 분포 가정 묶음 positive}, X = 1{Xie contradictory}</span></td>
+<td><span class="formula">\[\begin{aligned}R &= \text{RECeUS-AIC classification},\\ P &= \mathbf{1}\{\text{MZ positive or HSU aggregate positive}\},\\ X &= \mathbf{1}\{\text{Xie contradictory}\}\end{aligned}\]</span></td>
 <td>다음 단계 반영 표 4행</td>
 </tr>
 <tr>
 <td><strong>Bayesian cure modeling</strong></td>
 <td>계획은 있으나 이번 Stage에서는 미실행입니다.</td>
-<td><span class="formula">Stage 6 is frequentist-only 점검; Bayesian mixture-cure 적합 is excluded here</span></td>
+<td><span class="formula">\[\text{Stage 6 is frequentist-only; Bayesian mixture-cure fitting is excluded here}\]</span></td>
 <td>이번 실행에서는 산출물이 없습니다</td>
 </tr>
 </tbody>
@@ -1003,55 +1023,55 @@
 <tr>
 <td><strong>Observed 뒤쪽 추적 구간 summary</strong></td>
 <td>4 자료셋 분석 버전들의 뒤쪽 추적 구간 구조를 요약했습니다.</td>
-<td><span class="formula">Tᵢ = 추적관찰 time, Δᵢ = 1{transition}; τ_d = max(Tᵢ), latest event = max(Tᵢ | Δᵢ=1), plateau = τ_d − latest event</span></td>
+<td><span class="formula">\[\begin{aligned}T_i &= \text{추적관찰 time}, & \Delta_i &= \mathbf{1}\{\text{transition}\},\\ \tau_d &= \max(T_i), & t_{\text{latest}} &= \max\{T_i : \Delta_i = 1\},\\ \text{plateau} &= \tau_d - t_{\text{latest}}\end{aligned}\]</span></td>
 <td>추적관찰 summary 4행</td>
 </tr>
 <tr>
 <td><strong>Maller–Zhou d_n / α_n / q_n</strong></td>
 <td>보조 단서와 뒤쪽 추적 구간 요약을 계산했습니다.</td>
-<td><span class="formula">d_n: exponential mixture-cure 작업용 모형; α_n, q_n: upper-뒤쪽 추적 구간 descriptive summary</span></td>
+<td><span class="formula">\[d_n:\ \text{exponential mixture-cure 작업용 모형}, \qquad \alpha_n,\ q_n:\ \text{upper-뒤쪽 추적 구간 descriptive summary}\]</span></td>
 <td>method 결과 행 8행 (4×2)</td>
 </tr>
 <tr>
 <td><strong>Xie sufficient-추적관찰 test</strong></td>
 <td>no-covariate extremes statistic T_n으로 모순 신호 여부를 점검했습니다.</td>
-<td><span class="formula">T_n with centered 반복 계산; 999 반복표본 그룹마다; project 모순 신호 rule: p_Xie &lt; 0.05; merged site-adjusted는 관찰 말단 구간을 상속</span></td>
+<td><span class="formula">\[\begin{aligned}T_n &:\ \text{centered extremes statistic},\\ B &= 999\ \text{반복표본/group},\\ \text{contradictory signal} &:\ p_{\text{Xie}} &lt; 0.05,\\ \text{merged site-adjusted} &:\ \text{관찰 말단 구간 상속}\end{aligned}\]</span></td>
 <td>observed method 결과 행 4행, 반복 계산 개 그룹 3개</td>
 </tr>
 <tr>
 <td><strong>RECeUS fixed Weibull</strong></td>
 <td>고정 Weibull 분포 가정로 sensitivity 기준을 계산했습니다.</td>
-<td><span class="formula">Estimate π̂_d and r̂_d at τ_d under Weibull mixture-cure 작업용 모형</span></td>
+<td><span class="formula">\[(\widehat{\pi}_d,\ \widehat{r}_d)\ \text{evaluated at }\tau_d \quad \text{under a Weibull mixture-cure working model}\]</span></td>
 <td>method 결과 행 4행</td>
 </tr>
 <tr>
 <td><strong>RECeUS-AIC 가장 먼저 적용한 판정 기준</strong></td>
 <td>4개 후보 분포 가정 중 AIC 최소 분포 가정를 선택한 뒤 공식 1차 게이트를 부여했습니다.</td>
-<td><span class="formula">f ∈ {exponential, weibull, gamma, loglogistic}, f* = argmin AIC_f, 분류ify by π̂_{d,f*} and r̂_{d,f*}</span></td>
+<td><span class="formula">\[\begin{aligned}f &\in \{\text{exponential},\ \text{weibull},\ \text{gamma},\ \text{loglogistic}\},\\ f^\ast &= \operatorname*{argmin}_f \mathrm{AIC}_f,\\ \text{classify by } &\widehat{\pi}_{d,f^\ast} \text{ and } \widehat{r}_{d,f^\ast}\end{aligned}\]</span></td>
 <td>primary 행 4행 + 후보 분포 가정 fits 16행</td>
 </tr>
 <tr>
 <td><strong>HSU 분포 가정별 작업용 모형s</strong></td>
 <td>3개 작업용 분포 가정 각각에서 cure fraction 보조 단서를 점검했습니다.</td>
-<td><span class="formula">g ∈ {weibull, lognormal, loglogistic}, AFT 작업용 latency 분포 가정, 999 parametric 반복 계산 반복표본 per 자료셋-분포 가정 조합</span></td>
+<td><span class="formula">\[\begin{aligned}g &\in \{\text{weibull},\ \text{lognormal},\ \text{loglogistic}\},\\ \text{latency model} &:\ \text{AFT},\\ B &= 999\ \text{parametric bootstrap replicates per dataset-distribution pair}\end{aligned}\]</span></td>
 <td>분포 가정별 행 12행, 반복 계산 개 그룹 12개</td>
 </tr>
 <tr>
 <td><strong>HSU 분포 가정 묶음 종합 결과</strong></td>
 <td>분포 가정별 p-value를 분포 가정 전체 수준의 수준으로 집계했습니다.</td>
-<td><span class="formula">Holm-adjusted 분포 가정 전체 수준의 aggre기준 over {weibull, lognormal, loglogistic}</span></td>
+<td><span class="formula">\[\text{Holm-adjusted aggregate over }\{\text{weibull},\ \text{lognormal},\ \text{loglogistic}\}\]</span></td>
 <td>aggre기준 행 4행</td>
 </tr>
 <tr>
 <td><strong>Final Stage 6 분류</strong></td>
 <td>RECeUS-AIC 가장 먼저 적용한 판정 기준, 보조 단서에 따른 완화, Xie 모순 신호를 합쳐 최종 분류를 만들었습니다.</td>
-<td><span class="formula">R = RECeUS-AIC 분류, P = 1{MZ 양성 or HSU 분포 가정 묶음 positive}, X = 1{Xie contradictory}</span></td>
+<td><span class="formula">\[\begin{aligned}R &= \text{RECeUS-AIC classification},\\ P &= \mathbf{1}\{\text{MZ positive or HSU aggregate positive}\},\\ X &= \mathbf{1}\{\text{Xie contradictory}\}\end{aligned}\]</span></td>
 <td>다음 단계 반영 표 4행</td>
 </tr>
 <tr>
 <td><strong>Bayesian cure modeling</strong></td>
 <td>계획은 있으나 이번 Stage에서는 미실행입니다.</td>
-<td><span class="formula">Stage 6 is frequentist-only 점검; Bayesian mixture-cure 적합 is excluded here</span></td>
+<td><span class="formula">\[\text{Stage 6 is frequentist-only; Bayesian mixture-cure fitting is excluded here}\]</span></td>
 <td>이번 실행에서는 산출물이 없습니다</td>
 </tr>
 </tbody>

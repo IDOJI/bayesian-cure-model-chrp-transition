@@ -195,7 +195,30 @@
     .tabs{padding:10px}
     .tabs button{width:100%; text-align:left}
   }
+  .formula-math{
+    display:inline-block;
+    max-width:100%;
+    padding:6px 10px;
+    border-radius:12px;
+    border:1px solid var(--border);
+    background:#f8fafc;
+    color:#0f172a;
+    overflow-x:auto;
+  }
+  .formula-math mjx-container{font-size:112%}
+  .formula-math mjx-container[display="true"]{margin:0 !important;text-align:left !important}
 </style>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(','\\)'], ['$', '$']],
+      displayMath: [['\\[','\\]']],
+      processEscapes: true
+    },
+    svg: {fontCache: 'global'}
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 <div class="container">
@@ -983,6 +1006,27 @@
 </section>
 <div class="footer-note">Stage 2 independent HTML report • dark-header template preserved • exact numbers from structured Stage 2 outputs</div>
 </div>
+<script>
+  window.addEventListener('load', async () => {
+    const normalize = value => value.replace(/\s+/g, ' ').trim();
+    const replacements = new Map([
+      [normalize('transition_only: Ŝ_tr(t), event = 1{status_num = 1}; remission_sensitive: Ŝ_rs(t), event = 1{status_num ∈ {1,2}}'), String.raw`\[\begin{aligned}\text{transition-only: } &\hat S_{\mathrm{tr}}(t),\quad \delta = \mathbf{1}\{\text{status\_num}=1\},\\ \text{remission-sensitive: } &\hat S_{\mathrm{rs}}(t),\quad \delta = \mathbf{1}\{\text{status\_num}\in\{1,2\}\}\end{aligned}\]`],
+      [normalize('reverse-KM: transition_only에서는 status_num ∈ {0,2}를 follow-up completion 사건으로, remission_sensitive에서는 status_num = 0을 사건으로 둡니다.'), String.raw`\[\begin{aligned}\text{transition-only: } &\delta_{\mathrm{FU}}=\mathbf{1}\{\text{status\_num}\in\{0,2\}\},\\ \text{remission-sensitive: } &\delta_{\mathrm{FU}}=\mathbf{1}\{\text{status\_num}=0\}\end{aligned}\]`],
+      [normalize('eligible_n(h)= #{potential follow-up ≥ h}; risk_set_n(h)= #{observed follow-up ≥ h}; Percentage(h)= complete(h)/eligible_n(h); CCI(h), SPT(h)= person-time based maturity summaries'), String.raw`\[\begin{aligned}\mathrm{eligible}_n(h) &= \#\{\text{potential follow-up}\ge h\},\\ \mathrm{risk\_set}_n(h) &= \#\{\text{observed follow-up}\ge h\},\\ \mathrm{Percentage}(h) &= \frac{\mathrm{complete}(h)}{\mathrm{eligible}_n(h)},\\ \mathrm{CCI}(h),\ \mathrm{SPT}(h) &:\ \text{person-time based maturity summaries}\end{aligned}\]`],
+      [normalize('site_adjusted: site별 administrative end date 사용; site_free: merged 전체의 단일 administrative end date 사용'), String.raw`\[\text{site-adjusted: site-specific administrative end date},\quad \text{site-free: pooled merged administrative end date}\]`]
+    ]);
+    const touched = [];
+    document.querySelectorAll('td').forEach(node => {
+      const tex = replacements.get(normalize(node.textContent));
+      if (!tex) return;
+      node.innerHTML = `<span class="formula-math">${tex}</span>`;
+      touched.push(node.querySelector('.formula-math'));
+    });
+    if (touched.length && window.MathJax?.typesetPromise) {
+      await window.MathJax.typesetPromise(touched);
+    }
+  });
+</script>
 <script>
   const buttons = document.querySelectorAll('.tabs button');
   const panels = document.querySelectorAll('.panel');
