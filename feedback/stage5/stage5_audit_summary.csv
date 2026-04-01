@@ -1,9 +1,0 @@
-check,status,detail
-model_plan_vs_registry,PASS,40 planned models; 40 registered; all 40 converged.
-prediction_grid_integrity,PASS,"Expected prediction rows 78,600 and actual prediction rows 78,600; no out-of-range risks/survivals; no identity or monotonicity violations."
-unsupported_metric_population,PASS,"AUC, Brier-related, and threshold outcome metrics are suppressed when binary outcome support is unavailable per QC summary."
-horizon_governance_fields,PASS,"support_tier, horizon_evidence_class, claim_restriction_flag, and risk_scale are present in exported long tables."
-late_horizon_support_pattern,PASS_WITH_EXPECTED_LIMITATION,PNU only has binary outcome support through year 2; SNU and merged retain binary support later but calibration regression support collapses by year 10 because supported bins drop below the minimum.
-calibration_regression_supported_rows,MINOR_ISSUE,"280 supported calibration rows; 279 fit successfully; 1 supported row failed because of a slope boundary flag (SNU, base, lognormal, year 9)."
-observed_ipcw_risk_when_no_controls,MINOR_ISSUE,"For PNU years 3-10, observed_ipcw_risk is exported as 1.0 even though binary outcome support is unavailable (nonevent IPCW count = 0). This follows the current code path but is potentially misleading if surfaced later."
-plot_structure,PASS_WITH_PRESENTATION_NOTE,"Plot panels are structurally consistent with the formula registry; blank PNU/SNU site-added panels reflect unavailable formulas, not missing computation."

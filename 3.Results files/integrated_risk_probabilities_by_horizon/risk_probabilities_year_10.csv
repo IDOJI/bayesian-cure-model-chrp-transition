@@ -1,0 +1,25 @@
+dataset_name,model_name,estimated_risk_probability
+PNU,KM benchmark,0.2988189169153016
+PNU,No-cure lognormal,0.554989498412735
+PNU,Frequentist mixture cure (lognormal),0.3878595296105625
+PNU,"Frequentist mixture cure (lognormal, susceptible only)",0.9618517330019202
+PNU,Bayesian transition-only cure,0.40718130711508865
+PNU,Bayesian transition-only cure (susceptible only),0.8260452251742063
+SNU,KM benchmark,0.3264499672580006
+SNU,No-cure lognormal,0.3073431753593254
+SNU,Frequentist mixture cure (lognormal),0.30441692047576846
+SNU,"Frequentist mixture cure (lognormal, susceptible only)",0.31974239542885746
+SNU,Bayesian transition-only cure,0.30065585062055383
+SNU,Bayesian transition-only cure (susceptible only),0.43610580630558976
+merged,KM benchmark,0.3506232937185608
+merged,No-cure lognormal,0.3390177873506348
+merged,Frequentist mixture cure (lognormal),0.33490282765589385
+merged,"Frequentist mixture cure (lognormal, susceptible only)",0.3744872735054801
+merged,Bayesian transition-only cure,0.3308015817444661
+merged,Bayesian transition-only cure (susceptible only),0.4635458524949092
+merged_site_adjusted,KM benchmark,0.3506232937185608
+merged_site_adjusted,No-cure lognormal,0.35638305636819245
+merged_site_adjusted,Frequentist mixture cure (lognormal),0.34491780312581083
+merged_site_adjusted,"Frequentist mixture cure (lognormal, susceptible only)",0.4316394936871941
+merged_site_adjusted,Bayesian transition-only cure,0.3478274024848595
+merged_site_adjusted,Bayesian transition-only cure (susceptible only),0.4477957634232917

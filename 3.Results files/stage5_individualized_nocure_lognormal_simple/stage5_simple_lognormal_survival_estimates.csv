@@ -1,0 +1,41 @@
+dataset_version_key,model_family,formula_rhs,horizon_year,estimated_survival_probability,estimated_risk_probability
+PNU,lognormal,age_s + sex_num,1,0.777113243325484,0.22288675667451596
+PNU,lognormal,age_s + sex_num,2,0.6883972046560726,0.31160279534392743
+PNU,lognormal,age_s + sex_num,3,0.6303196875264642,0.36968031247353583
+PNU,lognormal,age_s + sex_num,4,0.5871286582366027,0.41287134176339735
+PNU,lognormal,age_s + sex_num,5,0.5528542054456783,0.4471457945543217
+PNU,lognormal,age_s + sex_num,6,0.5245413163589608,0.47545868364103916
+PNU,lognormal,age_s + sex_num,7,0.5004998814902275,0.4995001185097725
+PNU,lognormal,age_s + sex_num,8,0.4796693317252559,0.5203306682747442
+PNU,lognormal,age_s + sex_num,9,0.4613393398366598,0.5386606601633401
+PNU,lognormal,age_s + sex_num,10,0.4450105015872649,0.554989498412735
+SNU,lognormal,age_s + sex_num,1,0.9158288917253993,0.08417110827460073
+SNU,lognormal,age_s + sex_num,2,0.8674470597002458,0.13255294029975417
+SNU,lognormal,age_s + sex_num,3,0.8315914368288152,0.1684085631711848
+SNU,lognormal,age_s + sex_num,4,0.8026867911792082,0.19731320882079184
+SNU,lognormal,age_s + sex_num,5,0.7783233266686381,0.22167667333136187
+SNU,lognormal,age_s + sex_num,6,0.7572006258973608,0.2427993741026392
+SNU,lognormal,age_s + sex_num,7,0.7385248032970723,0.26147519670292774
+SNU,lognormal,age_s + sex_num,8,0.7217707663130977,0.27822923368690233
+SNU,lognormal,age_s + sex_num,9,0.7065709341034166,0.29342906589658335
+SNU,lognormal,age_s + sex_num,10,0.6926568246406746,0.3073431753593254
+merged,lognormal,age_s + sex_num,1,0.8913037930066606,0.10869620699333937
+merged,lognormal,age_s + sex_num,2,0.8382263328264822,0.16177366717351782
+merged,lognormal,age_s + sex_num,3,0.8004136510319642,0.19958634896803584
+merged,lognormal,age_s + sex_num,4,0.7706090101746691,0.2293909898253309
+merged,lognormal,age_s + sex_num,5,0.7458673053129812,0.2541326946870188
+merged,lognormal,age_s + sex_num,6,0.7246576662159295,0.27534233378407047
+merged,lognormal,age_s + sex_num,7,0.706069756724792,0.293930243275208
+merged,lognormal,age_s + sex_num,8,0.6895133731957167,0.3104866268042833
+merged,lognormal,age_s + sex_num,9,0.6745818951955957,0.32541810480440425
+merged,lognormal,age_s + sex_num,10,0.6609822126493652,0.3390177873506348
+merged_site_adjusted,lognormal,age_s + sex_num + site,1,0.8881839782268015,0.11181602177319849
+merged_site_adjusted,lognormal,age_s + sex_num + site,2,0.8319630333710313,0.16803696662896872
+merged_site_adjusted,lognormal,age_s + sex_num + site,3,0.7917741781582778,0.20822582184172223
+merged_site_adjusted,lognormal,age_s + sex_num + site,4,0.7600690270795998,0.23993097292040022
+merged_site_adjusted,lognormal,age_s + sex_num + site,5,0.7337505530170556,0.2662494469829444
+merged_site_adjusted,lognormal,age_s + sex_num + site,6,0.7111993742260326,0.28880062577396737
+merged_site_adjusted,lognormal,age_s + sex_num + site,7,0.6914488629348773,0.3085511370651227
+merged_site_adjusted,lognormal,age_s + sex_num + site,8,0.6738706684240645,0.3261293315759355
+merged_site_adjusted,lognormal,age_s + sex_num + site,9,0.6580310611636816,0.3419689388363184
+merged_site_adjusted,lognormal,age_s + sex_num + site,10,0.6436169436318075,0.35638305636819245
