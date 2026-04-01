@@ -3,8 +3,14 @@ find_repo_root <- function(start_dir) {
   current_dir <- normalizePath(start_dir, winslash = "/", mustWork = FALSE)
 
   repeat {
-    stage7_reference <- file.path(current_dir, "2.Rcode", "stage7_ Frequentist cure block.r")
-    if (file.exists(stage7_reference)) {
+    has_repo_markers <- dir.exists(file.path(current_dir, ".git")) ||
+      (
+        dir.exists(file.path(current_dir, "0.Data")) &&
+          dir.exists(file.path(current_dir, "2.Rcode")) &&
+          dir.exists(file.path(current_dir, "3.Results files"))
+      )
+
+    if (has_repo_markers) {
       return(current_dir)
     }
 
@@ -16,21 +22,9 @@ find_repo_root <- function(start_dir) {
   }
 
   stop(
-    "Could not locate the repository root containing `2.Rcode/stage7_ Frequentist cure block.r`.",
+    "Could not locate the repository root.",
     call. = FALSE
   )
-}
-
-first_existing_dir <- function(paths) {
-  paths <- paths[!is.na(paths) & nzchar(paths)]
-  existing <- paths[dir.exists(paths)]
-  if (length(existing) > 0L) {
-    return(existing[[1L]])
-  }
-  if (length(paths) > 0L) {
-    return(paths[[1L]])
-  }
-  NA_character_
 }
 
 command_args <- commandArgs(trailingOnly = FALSE)
@@ -44,26 +38,20 @@ search_start_dir <- if (length(script_arg) > 0L) {
 repo_root <- find_repo_root(search_start_dir)
 results_root_default <- file.path(repo_root, "3.Results files")
 
-sys_name <- Sys.info()[["sysname"]]
-dropbox_results_root_default <- switch(
-  sys_name,
-  "Darwin" = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
-  "Windows" = "C:/Users/clair/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
-  NA_character_
+source_data_file <- Sys.getenv(
+  "STAGE7_SIMPLE_DATA_FILE",
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
 )
-
-stage1_path_default <- first_existing_dir(
-  c(
-    file.path(results_root_default, "stage1_Backbone lock"),
-    file.path(dropbox_results_root_default, "stage1_Backbone lock")
-  )
+export_path <- Sys.getenv(
+  "STAGE7_SIMPLE_EXPORT_PATH",
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/1.Modeling/3.MLE Mixture Cure"
 )
-
-stage1_path <- Sys.getenv("STAGE7_SIMPLE_STAGE1_PATH", unset = stage1_path_default)
-export_path <- Sys.getenv("STAGE7_SIMPLE_EXPORT_PATH", unset = results_root_default)
-
-stage1_analysis_datasets_file <- file.path(stage1_path, "stage1_analysis_datasets.rds")
-stage1_formula_registry_file <- file.path(stage1_path, "stage1_formula_registry.csv")
+pnu_site_label <- Sys.getenv("STAGE7_SIMPLE_PNU_SITE_LABEL", unset = "PNU")
+snu_site_label <- Sys.getenv("STAGE7_SIMPLE_SNU_SITE_LABEL", unset = "SNU")
+reuse_existing_fit_rds <- identical(
+  toupper(trimws(Sys.getenv("STAGE7_SIMPLE_REUSE_EXISTING_FIT_RDS", unset = "FALSE"))),
+  "TRUE"
+)
 
 horizon_years <- 1:10
 curve_horizon_max_year <- 10
@@ -91,22 +79,6 @@ plot_rds_file <- file.path(
   export_path,
   "stage7_simple_lognormal_mixture_cure_plot_objects.rds"
 )
-overall_survival_png_file <- file.path(
-  export_path,
-  "stage7_simple_lognormal_mixture_cure_overall_survival.png"
-)
-overall_risk_png_file <- file.path(
-  export_path,
-  "stage7_simple_lognormal_mixture_cure_overall_risk.png"
-)
-susceptible_survival_png_file <- file.path(
-  export_path,
-  "stage7_simple_lognormal_mixture_cure_susceptible_only_survival.png"
-)
-susceptible_risk_png_file <- file.path(
-  export_path,
-  "stage7_simple_lognormal_mixture_cure_susceptible_only_risk.png"
-)
 
 dataset_model_registry <- tibble::tibble(
   dataset = c("PNU", "SNU", "merged_no_site", "merged_site_adjusted"),
@@ -121,6 +93,13 @@ dataset_palette <- c(
   "SNU" = "#2A6F97",
   "merged_no_site" = "#C1666B",
   "merged_site_adjusted" = "#B8860B"
+)
+
+plot_dataset_label_lookup <- c(
+  "PNU" = "PNU",
+  "SNU" = "SNU",
+  "merged_no_site" = "Merged",
+  "merged_site_adjusted" = "Merged (site-adjusted)"
 )
 
 # Load Packages -----------------------------------------------------------
@@ -164,6 +143,242 @@ assert_file_exists <- function(path, label) {
 read_csv_checked <- function(path, label) {
   assert_file_exists(path, label)
   readr::read_csv(path, show_col_types = FALSE, progress = FALSE)
+}
+
+coerce_numeric_text <- function(x) {
+  suppressWarnings(as.numeric(as.character(x)))
+}
+
+standardize_known_site_labels <- function(df, pnu_label, snu_label) {
+  if (!"site" %in% names(df)) {
+    stop("Merged input must contain column `site`.", call. = FALSE)
+  }
+
+  df %>%
+    mutate(
+      site = trimws(as.character(site)),
+      site = dplyr::case_when(
+        toupper(site) == toupper(pnu_label) ~ pnu_label,
+        toupper(site) == toupper(snu_label) ~ snu_label,
+        TRUE ~ site
+      )
+    )
+}
+
+validate_source_data <- function(df, pnu_label, snu_label) {
+  required_cols <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0L) {
+    stop(
+      sprintf(
+        "Merged preprocessed data is missing required columns: %s",
+        paste(missing_cols, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  observed_sites <- sort(unique(trimws(as.character(df$site))))
+  expected_sites <- c(pnu_label, snu_label)
+  unexpected_sites <- setdiff(observed_sites, expected_sites)
+  if (length(unexpected_sites) > 0L) {
+    stop(
+      sprintf(
+        "Unexpected site labels found in merged input: %s",
+        paste(unexpected_sites, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
+
+split_site_dataset <- function(merged_df, site_label, dataset_name) {
+  out <- merged_df %>%
+    filter(toupper(trimws(as.character(site))) == toupper(site_label)) %>%
+    mutate(site = site_label)
+
+  if (nrow(out) == 0L) {
+    stop(
+      sprintf("[%s] No rows found in merged input for site label `%s`.", dataset_name, site_label),
+      call. = FALSE
+    )
+  }
+
+  out
+}
+
+prepare_backbone_dataset <- function(df, dataset_name, site_mode = c("single", "merged")) {
+  site_mode <- match.arg(site_mode)
+
+  required_cols <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0L) {
+    stop(
+      sprintf("[%s] Missing required columns: %s", dataset_name, paste(missing_cols, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+
+  out <- df %>%
+    mutate(
+      id = trimws(as.character(id)),
+      site = trimws(as.character(site)),
+      sex_num = as.integer(coerce_numeric_text(sex_num)),
+      age_exact_entry = coerce_numeric_text(age_exact_entry),
+      days_followup = coerce_numeric_text(days_followup),
+      status_num = as.integer(coerce_numeric_text(status_num))
+    )
+
+  if (nrow(out) == 0L) {
+    stop(sprintf("[%s] Dataset has zero rows after loading.", dataset_name), call. = FALSE)
+  }
+
+  if (anyNA(out[, required_cols])) {
+    stop(sprintf("[%s] Missing values detected in required columns.", dataset_name), call. = FALSE)
+  }
+
+  if (any(out$id == "", na.rm = TRUE)) {
+    stop(sprintf("[%s] Blank `id` values detected.", dataset_name), call. = FALSE)
+  }
+
+  if (any(out$site == "", na.rm = TRUE)) {
+    stop(sprintf("[%s] Blank `site` values detected.", dataset_name), call. = FALSE)
+  }
+
+  if (any(!out$sex_num %in% c(0L, 1L), na.rm = TRUE)) {
+    stop(sprintf("[%s] `sex_num` must be coded as 0/1 only.", dataset_name), call. = FALSE)
+  }
+
+  if (any(!out$status_num %in% c(0L, 1L, 2L), na.rm = TRUE)) {
+    stop(sprintf("[%s] `status_num` must be coded as 0/1/2 only.", dataset_name), call. = FALSE)
+  }
+
+  if (any(out$days_followup < 0, na.rm = TRUE)) {
+    stop(sprintf("[%s] Negative `days_followup` values detected.", dataset_name), call. = FALSE)
+  }
+
+  n_site_levels <- dplyr::n_distinct(out$site)
+  if (site_mode == "single" && n_site_levels != 1L) {
+    stop(sprintf("[%s] Single-cohort input must contain exactly one site.", dataset_name), call. = FALSE)
+  }
+  if (site_mode == "merged" && n_site_levels < 2L) {
+    stop(sprintf("[%s] Merged input must contain at least two site levels.", dataset_name), call. = FALSE)
+  }
+
+  age_sd <- stats::sd(out$age_exact_entry)
+  if (is.na(age_sd) || age_sd <= 0) {
+    stop(sprintf("[%s] `age_exact_entry` must have positive standard deviation.", dataset_name), call. = FALSE)
+  }
+
+  age_mean <- mean(out$age_exact_entry)
+
+  out %>%
+    mutate(
+      unique_person_id = paste(site, id, sep = "_"),
+      time_year = days_followup / 365.25,
+      event_main = as.integer(status_num == 1L),
+      right_censor_flag = as.integer(status_num == 0L),
+      remission_flag = as.integer(status_num == 2L),
+      censor_main = as.integer(status_num %in% c(0L, 2L)),
+      sex_label = factor(if_else(sex_num == 0L, "Female", "Male"), levels = c("Female", "Male")),
+      age_s = (age_exact_entry - age_mean) / (2 * age_sd)
+    )
+}
+
+build_analysis_datasets_from_source <- function(source_file, pnu_label, snu_label) {
+  assert_file_exists(source_file, "Merged preprocessed data CSV")
+  source_df <- readr::read_csv(
+    source_file,
+    col_types = readr::cols(.default = readr::col_character()),
+    show_col_types = FALSE,
+    progress = FALSE
+  )
+  source_df <- standardize_known_site_labels(source_df, pnu_label, snu_label)
+  validate_source_data(source_df, pnu_label, snu_label)
+
+  analysis_datasets <- list(
+    PNU = prepare_backbone_dataset(
+      split_site_dataset(source_df, pnu_label, "PNU"),
+      dataset_name = "PNU",
+      site_mode = "single"
+    ),
+    SNU = prepare_backbone_dataset(
+      split_site_dataset(source_df, snu_label, "SNU"),
+      dataset_name = "SNU",
+      site_mode = "single"
+    ),
+    merged = prepare_backbone_dataset(
+      source_df,
+      dataset_name = "merged",
+      site_mode = "merged"
+    )
+  )
+
+  if (!all(c("PNU", "SNU", "merged") %in% names(analysis_datasets))) {
+    stop("Analysis dataset bundle must contain `PNU`, `SNU`, and `merged`.", call. = FALSE)
+  }
+
+  analysis_datasets
+}
+
+summarize_observed_followup <- function(analysis_datasets) {
+  bind_rows(lapply(names(analysis_datasets), function(dataset_name) {
+    tibble(
+      source_dataset = dataset_name,
+      max_observed_followup_year = max(as.numeric(analysis_datasets[[dataset_name]]$time_year), na.rm = TRUE)
+    )
+  }))
+}
+
+make_formula_registry <- function() {
+  formula_tbl <- bind_rows(
+    tibble::tibble(
+      dataset = c("PNU", "PNU", "SNU", "SNU"),
+      formula_name = c("base", "interaction", "base", "interaction"),
+      formula_label = c("Base", "Interaction", "Base", "Interaction"),
+      formula_rhs = c(
+        "age_s + sex_num",
+        "age_s + sex_num + age_s:sex_num",
+        "age_s + sex_num",
+        "age_s + sex_num + age_s:sex_num"
+      )
+    ),
+    tibble::tibble(
+      dataset = c("merged", "merged", "merged", "merged"),
+      formula_name = c("base", "interaction", "site_added", "site_interaction"),
+      formula_label = c("Base", "Interaction", "Site-added", "Site + interaction"),
+      formula_rhs = c(
+        "age_s + sex_num",
+        "age_s + sex_num + age_s:sex_num",
+        "age_s + sex_num + site",
+        "age_s + sex_num + age_s:sex_num + site"
+      )
+    )
+  )
+
+  formula_tbl %>%
+    mutate(
+      formula_id = paste(dataset, formula_name, sep = "__"),
+      formula_full = paste("~", formula_rhs),
+      uses_site = grepl("\\bsite\\b", formula_rhs),
+      uses_age_sex_interaction = grepl("age_s:sex_num", formula_rhs, fixed = TRUE),
+      site_branch = if_else(uses_site, "site_adjusted", "site_free"),
+      interaction_branch = if_else(uses_age_sex_interaction, "age_sex_interaction", "no_age_sex_interaction")
+    ) %>%
+    select(
+      dataset,
+      formula_id,
+      formula_name,
+      formula_label,
+      formula_rhs,
+      formula_full,
+      uses_site,
+      uses_age_sex_interaction,
+      site_branch,
+      interaction_branch
+    )
 }
 
 normalize_dataset_label <- function(x) {
@@ -621,20 +836,62 @@ build_subject_prediction_df <- function(df, spec_row, fit, times) {
   }))
 }
 
-make_curve_plot <- function(curve_df, value_col, y_label, title_text) {
+build_plot_group_registry <- function() {
+  tibble::tibble(
+    plot_group = c("all_cohorts", "pnu_only", "snu_only", "merged_only"),
+    group_title = c(
+      "PNU, SNU, and merged cohorts",
+      "PNU cohort",
+      "SNU cohort",
+      "Merged cohort models"
+    ),
+    dataset_keys = list(
+      c("PNU", "SNU", "merged_no_site", "merged_site_adjusted"),
+      "PNU",
+      "SNU",
+      c("merged_no_site", "merged_site_adjusted")
+    ),
+    include_pnu_reference = c(TRUE, TRUE, FALSE, FALSE)
+  )
+}
+
+make_plot_output_file <- function(export_dir, metric_name, plot_group) {
+  file.path(
+    export_dir,
+    paste0("stage7_simple_lognormal_mixture_cure_", metric_name, "__", plot_group, ".png")
+  )
+}
+
+make_curve_plot <- function(curve_df, value_col, y_label, title_text, pnu_reference_year = NA_real_) {
+  dataset_labels <- curve_df %>%
+    distinct(dataset, plot_dataset_label) %>%
+    arrange(match(dataset, dataset_model_registry$dataset))
   yearly_points <- curve_df %>%
     filter(time_horizon_year %in% horizon_years)
+  show_legend <- nrow(dataset_labels) > 1L
+  subtitle_text <- "Cohort-level means of subject-level predictions from frequentist log-normal mixture cure models"
 
-  ggplot(curve_df, aes(x = time_horizon_year, y = .data[[value_col]], color = dataset)) +
+  if (is.finite(pnu_reference_year) && any(curve_df$dataset == "PNU")) {
+    subtitle_text <- paste0(
+      subtitle_text,
+      sprintf(" | Dashed line = PNU max observed follow-up (%.2f years)", pnu_reference_year)
+    )
+  }
+
+  plot_object <- ggplot(curve_df, aes(x = time_horizon_year, y = .data[[value_col]], color = dataset)) +
     geom_line(linewidth = 1.05) +
     geom_point(
       data = yearly_points,
       aes(x = time_horizon_year, y = .data[[value_col]], color = dataset),
       size = 1.8
     ) +
-    scale_color_manual(values = dataset_palette) +
+    scale_color_manual(
+      values = dataset_palette,
+      breaks = dataset_labels$dataset,
+      labels = dataset_labels$plot_dataset_label
+    ) +
     scale_x_continuous(
-      breaks = 0:curve_horizon_max_year,
+      breaks = horizon_years,
       limits = c(0, curve_horizon_max_year),
       expand = expansion(mult = c(0.01, 0.02))
     ) +
@@ -645,17 +902,29 @@ make_curve_plot <- function(curve_df, value_col, y_label, title_text) {
     ) +
     labs(
       title = title_text,
-      subtitle = "Cohort-level means of subject-level predictions from frequentist log-normal mixture cure models",
-      x = "Years after cohort entry",
+      subtitle = subtitle_text,
+      x = "Years after cohort entry (k)",
       y = y_label,
       color = "Dataset"
     ) +
     theme_bw(base_size = 12) +
     theme(
-      legend.position = "top",
+      legend.position = if (show_legend) "top" else "none",
       plot.title = element_text(face = "bold"),
       plot.subtitle = element_text(size = 10)
     )
+
+  if (is.finite(pnu_reference_year) && any(curve_df$dataset == "PNU")) {
+    plot_object <- plot_object +
+      geom_vline(
+        xintercept = pnu_reference_year,
+        linetype = "dashed",
+        linewidth = 0.7,
+        color = dataset_palette[["PNU"]]
+      )
+  }
+
+  plot_object
 }
 
 save_plot_png <- function(plot_object, output_file) {
@@ -669,12 +938,18 @@ save_plot_png <- function(plot_object, output_file) {
   )
 }
 
-# Read Stage 1 Inputs -----------------------------------------------------
-assert_file_exists(stage1_analysis_datasets_file, "Stage 1 analysis datasets RDS")
-assert_file_exists(stage1_formula_registry_file, "Stage 1 formula registry CSV")
-
-analysis_datasets <- readRDS(stage1_analysis_datasets_file)
-formula_registry <- read_csv_checked(stage1_formula_registry_file, "Stage 1 formula registry CSV")
+# Build Direct Analysis Inputs --------------------------------------------
+analysis_datasets <- build_analysis_datasets_from_source(
+  source_file = source_data_file,
+  pnu_label = pnu_site_label,
+  snu_label = snu_site_label
+)
+formula_registry <- make_formula_registry()
+observed_followup_summary <- summarize_observed_followup(analysis_datasets)
+pnu_max_observed_followup_year <- observed_followup_summary %>%
+  filter(source_dataset == "PNU") %>%
+  pull(max_observed_followup_year) %>%
+  .[[1L]]
 
 validate_inputs(analysis_datasets, formula_registry)
 model_specs <- select_model_specs(formula_registry)
@@ -682,7 +957,7 @@ model_specs <- select_model_specs(formula_registry)
 # Fit Models and Build Subject-Level Predictions --------------------------
 curve_time_grid <- sort(unique(c(0, seq(0, curve_horizon_max_year, by = curve_step_year), horizon_years)))
 
-fitted_object_cache <- load_fitted_object_cache(fit_object_rds_file)
+fitted_object_cache <- if (reuse_existing_fit_rds) load_fitted_object_cache(fit_object_rds_file) else list()
 subject_prediction_list <- vector("list", nrow(model_specs))
 
 for (ii in seq_len(nrow(model_specs))) {
@@ -696,7 +971,7 @@ for (ii in seq_len(nrow(model_specs))) {
   )
 
   cached_fit_obj <- fitted_object_cache[[dataset_name]]
-  if (has_usable_cached_fit(cached_fit_obj, spec_row)) {
+  if (reuse_existing_fit_rds && has_usable_cached_fit(cached_fit_obj, spec_row)) {
     fit_obj <- cached_fit_obj
     message(sprintf("[%s] Using cached fitted object from %s", dataset_name, basename(fit_object_rds_file)))
   } else {
@@ -753,6 +1028,10 @@ cohort_curve_df <- subject_prediction_df %>%
 plot_source_df <- cohort_curve_df %>%
   transmute(
     dataset,
+    plot_dataset_label = dplyr::coalesce(
+      unname(plot_dataset_label_lookup[dataset]),
+      dataset_label
+    ),
     model_formula = if_else(
       incidence_rhs == latency_rhs,
       paste0("incidence = latency = ", incidence_rhs),
@@ -772,40 +1051,51 @@ horizon_summary_df <- plot_source_df %>%
   filter(time_horizon_year %in% horizon_years)
 
 # Build Plots -------------------------------------------------------------
-overall_survival_plot <- make_curve_plot(
-  curve_df = plot_source_df,
-  value_col = "overall_survival_prob",
-  y_label = "Overall survival probability",
-  title_text = "Frequentist log-normal mixture cure: overall survival"
-)
+plot_group_registry <- build_plot_group_registry()
+plot_registry <- list()
 
-overall_risk_plot <- make_curve_plot(
-  curve_df = plot_source_df,
-  value_col = "overall_risk_prob",
-  y_label = "Overall cumulative risk",
-  title_text = "Frequentist log-normal mixture cure: overall cumulative risk"
-)
+for (ii in seq_len(nrow(plot_group_registry))) {
+  plot_group <- plot_group_registry$plot_group[[ii]]
+  group_title <- plot_group_registry$group_title[[ii]]
+  group_dataset_keys <- plot_group_registry$dataset_keys[[ii]]
+  include_pnu_reference <- isTRUE(plot_group_registry$include_pnu_reference[[ii]])
+  group_curve_df <- plot_source_df %>%
+    filter(dataset %in% group_dataset_keys)
 
-susceptible_survival_plot <- make_curve_plot(
-  curve_df = plot_source_df,
-  value_col = "susceptible_only_survival_prob",
-  y_label = "Susceptible-only survival probability",
-  title_text = "Frequentist log-normal mixture cure: susceptible-only survival"
-)
+  if (nrow(group_curve_df) == 0L) {
+    stop(sprintf("No plotting rows found for plot group `%s`.", plot_group), call. = FALSE)
+  }
 
-susceptible_risk_plot <- make_curve_plot(
-  curve_df = plot_source_df,
-  value_col = "susceptible_only_risk_prob",
-  y_label = "Susceptible-only cumulative risk",
-  title_text = "Frequentist log-normal mixture cure: susceptible-only cumulative risk"
-)
+  pnu_reference_year <- if (include_pnu_reference) pnu_max_observed_followup_year else NA_real_
 
-plot_registry <- list(
-  overall_survival_curve = overall_survival_plot,
-  overall_risk_curve = overall_risk_plot,
-  susceptible_only_survival_curve = susceptible_survival_plot,
-  susceptible_only_risk_curve = susceptible_risk_plot
-)
+  survival_plot <- make_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_survival_prob",
+    y_label = "Estimated survival probability",
+    title_text = paste0("Estimated survival probability: ", group_title),
+    pnu_reference_year = pnu_reference_year
+  )
+
+  risk_plot <- make_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_risk_prob",
+    y_label = "Estimated risk probability (1 - survival)",
+    title_text = paste0("Estimated risk probability: ", group_title),
+    pnu_reference_year = pnu_reference_year
+  )
+
+  plot_registry[[paste0(plot_group, "__survival_curve")]] <- survival_plot
+  plot_registry[[paste0(plot_group, "__risk_curve")]] <- risk_plot
+
+  save_plot_png(
+    survival_plot,
+    make_plot_output_file(export_path, "estimated_survival_curve", plot_group)
+  )
+  save_plot_png(
+    risk_plot,
+    make_plot_output_file(export_path, "estimated_risk_curve", plot_group)
+  )
+}
 
 # Write Outputs -----------------------------------------------------------
 readr::write_csv(horizon_summary_df, horizon_summary_file)
@@ -820,11 +1110,6 @@ legacy_curve_data_file <- file.path(
 if (file.exists(legacy_curve_data_file)) {
   unlink(legacy_curve_data_file)
 }
-
-save_plot_png(overall_survival_plot, overall_survival_png_file)
-save_plot_png(overall_risk_plot, overall_risk_png_file)
-save_plot_png(susceptible_survival_plot, susceptible_survival_png_file)
-save_plot_png(susceptible_risk_plot, susceptible_risk_png_file)
 
 message("Stage 7 simplified log-normal mixture cure export completed.")
 message("Horizon summary CSV: ", normalizePath(horizon_summary_file, winslash = "/", mustWork = FALSE))
