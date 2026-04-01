@@ -7,7 +7,7 @@
 
 *---*
 
-# *🟧 Core Analysis Schema ===================*
+# *🟧 Core Analysis Schema*
 
 ## *🟩 `id` (character)*
 
@@ -39,7 +39,7 @@
 
 *---*
 
-# *🟧 Sex Variables ===================*
+# *🟧 Sex Variables*
 
 ## *🟩 `sex_num` (numeric; 0/1)*
 
@@ -65,7 +65,7 @@
 
 *---*
 
-# *🟧 Date Variables ===================*
+# *🟧 Date Variables*
 
 ## *🟩 `date_birth` (Date)*
 
@@ -95,7 +95,7 @@
 
 *---*
 
-# *🟧 Age Variables ===================*
+# *🟧 Age Variables*
 
 ## *🟩 `age_int` (numeric/integer; years)*
 
@@ -125,7 +125,7 @@
 
 *---*
 
-# *🟧 Survival Analysis Variables ===================*
+# *🟧 Survival Analysis Variables*
 
 ## *🟩 `days_followup` (numeric; days)*
 
@@ -202,7 +202,7 @@
 
 *---*
 
-# *🟧 Derived / Reference Variable (if needed) ===================*
+# *🟧 Derived / Reference Variable (if needed)*
 
 ## *🟨 `date_followup` (derived; Date)*
 
