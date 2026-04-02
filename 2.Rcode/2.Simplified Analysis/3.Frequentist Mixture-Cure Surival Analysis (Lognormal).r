@@ -40,7 +40,7 @@ results_root_default <- file.path(repo_root, "3.Results files")
 
 source_data_file <- Sys.getenv(
   "STAGE7_SIMPLE_DATA_FILE",
-  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/0.Data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
 )
 export_path <- Sys.getenv(
   "STAGE7_SIMPLE_EXPORT_PATH",
@@ -49,19 +49,22 @@ export_path <- Sys.getenv(
 pnu_site_label <- Sys.getenv("STAGE7_SIMPLE_PNU_SITE_LABEL", unset = "PNU")
 snu_site_label <- Sys.getenv("STAGE7_SIMPLE_SNU_SITE_LABEL", unset = "SNU")
 reuse_existing_fit_rds <- identical(
-  toupper(trimws(Sys.getenv("STAGE7_SIMPLE_REUSE_EXISTING_FIT_RDS", unset = "FALSE"))),
+  toupper(trimws(Sys.getenv("STAGE7_SIMPLE_REUSE_EXISTING_FIT_RDS", unset = "TRUE"))),
   "TRUE"
 )
 
 horizon_years <- 1:10
 curve_horizon_max_year <- 10
 curve_step_year <- 0.05
+detail_tick_step_year <- 0.5
 time_origin_epsilon_year <- 1e-10
 main_risk_scale <- "transition_only_main"
 model_id_value <- "frequentist_mixture_cure_lognormal"
 plot_width_in <- 10
 plot_height_in <- 6
 plot_dpi <- 320
+detail_plot_width_in <- 14
+detail_plot_height_in <- 8
 
 horizon_summary_file <- file.path(
   export_path,
@@ -78,6 +81,10 @@ fit_object_rds_file <- file.path(
 plot_rds_file <- file.path(
   export_path,
   "stage7_simple_lognormal_mixture_cure_plot_objects.rds"
+)
+detail_annotation_file <- file.path(
+  export_path,
+  "stage7_simple_lognormal_mixture_cure_detail_annotation_table.csv"
 )
 
 dataset_model_registry <- tibble::tibble(
@@ -855,6 +862,24 @@ build_plot_group_registry <- function() {
   )
 }
 
+build_dataset_detail_plot_registry <- function() {
+  tibble::tibble(
+    plot_group = c("pnu_detail", "snu_detail", "merged_detail"),
+    group_title = c(
+      "PNU cohort",
+      "SNU cohort",
+      "Merged cohort models"
+    ),
+    dataset_keys = list(
+      "PNU",
+      "SNU",
+      c("merged_no_site", "merged_site_adjusted")
+    ),
+    source_dataset = c("PNU", "SNU", "merged"),
+    include_pnu_reference = c(TRUE, FALSE, FALSE)
+  )
+}
+
 make_plot_output_file <- function(export_dir, metric_name, plot_group) {
   file.path(
     export_dir,
@@ -862,7 +887,60 @@ make_plot_output_file <- function(export_dir, metric_name, plot_group) {
   )
 }
 
-make_curve_plot <- function(curve_df, value_col, y_label, title_text, pnu_reference_year = NA_real_) {
+format_half_year_tick_labels <- function(x) {
+  ifelse(
+    abs(x - round(x)) < 1e-9,
+    formatC(x, format = "f", digits = 0),
+    formatC(x, format = "f", digits = 1)
+  )
+}
+
+build_detail_annotation_table <- function(analysis_df, times) {
+  tibble(
+    time_horizon_year = as.numeric(times),
+    n_at_risk = vapply(
+      times,
+      function(tt) sum(as.numeric(analysis_df$time_year) >= tt, na.rm = TRUE),
+      integer(1)
+    ),
+    n_transition_cumulative = vapply(
+      times,
+      function(tt) sum(as.integer(analysis_df$event_main) == 1L & as.numeric(analysis_df$time_year) <= tt, na.rm = TRUE),
+      integer(1)
+    )
+  )
+}
+
+remove_existing_detail_plot_outputs <- function(export_dir, annotation_file) {
+  if (!dir.exists(export_dir)) {
+    return(invisible(NULL))
+  }
+
+  existing_detail_pngs <- list.files(
+    export_dir,
+    pattern = "^stage7_simple_lognormal_mixture_cure_.*with_counts__.*\\.png$",
+    full.names = TRUE
+  )
+  existing_targets <- unique(c(existing_detail_pngs, annotation_file[file.exists(annotation_file)]))
+
+  if (length(existing_targets) > 0L) {
+    unlink(existing_targets)
+  }
+
+  invisible(existing_targets)
+}
+
+make_curve_plot <- function(
+  curve_df,
+  value_col,
+  y_label,
+  title_text,
+  pnu_reference_year = NA_real_,
+  x_breaks = horizon_years,
+  x_labels = scales::label_number(accuracy = 1),
+  y_lower_limit = 0,
+  caption_text = NULL
+) {
   dataset_labels <- curve_df %>%
     distinct(dataset, plot_dataset_label) %>%
     arrange(match(dataset, dataset_model_registry$dataset))
@@ -891,13 +969,15 @@ make_curve_plot <- function(curve_df, value_col, y_label, title_text, pnu_refere
       labels = dataset_labels$plot_dataset_label
     ) +
     scale_x_continuous(
-      breaks = horizon_years,
+      breaks = x_breaks,
+      labels = x_labels,
       limits = c(0, curve_horizon_max_year),
       expand = expansion(mult = c(0.01, 0.02))
     ) +
     scale_y_continuous(
       labels = scales::label_percent(accuracy = 1),
-      limits = c(0, 1),
+      breaks = seq(0, 1, by = 0.2),
+      limits = c(y_lower_limit, 1),
       expand = expansion(mult = c(0, 0.02))
     ) +
     labs(
@@ -905,14 +985,25 @@ make_curve_plot <- function(curve_df, value_col, y_label, title_text, pnu_refere
       subtitle = subtitle_text,
       x = "Years after cohort entry (k)",
       y = y_label,
-      color = "Dataset"
+      color = "Dataset",
+      caption = caption_text
     ) +
     theme_bw(base_size = 12) +
     theme(
       legend.position = if (show_legend) "top" else "none",
       plot.title = element_text(face = "bold"),
-      plot.subtitle = element_text(size = 10)
-    )
+      plot.subtitle = element_text(size = 10),
+      plot.caption = element_text(size = 9, hjust = 0),
+      plot.caption.position = "plot",
+      plot.margin = margin(
+        t = 5.5,
+        r = 5.5,
+        b = if (y_lower_limit < 0) 28 else 5.5,
+        l = 5.5
+      ),
+      axis.text.x = element_text(size = if (length(x_breaks) > length(horizon_years)) 7 else 9)
+    ) +
+    coord_cartesian(clip = "off")
 
   if (is.finite(pnu_reference_year) && any(curve_df$dataset == "PNU")) {
     plot_object <- plot_object +
@@ -927,15 +1018,117 @@ make_curve_plot <- function(curve_df, value_col, y_label, title_text, pnu_refere
   plot_object
 }
 
-save_plot_png <- function(plot_object, output_file) {
+make_detail_curve_plot <- function(
+  curve_df,
+  value_col,
+  y_label,
+  title_text,
+  analysis_df,
+  pnu_reference_year = NA_real_
+) {
+  detail_times <- seq(0, curve_horizon_max_year, by = detail_tick_step_year)
+  detail_bar_x_limits <- c(
+    -detail_tick_step_year * 0.4,
+    curve_horizon_max_year + detail_tick_step_year * 0.4
+  )
+  curve_plot <- make_curve_plot(
+    curve_df = curve_df,
+    value_col = value_col,
+    y_label = y_label,
+    title_text = title_text,
+    pnu_reference_year = pnu_reference_year,
+    x_breaks = detail_times,
+    x_labels = format_half_year_tick_labels,
+    y_lower_limit = 0,
+    caption_text = NULL
+  ) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin = margin(t = 5.5, r = 5.5, b = 0, l = 5.5)
+    )
+
+  annotation_tbl <- build_detail_annotation_table(analysis_df, detail_times)
+
+  at_risk_plot <- ggplot(annotation_tbl, aes(x = time_horizon_year, y = n_at_risk)) +
+    geom_col(width = detail_tick_step_year * 0.72, fill = "#8FA3BF") +
+    geom_text(aes(label = n_at_risk), vjust = -0.25, size = 2.8) +
+    scale_x_continuous(
+      breaks = detail_times,
+      labels = format_half_year_tick_labels,
+      limits = detail_bar_x_limits,
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(x = NULL, y = "n at risk") +
+    theme_bw(base_size = 11) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(t = 0, r = 5.5, b = 0, l = 5.5)
+    )
+
+  transition_plot <- ggplot(annotation_tbl, aes(x = time_horizon_year, y = n_transition_cumulative)) +
+    geom_col(width = detail_tick_step_year * 0.72, fill = "#D98C6C") +
+    geom_text(aes(label = n_transition_cumulative), vjust = -0.25, size = 2.8) +
+    scale_x_continuous(
+      breaks = detail_times,
+      labels = format_half_year_tick_labels,
+      limits = detail_bar_x_limits,
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(
+      x = "Years after cohort entry (k)",
+      y = "cumulative\ntransitions"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      axis.text.x = element_text(size = 7),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(t = 0, r = 5.5, b = 5.5, l = 5.5)
+    )
+
+  list(
+    curve_plot = curve_plot,
+    at_risk_plot = at_risk_plot,
+    transition_plot = transition_plot,
+    annotation_tbl = annotation_tbl
+  )
+}
+
+save_plot_png <- function(plot_object, output_file, width = plot_width_in, height = plot_height_in) {
   ggplot2::ggsave(
     filename = output_file,
     plot = plot_object,
-    width = plot_width_in,
-    height = plot_height_in,
+    width = width,
+    height = height,
     dpi = plot_dpi,
     units = "in"
   )
+}
+
+save_stacked_plot_png <- function(plot_bundle, output_file, width = detail_plot_width_in, height = detail_plot_height_in) {
+  grDevices::png(filename = output_file, width = width, height = height, units = "in", res = plot_dpi)
+  on.exit(grDevices::dev.off(), add = TRUE)
+
+  grid::grid.newpage()
+  grid::pushViewport(
+    grid::viewport(
+      layout = grid::grid.layout(
+        nrow = 3,
+        ncol = 1,
+        heights = grid::unit(c(3.8, 1.4, 1.4), "null")
+      )
+    )
+  )
+
+  print(plot_bundle$curve_plot, vp = grid::viewport(layout.pos.row = 1, layout.pos.col = 1))
+  print(plot_bundle$at_risk_plot, vp = grid::viewport(layout.pos.row = 2, layout.pos.col = 1))
+  print(plot_bundle$transition_plot, vp = grid::viewport(layout.pos.row = 3, layout.pos.col = 1))
 }
 
 # Build Direct Analysis Inputs --------------------------------------------
@@ -1052,7 +1245,9 @@ horizon_summary_df <- plot_source_df %>%
 
 # Build Plots -------------------------------------------------------------
 plot_group_registry <- build_plot_group_registry()
+detail_plot_group_registry <- build_dataset_detail_plot_registry()
 plot_registry <- list()
+detail_annotation_list <- list()
 
 for (ii in seq_len(nrow(plot_group_registry))) {
   plot_group <- plot_group_registry$plot_group[[ii]]
@@ -1097,9 +1292,77 @@ for (ii in seq_len(nrow(plot_group_registry))) {
   )
 }
 
+remove_existing_detail_plot_outputs(
+  export_dir = export_path,
+  annotation_file = detail_annotation_file
+)
+
+for (ii in seq_len(nrow(detail_plot_group_registry))) {
+  plot_group <- detail_plot_group_registry$plot_group[[ii]]
+  group_title <- detail_plot_group_registry$group_title[[ii]]
+  group_dataset_keys <- detail_plot_group_registry$dataset_keys[[ii]]
+  source_dataset_name <- detail_plot_group_registry$source_dataset[[ii]]
+  include_pnu_reference <- isTRUE(detail_plot_group_registry$include_pnu_reference[[ii]])
+  analysis_df <- analysis_datasets[[source_dataset_name]]
+  group_curve_df <- plot_source_df %>%
+    filter(dataset %in% group_dataset_keys)
+
+  if (nrow(group_curve_df) == 0L) {
+    stop(sprintf("No plotting rows found for detail plot group `%s`.", plot_group), call. = FALSE)
+  }
+
+  pnu_reference_year <- if (include_pnu_reference) pnu_max_observed_followup_year else NA_real_
+
+  detail_annotation_list[[ii]] <- build_detail_annotation_table(
+    analysis_df = analysis_df,
+    times = seq(0, curve_horizon_max_year, by = detail_tick_step_year)
+  ) %>%
+    mutate(
+      plot_group = plot_group,
+      source_dataset = source_dataset_name
+    )
+
+  survival_detail_plot_bundle <- make_detail_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_survival_prob",
+    y_label = "Estimated survival probability",
+    title_text = paste0("Estimated survival probability with risk counts: ", group_title),
+    analysis_df = analysis_df,
+    pnu_reference_year = pnu_reference_year
+  )
+
+  risk_detail_plot_bundle <- make_detail_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_risk_prob",
+    y_label = "Estimated risk probability (1 - survival)",
+    title_text = paste0("Estimated risk probability with risk counts: ", group_title),
+    analysis_df = analysis_df,
+    pnu_reference_year = pnu_reference_year
+  )
+
+  plot_registry[[paste0(plot_group, "__survival_curve_with_counts")]] <- survival_detail_plot_bundle
+  plot_registry[[paste0(plot_group, "__risk_curve_with_counts")]] <- risk_detail_plot_bundle
+
+  save_stacked_plot_png(
+    survival_detail_plot_bundle,
+    make_plot_output_file(export_path, "estimated_survival_curve_with_counts", plot_group),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
+  save_stacked_plot_png(
+    risk_detail_plot_bundle,
+    make_plot_output_file(export_path, "estimated_risk_curve_with_counts", plot_group),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
+}
+
+detail_annotation_df <- bind_rows(detail_annotation_list)
+
 # Write Outputs -----------------------------------------------------------
 readr::write_csv(horizon_summary_df, horizon_summary_file)
 readr::write_csv(plot_source_df, plot_source_file)
+readr::write_csv(detail_annotation_df, detail_annotation_file)
 saveRDS(fitted_object_cache, fit_object_rds_file)
 saveRDS(plot_registry, plot_rds_file)
 

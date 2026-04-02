@@ -38,7 +38,7 @@ dropbox_export_path_default <- "/Users/ido/Library/CloudStorage/Dropbox/Data Ana
 
 source_data_file <- Sys.getenv(
   "STAGE5_SIMPLE_DATA_FILE",
-  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/0.Data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
 )
 export_path <- Sys.getenv(
   "STAGE5_SIMPLE_EXPORT_PATH",
@@ -56,12 +56,16 @@ risk_plot_rds_file <- file.path(export_path, "stage5_simple_lognormal_risk_plot.
 survival_plot_png_file <- file.path(export_path, "stage5_simple_lognormal_survival_plot.png")
 risk_plot_png_file <- file.path(export_path, "stage5_simple_lognormal_risk_plot.png")
 plot_bundle_rds_file <- file.path(export_path, "stage5_simple_lognormal_plot_bundle.rds")
+detail_plot_bundle_rds_file <- file.path(export_path, "stage5_simple_lognormal_detail_plot_bundle.rds")
 
 required_datasets <- c("PNU", "SNU", "merged")
 common_horizons_year <- 1:10
 time_origin_epsilon_year <- 1e-08
 curve_step_year <- 0.05
 curve_horizon_max_year <- 10
+risk_table_step_year <- 0.5
+detail_plot_width_in <- 14
+detail_plot_height_in <- 9
 
 dataset_version_registry <- tibble::tibble(
   dataset_version_key = c("PNU", "SNU", "merged", "merged_site_adjusted"),
@@ -86,7 +90,7 @@ plot_group_registry <- list(
   merged = list(dataset_version_keys = "merged", label = "Merged")
 )
 
-required_packages <- c("readr", "dplyr", "tibble", "ggplot2", "scales", "survival", "flexsurv")
+required_packages <- c("readr", "dplyr", "tibble", "ggplot2", "scales", "survival", "flexsurv", "patchwork")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -846,6 +850,123 @@ add_pnu_followup_line <- function(plot_object, dataset_version_keys, pnu_followu
     )
 }
 
+format_halfyear_labels <- function(x) {
+  vapply(
+    x,
+    FUN.VALUE = character(1),
+    FUN = function(tt) {
+      if (abs(tt - round(tt)) < 1e-8) {
+        as.character(as.integer(round(tt)))
+      } else {
+        format(tt, nsmall = 1, trim = TRUE)
+      }
+    }
+  )
+}
+
+build_dataset_followup_summary <- function(df) {
+  time_grid <- seq(0, curve_horizon_max_year, by = risk_table_step_year)
+
+  tibble(
+    time_year = time_grid,
+    n_at_risk = vapply(
+      time_grid,
+      FUN.VALUE = integer(1),
+      FUN = function(tt) sum(df$time_year >= tt, na.rm = TRUE)
+    ),
+    n_transition_cum = vapply(
+      time_grid,
+      FUN.VALUE = integer(1),
+      FUN = function(tt) sum(df$event_main == 1L & df$time_year <= tt, na.rm = TRUE)
+    )
+  )
+}
+
+prepare_followup_bar_data <- function(followup_summary_df) {
+  bind_rows(
+    followup_summary_df %>%
+      transmute(
+        time_year,
+        metric_label = "At risk",
+        value = as.numeric(n_at_risk)
+      ),
+    followup_summary_df %>%
+      transmute(
+        time_year,
+        metric_label = "Cumulative transitions",
+        value = as.numeric(n_transition_cum)
+      )
+  ) %>%
+    mutate(
+      metric_label = factor(metric_label, levels = c("At risk", "Cumulative transitions"))
+    )
+}
+
+make_followup_annotation_plot <- function(followup_summary_df, dataset_version_keys, pnu_followup_end_year) {
+  bar_df <- prepare_followup_bar_data(followup_summary_df)
+  metric_palette <- c(
+    "At risk" = "#94A3B8",
+    "Cumulative transitions" = "#F59E0B"
+  )
+
+  plot_object <- ggplot(bar_df, aes(x = time_year, y = value, fill = metric_label)) +
+    geom_col(width = risk_table_step_year * 0.72, show.legend = FALSE) +
+    geom_text(
+      aes(label = scales::comma(value)),
+      vjust = -0.25,
+      size = 2.8,
+      color = "#111827"
+    ) +
+    facet_grid(metric_label ~ ., scales = "free_y", switch = "y") +
+    scale_fill_manual(values = metric_palette, drop = FALSE) +
+    scale_x_continuous(
+      breaks = followup_summary_df$time_year,
+      labels = format_halfyear_labels(followup_summary_df$time_year),
+      limits = c(-risk_table_step_year / 2, curve_horizon_max_year + risk_table_step_year / 2),
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_continuous(
+      labels = scales::comma,
+      expand = expansion(mult = c(0, 0.22))
+    ) +
+    labs(
+      x = "Years after cohort entry (0.5-year intervals)",
+      y = "Count"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_line(color = "#E5E7EB", linewidth = 0.3),
+      panel.grid.major.x = element_blank(),
+      axis.text.x = element_text(size = 8, angle = 90, vjust = 0.5, hjust = 1),
+      axis.text.y = element_text(size = 9),
+      strip.placement = "outside",
+      strip.background = element_blank(),
+      strip.text.y.left = element_text(angle = 0, face = "bold", size = 10),
+      legend.position = "none",
+      plot.margin = margin(0, 5.5, 5.5, 5.5)
+    )
+
+  add_pnu_followup_line(plot_object, dataset_version_keys, pnu_followup_end_year)
+}
+
+combine_main_plot_with_followup_table <- function(main_plot, followup_plot) {
+  main_plot <- main_plot +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin = margin(5.5, 5.5, 0, 5.5)
+    )
+
+  patchwork::wrap_plots(
+    main_plot,
+    followup_plot,
+    ncol = 1,
+    heights = c(4.4, 2.6)
+  )
+}
+
 make_probability_plot <- function(
   curve_df,
   yearly_df,
@@ -953,6 +1074,13 @@ make_plot_file_base <- function(plot_type, plot_group_key) {
   file.path(
     export_path,
     paste0("stage5_simple_lognormal_", plot_type, "_plot_", plot_group_key)
+  )
+}
+
+make_detail_plot_file_base <- function(plot_type, plot_group_key) {
+  file.path(
+    export_path,
+    paste0("stage5_simple_lognormal_", plot_type, "_plot_", plot_group_key, "_with_risk_table")
   )
 }
 
@@ -1088,6 +1216,47 @@ risk_plot_bundle <- lapply(
 )
 names(risk_plot_bundle) <- names(plot_group_registry)
 
+detail_plot_group_keys <- setdiff(names(plot_group_registry), "all")
+analysis_dataset_lookup <- c(pnu = "PNU", snu = "SNU", merged = "merged")
+
+followup_summary_bundle <- lapply(
+  detail_plot_group_keys,
+  function(plot_group_key) {
+    build_dataset_followup_summary(analysis_datasets[[analysis_dataset_lookup[[plot_group_key]]]])
+  }
+)
+names(followup_summary_bundle) <- detail_plot_group_keys
+
+detail_survival_plot_bundle <- lapply(
+  detail_plot_group_keys,
+  function(plot_group_key) {
+    combine_main_plot_with_followup_table(
+      main_plot = survival_plot_bundle[[plot_group_key]],
+      followup_plot = make_followup_annotation_plot(
+        followup_summary_df = followup_summary_bundle[[plot_group_key]],
+        dataset_version_keys = plot_group_registry[[plot_group_key]]$dataset_version_keys,
+        pnu_followup_end_year = pnu_followup_end_year
+      )
+    )
+  }
+)
+names(detail_survival_plot_bundle) <- detail_plot_group_keys
+
+detail_risk_plot_bundle <- lapply(
+  detail_plot_group_keys,
+  function(plot_group_key) {
+    combine_main_plot_with_followup_table(
+      main_plot = risk_plot_bundle[[plot_group_key]],
+      followup_plot = make_followup_annotation_plot(
+        followup_summary_df = followup_summary_bundle[[plot_group_key]],
+        dataset_version_keys = plot_group_registry[[plot_group_key]]$dataset_version_keys,
+        pnu_followup_end_year = pnu_followup_end_year
+      )
+    )
+  }
+)
+names(detail_risk_plot_bundle) <- detail_plot_group_keys
+
 survival_plot_obj <- survival_plot_bundle[["all"]]
 risk_plot_obj <- risk_plot_bundle[["all"]]
 
@@ -1106,6 +1275,14 @@ save_plot_rds(
   ),
   plot_bundle_rds_file
 )
+save_plot_rds(
+  list(
+    survival = detail_survival_plot_bundle,
+    risk = detail_risk_plot_bundle,
+    followup_summary = followup_summary_bundle
+  ),
+  detail_plot_bundle_rds_file
+)
 
 for (plot_group_key in setdiff(names(plot_group_registry), "all")) {
   survival_file_base <- make_plot_file_base("survival", plot_group_key)
@@ -1115,6 +1292,24 @@ for (plot_group_key in setdiff(names(plot_group_registry), "all")) {
   save_plot_rds(risk_plot_bundle[[plot_group_key]], paste0(risk_file_base, ".rds"))
   save_plot_png(survival_plot_bundle[[plot_group_key]], paste0(survival_file_base, ".png"))
   save_plot_png(risk_plot_bundle[[plot_group_key]], paste0(risk_file_base, ".png"))
+
+  detail_survival_file_base <- make_detail_plot_file_base("survival", plot_group_key)
+  detail_risk_file_base <- make_detail_plot_file_base("risk", plot_group_key)
+
+  save_plot_rds(detail_survival_plot_bundle[[plot_group_key]], paste0(detail_survival_file_base, ".rds"))
+  save_plot_rds(detail_risk_plot_bundle[[plot_group_key]], paste0(detail_risk_file_base, ".rds"))
+  save_plot_png(
+    detail_survival_plot_bundle[[plot_group_key]],
+    paste0(detail_survival_file_base, ".png"),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
+  save_plot_png(
+    detail_risk_plot_bundle[[plot_group_key]],
+    paste0(detail_risk_file_base, ".png"),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
 }
 
 message("Saved simplified Stage 5 log-normal outputs to: ", export_path)

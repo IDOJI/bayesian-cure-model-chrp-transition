@@ -40,7 +40,7 @@ script_dir <- file.path(repo_root, "2.Rcode", "2.Simplified Analysis")
 
 source_data_file <- Sys.getenv(
   "STAGE3_SIMPLE_DATA_FILE",
-  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/0.Data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
 )
 export_path <- Sys.getenv(
   "STAGE3_SIMPLE_EXPORT_PATH",
@@ -67,6 +67,10 @@ required_datasets <- c("PNU", "SNU", "merged")
 common_horizons_year <- 1:10
 plot_dataset_label_lookup <- c(PNU = "PNU", SNU = "SNU", merged = "Merged")
 dataset_palette <- c(PNU = "#1B4332", SNU = "#2A6F97", Merged = "#C1666B")
+count_metric_palette <- c(
+  "Number at risk" = "#4C78A8",
+  "Cumulative transitions" = "#E07A5F"
+)
 plot_scenarios <- list(
   list(key = "all_cohorts", label = "PNU, SNU, and Merged", datasets = required_datasets),
   list(key = "pnu_only", label = "PNU Only", datasets = c("PNU")),
@@ -74,7 +78,7 @@ plot_scenarios <- list(
   list(key = "merged_only", label = "Merged Only", datasets = c("merged"))
 )
 
-required_packages <- c("readr", "dplyr", "tibble", "survival", "ggplot2", "scales")
+required_packages <- c("readr", "dplyr", "tibble", "survival", "ggplot2", "scales", "patchwork")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -93,6 +97,7 @@ suppressPackageStartupMessages({
   library(survival)
   library(ggplot2)
   library(scales)
+  library(patchwork)
 })
 
 options(stringsAsFactors = FALSE, scipen = 999)
@@ -596,6 +601,272 @@ save_plot_png <- function(plot_object, output_file, width = 10, height = 6, dpi 
   )
 }
 
+build_dataset_count_plot_file_stem <- function(dataset_name, plot_type) {
+  paste0(
+    "stage3_simple_km_",
+    plot_type,
+    "_plot_",
+    tolower(dataset_name),
+    "_with_counts"
+  )
+}
+
+cleanup_existing_with_counts_outputs <- function(output_dir) {
+  old_files <- list.files(
+    output_dir,
+    pattern = "^stage3_simple_km_(survival|risk)_plot_(pnu|snu|merged)_with_counts\\.(png|rds)$",
+    full.names = TRUE
+  )
+
+  if (length(old_files) == 0L) {
+    return(invisible(character()))
+  }
+
+  removed_flag <- file.remove(old_files)
+  if (any(!removed_flag)) {
+    stop(
+      sprintf(
+        "Failed to remove existing with-counts files: %s",
+        paste(basename(old_files[!removed_flag]), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  invisible(old_files[removed_flag])
+}
+
+format_half_year_label <- function(x) {
+  ifelse(
+    abs(x - round(x)) < 1e-08,
+    as.character(as.integer(round(x))),
+    formatC(x, format = "f", digits = 1)
+  )
+}
+
+build_count_bar_data <- function(
+    dataset_name,
+    analysis_df,
+    interval_year = 0.5,
+    max_year = 10
+) {
+  time_grid <- seq(0, max_year, by = interval_year)
+
+  tibble(
+    dataset = dataset_name,
+    time_year = time_grid,
+    n_at_risk = vapply(
+      time_grid,
+      function(tt) sum(analysis_df$time_year >= tt, na.rm = TRUE),
+      integer(1)
+    ),
+    n_transition_cumulative = vapply(
+      time_grid,
+      function(tt) sum(analysis_df$status_num == 1L & analysis_df$time_year <= tt, na.rm = TRUE),
+      integer(1)
+    )
+  )
+}
+
+make_dataset_curve_component <- function(
+    curve_df,
+    yearly_df,
+    dataset_name,
+    dataset_summary,
+    plot_type = c("survival", "risk")
+) {
+  plot_type <- match.arg(plot_type)
+  dataset_label <- unname(plot_dataset_label_lookup[[dataset_name]])
+  dataset_color <- unname(dataset_palette[[dataset_label]])
+  curve_subset <- curve_df %>% filter(dataset == dataset_name)
+  yearly_subset <- yearly_df %>% filter(dataset == dataset_name)
+
+  subtitle_text <- NULL
+  if (identical(dataset_name, "PNU")) {
+    pnu_followup_years <- dataset_summary %>%
+      filter(dataset == "PNU") %>%
+      pull(max_followup_years)
+    subtitle_text <- sprintf("PNU max follow-up = %.2f years", pnu_followup_years[[1L]])
+  }
+
+  y_col <- if (identical(plot_type, "risk")) {
+    "estimated_risk_probability"
+  } else {
+    "estimated_survival_probability"
+  }
+
+  curve_plot <- ggplot(
+    curve_subset,
+    aes(x = time_year, y = .data[[y_col]])
+  ) +
+    geom_step(linewidth = 1.1, color = dataset_color) +
+    geom_point(
+      data = yearly_subset,
+      aes(x = horizon_year, y = .data[[y_col]]),
+      inherit.aes = FALSE,
+      size = 2,
+      color = dataset_color
+    ) +
+    scale_x_continuous(
+      breaks = 1:10,
+      expand = expansion(mult = c(0.01, 0.03))
+    ) +
+    scale_y_continuous(
+      labels = scales::label_percent(accuracy = 1),
+      limits = c(0, 1),
+      expand = expansion(mult = c(0, 0.02))
+    ) +
+    coord_cartesian(xlim = c(0, 10)) +
+    labs(
+      title = if (identical(plot_type, "risk")) {
+        paste("Kaplan-Meier Estimated Risk Probability with Bar Counts -", dataset_label)
+      } else {
+        paste("Kaplan-Meier Estimated Survival Probability with Bar Counts -", dataset_label)
+      },
+      subtitle = subtitle_text,
+      x = NULL,
+      y = if (identical(plot_type, "risk")) {
+        "Estimated risk probability (1 - survival probability)"
+      } else {
+        "Estimated survival probability"
+      }
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin = margin(5.5, 5.5, 0, 5.5)
+    )
+
+  if (identical(dataset_name, "PNU")) {
+    pnu_vertical_line <- dataset_summary %>%
+      filter(dataset == "PNU") %>%
+      transmute(xintercept = max_followup_years)
+
+    curve_plot <- curve_plot +
+      geom_vline(
+        data = pnu_vertical_line,
+        aes(xintercept = xintercept),
+        linewidth = 0.8,
+        linetype = "22",
+        color = dataset_color
+      )
+  }
+
+  curve_plot
+}
+
+make_count_bar_component <- function(
+    count_bar_data,
+    dataset_name,
+    dataset_summary
+) {
+  dataset_label <- unname(plot_dataset_label_lookup[[dataset_name]])
+  dataset_color <- unname(dataset_palette[[dataset_label]])
+
+  count_long_df <- bind_rows(
+    count_bar_data %>%
+      transmute(time_year, metric = "Number at risk", value = n_at_risk),
+    count_bar_data %>%
+      transmute(time_year, metric = "Cumulative transitions", value = n_transition_cumulative)
+  ) %>%
+    mutate(
+      metric = factor(metric, levels = c("Number at risk", "Cumulative transitions"))
+    )
+
+  bar_plot <- ggplot(count_long_df, aes(x = time_year, y = value, fill = metric)) +
+    geom_col(width = 0.40, alpha = 0.90) +
+    geom_text(
+      aes(label = value),
+      vjust = -0.20,
+      size = 2.4
+    ) +
+    facet_grid(metric ~ ., scales = "free_y", switch = "y") +
+    scale_fill_manual(values = count_metric_palette, guide = "none") +
+    scale_x_continuous(
+      breaks = seq(0, 10, by = 0.5),
+      labels = format_half_year_label,
+      expand = expansion(mult = c(0.01, 0.02))
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = c(0, 0.18))
+    ) +
+    coord_cartesian(xlim = c(0, 10), clip = "off") +
+    labs(
+      x = "Years after cohort entry (6-month intervals)",
+      y = NULL
+    ) +
+    theme_bw(base_size = 10) +
+    theme(
+      strip.placement = "outside",
+      strip.background = element_rect(fill = "grey95"),
+      strip.text.y.left = element_text(angle = 0, face = "bold"),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 7),
+      panel.spacing = unit(0.25, "lines"),
+      plot.margin = margin(0, 5.5, 5.5, 5.5)
+    )
+
+  if (identical(dataset_name, "PNU")) {
+    pnu_vertical_line <- dataset_summary %>%
+      filter(dataset == "PNU") %>%
+      transmute(xintercept = max_followup_years)
+
+    bar_plot <- bar_plot +
+      geom_vline(
+        data = pnu_vertical_line,
+        aes(xintercept = xintercept),
+        linewidth = 0.6,
+        linetype = "22",
+        color = dataset_color
+      )
+  }
+
+  bar_plot
+}
+
+make_dataset_count_plot <- function(
+    curve_df,
+    yearly_df,
+    dataset_name,
+    analysis_df,
+    dataset_summary,
+    plot_type = c("survival", "risk")
+) {
+  plot_type <- match.arg(plot_type)
+
+  curve_component <- make_dataset_curve_component(
+    curve_df = curve_df,
+    yearly_df = yearly_df,
+    dataset_name = dataset_name,
+    dataset_summary = dataset_summary,
+    plot_type = plot_type
+  )
+  count_bar_data <- build_count_bar_data(
+    dataset_name = dataset_name,
+    analysis_df = analysis_df
+  )
+  bar_component <- make_count_bar_component(
+    count_bar_data = count_bar_data,
+    dataset_name = dataset_name,
+    dataset_summary = dataset_summary
+  )
+
+  curve_component / bar_component +
+    patchwork::plot_layout(heights = c(2.4, 1.9))
+}
+
+save_patchwork_png <- function(plot_object, output_file, width = 12, height = 9, dpi = 300) {
+  ggplot2::ggsave(
+    filename = output_file,
+    plot = plot_object,
+    width = width,
+    height = height,
+    dpi = dpi,
+    units = "in"
+  )
+}
+
 # Read: direct source data and build analysis inputs ===============================
 message("Reading source data directly from: ", source_data_file)
 analysis_datasets <- build_analysis_datasets_from_source(
@@ -710,6 +981,60 @@ for (scenario in plot_scenarios) {
     save_plot_png(survival_plot_obj, survival_plot_png_file)
     save_plot_png(risk_plot_obj, risk_plot_png_file)
   }
+}
+
+removed_with_count_files <- cleanup_existing_with_counts_outputs(export_path)
+if (length(removed_with_count_files) > 0L) {
+  message("Removed existing with-counts files from: ", export_path)
+}
+
+for (dataset_name in required_datasets) {
+  dataset_survival_count_plot <- make_dataset_count_plot(
+    curve_df = full_curve_plot_data,
+    yearly_df = yearly_plot_data,
+    dataset_name = dataset_name,
+    analysis_df = analysis_datasets[[dataset_name]],
+    dataset_summary = dataset_summary,
+    plot_type = "survival"
+  )
+
+  dataset_risk_count_plot <- make_dataset_count_plot(
+    curve_df = full_curve_plot_data,
+    yearly_df = yearly_plot_data,
+    dataset_name = dataset_name,
+    analysis_df = analysis_datasets[[dataset_name]],
+    dataset_summary = dataset_summary,
+    plot_type = "risk"
+  )
+
+  survival_count_file_stem <- build_dataset_count_plot_file_stem(dataset_name, "survival")
+  risk_count_file_stem <- build_dataset_count_plot_file_stem(dataset_name, "risk")
+
+  survival_count_png_file <- file.path(export_path, paste0(survival_count_file_stem, ".png"))
+  survival_count_rds_file <- file.path(export_path, paste0(survival_count_file_stem, ".rds"))
+  risk_count_png_file <- file.path(export_path, paste0(risk_count_file_stem, ".png"))
+  risk_count_rds_file <- file.path(export_path, paste0(risk_count_file_stem, ".rds"))
+
+  saveRDS(dataset_survival_count_plot, survival_count_rds_file)
+  saveRDS(dataset_risk_count_plot, risk_count_rds_file)
+  save_patchwork_png(dataset_survival_count_plot, survival_count_png_file)
+  save_patchwork_png(dataset_risk_count_plot, risk_count_png_file)
+
+  plot_manifest <- bind_rows(
+    plot_manifest,
+    build_plot_manifest_row(
+      scenario_key = paste0(tolower(dataset_name), "_with_counts"),
+      plot_type = "survival_with_counts",
+      png_file = survival_count_png_file,
+      rds_file = survival_count_rds_file
+    ),
+    build_plot_manifest_row(
+      scenario_key = paste0(tolower(dataset_name), "_with_counts"),
+      plot_type = "risk_with_counts",
+      png_file = risk_count_png_file,
+      rds_file = risk_count_rds_file
+    )
+  )
 }
 
 # Export: simplified outputs ===============================

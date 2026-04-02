@@ -3,8 +3,14 @@ find_repo_root <- function(start_dir) {
   current_dir <- normalizePath(start_dir, winslash = "/", mustWork = FALSE)
 
   repeat {
-    stage8_reference <- file.path(current_dir, "2.Rcode", "stage8A_Bayesian transition-only cure.r")
-    if (file.exists(stage8_reference)) {
+    has_repo_markers <- dir.exists(file.path(current_dir, ".git")) ||
+      (
+        dir.exists(file.path(current_dir, "0.Data")) &&
+          dir.exists(file.path(current_dir, "2.Rcode")) &&
+          dir.exists(file.path(current_dir, "3.Results files"))
+      )
+
+    if (has_repo_markers) {
       return(current_dir)
     }
 
@@ -15,10 +21,7 @@ find_repo_root <- function(start_dir) {
     current_dir <- parent_dir
   }
 
-  stop(
-    "Could not locate the repository root containing `2.Rcode/stage8A_Bayesian transition-only cure.r`.",
-    call. = FALSE
-  )
+  stop("Could not locate the repository root.", call. = FALSE)
 }
 
 command_args <- commandArgs(trailingOnly = FALSE)
@@ -30,33 +33,28 @@ search_start_dir <- if (length(script_arg) > 0L) {
 }
 
 repo_root <- find_repo_root(search_start_dir)
-results_root <- file.path(repo_root, "3.Results files")
 
-sys_name <- Sys.info()[["sysname"]]
-dropbox_results_root <- switch(
-  sys_name,
-  "Darwin" = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
-  "Windows" = "C:/Users/clair/Dropbox/Data Analysis/Survival Analysis On CHR-P_Results",
-  stop("Unsupported OS: ", sys_name)
-)
-
-merged_data_path <- Sys.getenv(
-  "STAGE8A_SIMPLE_MERGED_DATA_PATH",
-  unset = file.path(dropbox_results_root, "data", "MERGED_dataset3_pnu_snu.csv")
+source_data_file <- Sys.getenv(
+  "STAGE8A_SIMPLE_DATA_FILE",
+  unset = Sys.getenv(
+    "STAGE8A_SIMPLE_MERGED_DATA_PATH",
+    unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/0.Data/2.Preprocessed data/Preprocessed_Merged_PNUH_SNUH_Data.csv"
+  )
 )
 export_path <- Sys.getenv(
   "STAGE8A_SIMPLE_EXPORT_PATH",
-  unset = results_root
+  unset = "/Users/ido/Library/CloudStorage/Dropbox/Data Analysis/Survival Analysis of CHR-P Using a Mixture Cure Model/1.Modeling/4.Bayesian Mixture Cure"
 )
+pnu_site_label <- Sys.getenv("STAGE8A_SIMPLE_PNU_SITE_LABEL", unset = "PNU")
+snu_site_label <- Sys.getenv("STAGE8A_SIMPLE_SNU_SITE_LABEL", unset = "SNU")
 
-pnu_site_label <- "PNU"
-snu_site_label <- "SNU"
-
-main_risk_scale <- "transition_only_main"
 horizon_years <- 1:10
 curve_horizon_max_year <- 10
 curve_step_year <- 0.05
+detail_tick_step_year <- 0.5
 time_origin_epsilon_year <- 1e-08
+main_risk_scale <- "transition_only_main"
+output_prefix <- "bayesian_mixture_cure"
 
 stan_chains <- as.integer(Sys.getenv("STAGE8A_SIMPLE_STAN_CHAINS", unset = "4"))
 stan_iter <- as.integer(Sys.getenv("STAGE8A_SIMPLE_STAN_ITER", unset = "2000"))
@@ -75,53 +73,35 @@ reuse_existing_fit_rds <- identical(
 plot_width_in <- 10
 plot_height_in <- 6
 plot_dpi <- 320
+detail_plot_width_in <- 14
+detail_plot_height_in <- 8
 
-horizon_summary_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_horizon_summary.csv"
-)
-curve_data_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_curve_data.csv"
-)
+horizon_summary_file <- file.path(export_path, paste0(output_prefix, "_horizon_summary.csv"))
+plot_source_file <- file.path(export_path, paste0(output_prefix, "_plot_source.csv"))
+detail_annotation_file <- file.path(export_path, paste0(output_prefix, "_detail_annotation_table.csv"))
+model_registry_file <- file.path(export_path, paste0(output_prefix, "_model_registry.csv"))
+parameter_summary_file <- file.path(export_path, paste0(output_prefix, "_parameter_summary.csv"))
+plot_rds_file <- file.path(export_path, paste0(output_prefix, "_plot_objects.rds"))
+trace_plot_pdf_file <- file.path(export_path, paste0(output_prefix, "_trace_plots.pdf"))
 fit_rds_path <- function(model_id, export_dir = export_path) {
-  file.path(
-    export_dir,
-    paste0("stage8A_simple_bayesian_transition_only__", model_id, "__fit.rds")
-  )
+  file.path(export_dir, paste0(output_prefix, "__", model_id, "__fit.rds"))
 }
-model_registry_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_model_registry.csv"
+
+dataset_registry <- tibble::tibble(
+  dataset = c("PNU", "SNU", "merged_no_site", "merged_site_adjusted"),
+  dataset_label = c("PNU", "SNU", "Merged", "Merged (site-adjusted)")
 )
-parameter_summary_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_parameter_summary.csv"
+dataset_order <- dataset_registry$dataset
+
+dataset_palette <- c(
+  "PNU" = "#1B4332",
+  "SNU" = "#2A6F97",
+  "merged_no_site" = "#C1666B",
+  "merged_site_adjusted" = "#B8860B"
 )
-plot_rds_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_plot_objects.rds"
-)
-trace_plot_pdf_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_trace_plots.pdf"
-)
-overall_survival_png_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_overall_survival.png"
-)
-overall_risk_png_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_overall_risk.png"
-)
-susceptible_survival_png_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_susceptible_only_survival.png"
-)
-susceptible_risk_png_file <- file.path(
-  export_path,
-  "stage8A_simple_bayesian_transition_only_susceptible_only_risk.png"
-)
+
+at_risk_bar_fill <- "#8FA3BF"
+transition_bar_fill <- "#D98C6C"
 
 if (anyNA(c(
   stan_chains,
@@ -141,13 +121,6 @@ if (stan_iter <= stan_warmup) {
 if (posterior_prediction_draws < 1L) {
   stop("`posterior_prediction_draws` must be at least 1.", call. = FALSE)
 }
-
-dataset_palette <- c(
-  "PNU" = "#1B4332",
-  "SNU" = "#2A6F97",
-  "merged_no_site" = "#C1666B",
-  "merged_site_adjusted" = "#B8860B"
-)
 
 # Load Packages -----------------------------------------------------------
 required_packages <- c("readr", "dplyr", "tibble", "ggplot2", "scales", "rstan")
@@ -173,7 +146,7 @@ suppressPackageStartupMessages({
 })
 
 options(stringsAsFactors = FALSE, scipen = 999)
-rstan_options(auto_write = FALSE)
+rstan_options(auto_write = TRUE)
 detected_cores <- suppressWarnings(parallel::detectCores(logical = TRUE))
 if (!is.finite(detected_cores) || detected_cores < 1L) {
   detected_cores <- 1L
@@ -182,6 +155,13 @@ options(mc.cores = max(1L, min(stan_chains, detected_cores)))
 dir.create(export_path, recursive = TRUE, showWarnings = FALSE)
 
 # Define Helpers ----------------------------------------------------------
+assert_file_exists <- function(path, label) {
+  if (!file.exists(path)) {
+    stop(sprintf("%s not found: %s", label, path), call. = FALSE)
+  }
+  invisible(path)
+}
+
 safe_numeric <- function(x) {
   suppressWarnings(as.numeric(as.character(x)))
 }
@@ -191,16 +171,19 @@ clip_prob <- function(x, eps = 1e-12) {
 }
 
 read_delimited_or_rds <- function(path) {
-  if (!file.exists(path)) {
-    stop("Input file does not exist: ", path, call. = FALSE)
-  }
-
+  assert_file_exists(path, "Input file")
   ext <- tolower(tools::file_ext(path))
+
   if (grepl("\\.csv\\.gz$", path, ignore.case = TRUE)) {
     return(readr::read_csv(path, show_col_types = FALSE, progress = FALSE))
   }
   if (ext == "csv") {
-    return(readr::read_csv(path, show_col_types = FALSE, progress = FALSE))
+    return(readr::read_csv(
+      path,
+      col_types = readr::cols(.default = readr::col_character()),
+      show_col_types = FALSE,
+      progress = FALSE
+    ))
   }
   if (ext == "rds") {
     return(readRDS(path))
@@ -226,104 +209,21 @@ ensure_draw_matrix <- function(x, ncol_expected) {
   )
 }
 
-# Define Data Preparation -------------------------------------------------
-prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label) {
-  if (is.null(df) || !inherits(df, "data.frame")) {
-    stop("Input dataset is NULL or not a data frame for ", dataset_name, call. = FALSE)
-  }
-
-  required_cols <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
-  missing_cols <- setdiff(required_cols, names(df))
-  if (length(missing_cols) > 0L) {
-    stop("[", dataset_name, "] Missing required columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
-  }
-
-  out <- tibble::as_tibble(df) %>%
-    mutate(
-      id = trimws(as.character(id)),
-      site = trimws(as.character(site)),
-      site = case_when(
-        toupper(site) == toupper(pnu_label) ~ pnu_label,
-        toupper(site) == toupper(snu_label) ~ snu_label,
-        TRUE ~ site
-      ),
-      sex_num = as.integer(safe_numeric(sex_num)),
-      age_exact_entry = safe_numeric(age_exact_entry),
-      days_followup = safe_numeric(days_followup),
-      status_num = as.integer(safe_numeric(status_num))
-    )
-
-  if (nrow(out) == 0L) {
-    stop("[", dataset_name, "] Dataset has zero rows.", call. = FALSE)
-  }
-  if (anyNA(out[required_cols])) {
-    stop("[", dataset_name, "] Missing values detected in required backbone columns.", call. = FALSE)
-  }
-  if (any(out$id == "")) {
-    stop("[", dataset_name, "] Blank `id` values detected.", call. = FALSE)
-  }
-  if (any(!out$sex_num %in% c(0L, 1L))) {
-    stop("[", dataset_name, "] `sex_num` must be coded 0/1.", call. = FALSE)
-  }
-  if (any(!out$status_num %in% c(0L, 1L, 2L))) {
-    stop("[", dataset_name, "] `status_num` must be coded 0/1/2.", call. = FALSE)
-  }
-  if (any(out$days_followup < 0)) {
-    stop("[", dataset_name, "] Negative `days_followup` values detected.", call. = FALSE)
-  }
-
-  if (dataset_name != "merged") {
-    out <- out %>% mutate(site = dataset_name)
-  }
-
-  age_mean <- mean(out$age_exact_entry)
-  age_sd <- stats::sd(out$age_exact_entry)
-  if (is.na(age_sd) || age_sd <= 0) {
-    stop("[", dataset_name, "] `age_exact_entry` must have positive SD.", call. = FALSE)
-  }
-
-  out <- out %>%
-    mutate(
-      unique_person_id = paste(site, id, sep = "_"),
-      time_year = pmax(days_followup / 365.25, time_origin_epsilon_year),
-      age_s = (age_exact_entry - age_mean) / (2 * age_sd),
-      # Transition-only event rule:
-      # - event_main = 1 only when status_num == 1
-      # - status_num == 0 or 2 are treated as censoring in this simplified script
-      event_main = as.integer(status_num == 1L),
-      censor_main = as.integer(status_num %in% c(0L, 2L))
-    )
-
-  if (dplyr::n_distinct(out$unique_person_id) != nrow(out)) {
-    stop("[", dataset_name, "] `site + id` is not unique.", call. = FALSE)
-  }
-  if (dataset_name == "merged" && dplyr::n_distinct(out$site) < 2L) {
-    stop("[merged] Merged dataset must contain at least two site levels.", call. = FALSE)
-  }
-
-  list(
-    data = out,
-    summary = tibble(
-      source_dataset_key = dataset_name,
-      n_subjects = nrow(out),
-      n_transition = sum(out$event_main == 1L),
-      n_censored = sum(out$censor_main == 1L)
-    )
+format_half_year_tick_labels <- function(x) {
+  ifelse(
+    abs(x - round(x)) < 1e-9,
+    formatC(x, format = "f", digits = 0),
+    formatC(x, format = "f", digits = 1)
   )
 }
 
-load_transition_only_datasets <- function(merged_path, pnu_label, snu_label) {
-  merged_raw <- read_delimited_or_rds(merged_path)
-  if (!inherits(merged_raw, "data.frame")) {
-    stop("Merged dataset could not be loaded.", call. = FALSE)
+# Define Data Preparation -------------------------------------------------
+standardize_known_site_labels <- function(df, pnu_label, snu_label) {
+  if (!("site" %in% names(df))) {
+    stop("Input data must contain a `site` column.", call. = FALSE)
   }
 
-  merged_raw <- tibble::as_tibble(merged_raw)
-  if (!("site" %in% names(merged_raw))) {
-    stop("Merged dataset must contain a `site` column.", call. = FALSE)
-  }
-
-  merged_raw <- merged_raw %>%
+  df %>%
     mutate(
       site = trimws(as.character(site)),
       site = case_when(
@@ -332,31 +232,156 @@ load_transition_only_datasets <- function(merged_path, pnu_label, snu_label) {
         TRUE ~ site
       )
     )
+}
 
-  pnu_raw <- merged_raw %>% filter(site == pnu_label)
-  snu_raw <- merged_raw %>% filter(site == snu_label)
+prepare_analysis_dataset <- function(df, dataset_name, pnu_label, snu_label, site_mode = c("single", "merged")) {
+  site_mode <- match.arg(site_mode)
 
-  if (nrow(pnu_raw) == 0L) {
-    stop("No rows found for PNU site label `", pnu_label, "`.", call. = FALSE)
+  required_cols <- c("id", "site", "sex_num", "age_exact_entry", "days_followup", "status_num")
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0L) {
+    stop(
+      sprintf("[%s] Missing required columns: %s", dataset_name, paste(missing_cols, collapse = ", ")),
+      call. = FALSE
+    )
   }
-  if (nrow(snu_raw) == 0L) {
-    stop("No rows found for SNU site label `", snu_label, "`.", call. = FALSE)
+
+  out <- tibble::as_tibble(df) %>%
+    standardize_known_site_labels(pnu_label = pnu_label, snu_label = snu_label) %>%
+    mutate(
+      id = trimws(as.character(id)),
+      sex_num = as.integer(safe_numeric(sex_num)),
+      age_exact_entry = safe_numeric(age_exact_entry),
+      days_followup = safe_numeric(days_followup),
+      status_num = as.integer(safe_numeric(status_num))
+    )
+
+  if (nrow(out) == 0L) {
+    stop(sprintf("[%s] Dataset has zero rows.", dataset_name), call. = FALSE)
+  }
+  if (anyNA(out[, required_cols])) {
+    stop(sprintf("[%s] Missing values detected in required columns.", dataset_name), call. = FALSE)
+  }
+  if (any(out$id == "", na.rm = TRUE)) {
+    stop(sprintf("[%s] Blank `id` values detected.", dataset_name), call. = FALSE)
+  }
+  if (any(out$site == "", na.rm = TRUE)) {
+    stop(sprintf("[%s] Blank `site` values detected.", dataset_name), call. = FALSE)
+  }
+  if (any(!out$sex_num %in% c(0L, 1L), na.rm = TRUE)) {
+    stop(sprintf("[%s] `sex_num` must be coded 0/1.", dataset_name), call. = FALSE)
+  }
+  if (any(!out$status_num %in% c(0L, 1L, 2L), na.rm = TRUE)) {
+    stop(sprintf("[%s] `status_num` must be coded 0/1/2.", dataset_name), call. = FALSE)
+  }
+  if (any(out$days_followup < 0, na.rm = TRUE)) {
+    stop(sprintf("[%s] Negative `days_followup` values detected.", dataset_name), call. = FALSE)
   }
 
-  pnu_obj <- prepare_analysis_dataset(pnu_raw, "PNU", pnu_label, snu_label)
-  snu_obj <- prepare_analysis_dataset(snu_raw, "SNU", pnu_label, snu_label)
-  merged_obj <- prepare_analysis_dataset(merged_raw, "merged", pnu_label, snu_label)
+  n_site_levels <- dplyr::n_distinct(out$site)
+  if (site_mode == "single" && n_site_levels != 1L) {
+    stop(sprintf("[%s] Single-cohort input must contain exactly one site.", dataset_name), call. = FALSE)
+  }
+  if (site_mode == "merged" && n_site_levels < 2L) {
+    stop(sprintf("[%s] Merged input must contain at least two site levels.", dataset_name), call. = FALSE)
+  }
+
+  age_mean <- mean(out$age_exact_entry)
+  age_sd <- stats::sd(out$age_exact_entry)
+  if (is.na(age_sd) || age_sd <= 0) {
+    stop(sprintf("[%s] `age_exact_entry` must have positive SD.", dataset_name), call. = FALSE)
+  }
+
+  out <- out %>%
+    mutate(
+      unique_person_id = paste(site, id, sep = "_"),
+      time_year = pmax(days_followup / 365.25, time_origin_epsilon_year),
+      age_s = (age_exact_entry - age_mean) / (2 * age_sd),
+      event_main = as.integer(status_num == 1L),
+      censor_main = as.integer(status_num %in% c(0L, 2L))
+    )
+
+  if (dplyr::n_distinct(out$unique_person_id) != nrow(out)) {
+    stop(sprintf("[%s] `site + id` is not unique.", dataset_name), call. = FALSE)
+  }
+
+  out
+}
+
+build_analysis_datasets_from_source <- function(source_file, pnu_label, snu_label) {
+  source_df <- read_delimited_or_rds(source_file)
+  if (!inherits(source_df, "data.frame")) {
+    stop("Merged preprocessed dataset could not be loaded as a data frame.", call. = FALSE)
+  }
+
+  source_df <- tibble::as_tibble(source_df) %>%
+    standardize_known_site_labels(pnu_label = pnu_label, snu_label = snu_label)
+
+  pnu_df <- source_df %>% filter(site == pnu_label)
+  snu_df <- source_df %>% filter(site == snu_label)
+
+  if (nrow(pnu_df) == 0L) {
+    stop("No PNU rows were found after standardizing `site` labels.", call. = FALSE)
+  }
+  if (nrow(snu_df) == 0L) {
+    stop("No SNU rows were found after standardizing `site` labels.", call. = FALSE)
+  }
 
   list(
-    datasets = list(
-      PNU = pnu_obj$data,
-      SNU = snu_obj$data,
-      merged = merged_obj$data
+    PNU = prepare_analysis_dataset(
+      df = pnu_df,
+      dataset_name = "PNU",
+      pnu_label = pnu_label,
+      snu_label = snu_label,
+      site_mode = "single"
     ),
-    dataset_summary = bind_rows(pnu_obj$summary, snu_obj$summary, merged_obj$summary)
+    SNU = prepare_analysis_dataset(
+      df = snu_df,
+      dataset_name = "SNU",
+      pnu_label = pnu_label,
+      snu_label = snu_label,
+      site_mode = "single"
+    ),
+    merged = prepare_analysis_dataset(
+      df = source_df,
+      dataset_name = "merged",
+      pnu_label = pnu_label,
+      snu_label = snu_label,
+      site_mode = "merged"
+    )
   )
 }
 
+summarize_analysis_datasets <- function(analysis_datasets) {
+  bind_rows(lapply(names(analysis_datasets), function(dataset_name) {
+    df <- analysis_datasets[[dataset_name]]
+    tibble(
+      source_dataset = dataset_name,
+      n_subjects = nrow(df),
+      n_transition = sum(df$event_main == 1L, na.rm = TRUE),
+      n_censored = sum(df$censor_main == 1L, na.rm = TRUE),
+      max_observed_followup_year = max(as.numeric(df$time_year), na.rm = TRUE)
+    )
+  }))
+}
+
+build_detail_annotation_table <- function(analysis_df, times) {
+  tibble(
+    time_horizon_year = as.numeric(times),
+    n_at_risk = vapply(
+      times,
+      function(tt) sum(as.numeric(analysis_df$time_year) >= tt, na.rm = TRUE),
+      integer(1)
+    ),
+    n_transition_cumulative = vapply(
+      times,
+      function(tt) sum(as.integer(analysis_df$event_main) == 1L & as.numeric(analysis_df$time_year) <= tt, na.rm = TRUE),
+      integer(1)
+    )
+  )
+}
+
+# Define Priors and Model Specifications ---------------------------------
 build_prior_artifacts <- function() {
   list(
     alpha_gp_vdw = -9.581369553169,
@@ -381,13 +406,10 @@ build_prior_artifacts <- function() {
   )
 }
 
-# Define Model Specifications ---------------------------------------------
 build_model_spec_registry <- function() {
-  # Retained main-model rule for the merged site-adjusted branch:
-  # follow the Stage 8A reference selection that places `site` in both the
-  # incidence part and the latency part (`site_in_both`).
   tibble(
     dataset = c("PNU", "SNU", "merged_no_site", "merged_site_adjusted"),
+    dataset_label = c("PNU", "SNU", "Merged", "Merged (site-adjusted)"),
     source_dataset_key = c("PNU", "SNU", "merged", "merged"),
     model_id = c(
       "PNU-L0-LN-ANCH-NOSITE",
@@ -457,7 +479,7 @@ make_design_bundle <- function(df, model_row, prior_artifacts, snu_label) {
 }
 
 # Define Stan Model -------------------------------------------------------
-compile_stage8a_simple_stan_model <- function() {
+compile_bayesian_mixture_cure_stan_model <- function() {
   stan_code <- r"(
 data {
   int<lower=1> N;
@@ -533,7 +555,7 @@ model {
 
   rstan::stan_model(
     model_code = stan_code,
-    model_name = "stage8A_simple_transition_only_bayesian_lognormal_cure"
+    model_name = "bayesian_lognormal_mixture_cure"
   )
 }
 
@@ -616,6 +638,7 @@ extract_parameter_summary <- function(fit, model_row, K_inc, K_lat) {
 
   tibble(
     dataset = model_row$dataset[[1L]],
+    dataset_label = model_row$dataset_label[[1L]],
     model_id = model_row$model_id[[1L]],
     site_adjustment_flag = as.logical(model_row$site_adjustment_flag[[1L]]),
     parameter = rownames(fit_summary),
@@ -629,9 +652,19 @@ extract_parameter_summary <- function(fit, model_row, K_inc, K_lat) {
   )
 }
 
-make_model_registry_row <- function(model_row, analysis_df, design_bundle, elapsed_seconds, divergent_transitions, treedepth_hits, prediction_draws, parameter_summary_df) {
+make_model_registry_row <- function(
+  model_row,
+  analysis_df,
+  design_bundle,
+  elapsed_seconds,
+  divergent_transitions,
+  treedepth_hits,
+  prediction_draws,
+  parameter_summary_df
+) {
   tibble(
     dataset = model_row$dataset[[1L]],
+    dataset_label = model_row$dataset_label[[1L]],
     source_dataset_key = model_row$source_dataset_key[[1L]],
     model_id = model_row$model_id[[1L]],
     structural_model_id = model_row$structural_model_id[[1L]],
@@ -735,12 +768,11 @@ write_trace_plot_pdf <- function(fit_records, output_file) {
   invisible(TRUE)
 }
 
-# Define Prediction Helpers -----------------------------------------------
-build_curve_prediction_df_from_draws <- function(model_row, n_subjects, design_bundle, draw_bundle, times) {
-  # The export tables are built by first computing subject-level predictions,
-  # then averaging those subject-level posterior means to the cohort level.
+# Define Prediction Helpers ----------------------------------------------
+build_curve_prediction_df_from_draws <- function(model_row, design_bundle, draw_bundle, times) {
   X_inc <- design_bundle$X_inc
   X_lat <- design_bundle$X_lat
+  n_subjects <- nrow(X_inc)
 
   eta_inc_mat <- X_inc %*% t(draw_bundle$beta_inc)
   eta_inc_mat <- sweep(eta_inc_mat, 2, draw_bundle$alpha_inc, "+")
@@ -752,7 +784,7 @@ build_curve_prediction_df_from_draws <- function(model_row, n_subjects, design_b
 
   subject_susceptible_fraction <- rowMeans(pi_mat)
 
-  curve_rows <- lapply(times, function(tt) {
+  bind_rows(lapply(times, function(tt) {
     if (tt <= 0) {
       subject_susceptible_only_survival <- rep(1, n_subjects)
       subject_overall_survival <- rep(1, n_subjects)
@@ -767,80 +799,304 @@ build_curve_prediction_df_from_draws <- function(model_row, n_subjects, design_b
 
     tibble(
       dataset = model_row$dataset[[1L]],
+      dataset_label = model_row$dataset_label[[1L]],
+      plot_dataset_label = model_row$dataset_label[[1L]],
       model_id = model_row$model_id[[1L]],
       site_adjustment_flag = as.logical(model_row$site_adjustment_flag[[1L]]),
       risk_scale = main_risk_scale,
-      time_year = as.numeric(tt),
+      time_horizon_year = as.numeric(tt),
       susceptible_fraction = mean(subject_susceptible_fraction),
+      cure_fraction = mean(1 - subject_susceptible_fraction),
       overall_survival_prob = mean(subject_overall_survival),
       overall_risk_prob = mean(1 - subject_overall_survival),
       susceptible_only_survival_prob = mean(subject_susceptible_only_survival),
       susceptible_only_risk_prob = mean(1 - subject_susceptible_only_survival),
       n_subjects = as.integer(n_subjects)
     )
-  })
-
-  bind_rows(curve_rows)
+  }))
 }
 
-# Build Plots -------------------------------------------------------------
-make_curve_plot <- function(curve_df, value_col, y_label, title_text) {
-  yearly_points <- curve_df %>%
-    filter(time_year %in% as.numeric(horizon_years))
+# Build Plot Helpers ------------------------------------------------------
+build_plot_group_registry <- function() {
+  tibble(
+    plot_group = c("all_cohorts", "pnu_only", "snu_only", "merged_only"),
+    group_title = c(
+      "PNU, SNU, and merged cohort models",
+      "PNU cohort",
+      "SNU cohort",
+      "Merged cohort models"
+    ),
+    dataset_keys = list(
+      c("PNU", "SNU", "merged_no_site", "merged_site_adjusted"),
+      "PNU",
+      "SNU",
+      c("merged_no_site", "merged_site_adjusted")
+    ),
+    include_pnu_reference = c(TRUE, TRUE, FALSE, FALSE)
+  )
+}
 
-  ggplot(curve_df, aes(x = time_year, y = .data[[value_col]], color = dataset)) +
+build_dataset_detail_plot_registry <- function() {
+  tibble(
+    plot_group = c("pnu_detail", "snu_detail", "merged_detail"),
+    group_title = c(
+      "PNU cohort",
+      "SNU cohort",
+      "Merged cohort models"
+    ),
+    dataset_keys = list(
+      "PNU",
+      "SNU",
+      c("merged_no_site", "merged_site_adjusted")
+    ),
+    source_dataset = c("PNU", "SNU", "merged"),
+    include_pnu_reference = c(TRUE, FALSE, FALSE)
+  )
+}
+
+make_plot_output_file <- function(export_dir, metric_name, plot_group) {
+  file.path(export_dir, paste0(output_prefix, "_", metric_name, "__", plot_group, ".png"))
+}
+
+remove_existing_detail_plot_outputs <- function(export_dir, annotation_file) {
+  if (!dir.exists(export_dir)) {
+    return(invisible(NULL))
+  }
+
+  existing_detail_pngs <- list.files(
+    export_dir,
+    pattern = paste0("^", output_prefix, "_.*with_counts__.*\\.png$"),
+    full.names = TRUE
+  )
+  existing_targets <- unique(c(existing_detail_pngs, annotation_file[file.exists(annotation_file)]))
+
+  if (length(existing_targets) > 0L) {
+    unlink(existing_targets)
+  }
+
+  invisible(existing_targets)
+}
+
+make_curve_plot <- function(
+  curve_df,
+  value_col,
+  y_label,
+  title_text,
+  pnu_reference_year = NA_real_,
+  x_breaks = horizon_years,
+  x_labels = scales::label_number(accuracy = 1),
+  y_lower_limit = 0,
+  caption_text = NULL
+) {
+  dataset_labels <- curve_df %>%
+    distinct(dataset, plot_dataset_label) %>%
+    arrange(match(dataset, dataset_order))
+
+  yearly_points <- curve_df %>%
+    filter(time_horizon_year %in% horizon_years)
+
+  show_legend <- nrow(dataset_labels) > 1L
+  subtitle_text <- "Cohort-level posterior means from direct Bayesian log-normal mixture cure model fits"
+
+  if (is.finite(pnu_reference_year) && any(curve_df$dataset == "PNU")) {
+    subtitle_text <- paste0(
+      subtitle_text,
+      sprintf(" | Dashed line = PNU max observed follow-up (%.2f years)", pnu_reference_year)
+    )
+  }
+
+  plot_object <- ggplot(curve_df, aes(x = time_horizon_year, y = .data[[value_col]], color = dataset)) +
     geom_line(linewidth = 1.05) +
     geom_point(
       data = yearly_points,
-      aes(x = time_year, y = .data[[value_col]], color = dataset),
+      aes(x = time_horizon_year, y = .data[[value_col]], color = dataset),
       size = 1.8
     ) +
-    scale_color_manual(values = dataset_palette) +
+    scale_color_manual(
+      values = dataset_palette,
+      breaks = dataset_labels$dataset,
+      labels = dataset_labels$plot_dataset_label
+    ) +
     scale_x_continuous(
-      breaks = 0:curve_horizon_max_year,
+      breaks = x_breaks,
+      labels = x_labels,
       limits = c(0, curve_horizon_max_year),
       expand = expansion(mult = c(0.01, 0.02))
     ) +
     scale_y_continuous(
       labels = scales::label_percent(accuracy = 1),
-      limits = c(0, 1),
+      breaks = seq(0, 1, by = 0.2),
+      limits = c(y_lower_limit, 1),
       expand = expansion(mult = c(0, 0.02))
     ) +
     labs(
       title = title_text,
-      subtitle = "Cohort-level means of subject-level posterior predictions from simplified Stage 8A Bayesian log-normal mixture cure models",
-      x = "Years after cohort entry",
+      subtitle = subtitle_text,
+      x = "Years after cohort entry (k)",
       y = y_label,
-      color = "Dataset"
+      color = "Dataset",
+      caption = caption_text
     ) +
     theme_bw(base_size = 12) +
     theme(
-      legend.position = "top",
+      legend.position = if (show_legend) "top" else "none",
       plot.title = element_text(face = "bold"),
-      plot.subtitle = element_text(size = 10)
-    )
+      plot.subtitle = element_text(size = 10),
+      plot.caption = element_text(size = 9, hjust = 0),
+      plot.caption.position = "plot",
+      plot.margin = margin(
+        t = 5.5,
+        r = 5.5,
+        b = if (y_lower_limit < 0) 28 else 5.5,
+        l = 5.5
+      ),
+      axis.text.x = element_text(size = if (length(x_breaks) > length(horizon_years)) 7 else 9)
+    ) +
+    coord_cartesian(clip = "off")
+
+  if (is.finite(pnu_reference_year) && any(curve_df$dataset == "PNU")) {
+    plot_object <- plot_object +
+      geom_vline(
+        xintercept = pnu_reference_year,
+        linetype = "dashed",
+        linewidth = 0.7,
+        color = dataset_palette[["PNU"]]
+      )
+  }
+
+  plot_object
 }
 
-save_plot_png <- function(plot_object, output_file) {
+make_detail_curve_plot <- function(
+  curve_df,
+  value_col,
+  y_label,
+  title_text,
+  analysis_df,
+  pnu_reference_year = NA_real_
+) {
+  detail_times <- seq(0, curve_horizon_max_year, by = detail_tick_step_year)
+  detail_bar_x_limits <- c(
+    -detail_tick_step_year * 0.4,
+    curve_horizon_max_year + detail_tick_step_year * 0.4
+  )
+
+  curve_plot <- make_curve_plot(
+    curve_df = curve_df,
+    value_col = value_col,
+    y_label = y_label,
+    title_text = title_text,
+    pnu_reference_year = pnu_reference_year,
+    x_breaks = detail_times,
+    x_labels = format_half_year_tick_labels,
+    y_lower_limit = 0,
+    caption_text = NULL
+  ) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.margin = margin(t = 5.5, r = 5.5, b = 0, l = 5.5)
+    )
+
+  annotation_tbl <- build_detail_annotation_table(analysis_df, detail_times)
+
+  at_risk_plot <- ggplot(annotation_tbl, aes(x = time_horizon_year, y = n_at_risk)) +
+    geom_col(width = detail_tick_step_year * 0.72, fill = at_risk_bar_fill) +
+    geom_text(aes(label = n_at_risk), vjust = -0.25, size = 2.8) +
+    scale_x_continuous(
+      breaks = detail_times,
+      labels = format_half_year_tick_labels,
+      limits = detail_bar_x_limits,
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(x = NULL, y = "n at risk") +
+    theme_bw(base_size = 11) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.title.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(t = 0, r = 5.5, b = 0, l = 5.5)
+    )
+
+  transition_plot <- ggplot(annotation_tbl, aes(x = time_horizon_year, y = n_transition_cumulative)) +
+    geom_col(width = detail_tick_step_year * 0.72, fill = transition_bar_fill) +
+    geom_text(aes(label = n_transition_cumulative), vjust = -0.25, size = 2.8) +
+    scale_x_continuous(
+      breaks = detail_times,
+      labels = format_half_year_tick_labels,
+      limits = detail_bar_x_limits,
+      expand = expansion(mult = c(0, 0))
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(
+      x = "Years after cohort entry (k)",
+      y = "cumulative\ntransitions"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      axis.text.x = element_text(size = 7),
+      panel.grid.minor = element_blank(),
+      plot.margin = margin(t = 0, r = 5.5, b = 5.5, l = 5.5)
+    )
+
+  list(
+    curve_plot = curve_plot,
+    at_risk_plot = at_risk_plot,
+    transition_plot = transition_plot,
+    annotation_tbl = annotation_tbl
+  )
+}
+
+save_plot_png <- function(plot_object, output_file, width = plot_width_in, height = plot_height_in) {
   ggplot2::ggsave(
     filename = output_file,
     plot = plot_object,
-    width = plot_width_in,
-    height = plot_height_in,
+    width = width,
+    height = height,
     dpi = plot_dpi,
     units = "in"
   )
 }
 
-# Load Data and Compile Model ---------------------------------------------
-loaded_objects <- load_transition_only_datasets(
-  merged_path = merged_data_path,
+save_stacked_plot_png <- function(plot_bundle, output_file, width = detail_plot_width_in, height = detail_plot_height_in) {
+  grDevices::png(filename = output_file, width = width, height = height, units = "in", res = plot_dpi)
+  on.exit(grDevices::dev.off(), add = TRUE)
+
+  grid::grid.newpage()
+  grid::pushViewport(
+    grid::viewport(
+      layout = grid::grid.layout(
+        nrow = 3,
+        ncol = 1,
+        heights = grid::unit(c(3.8, 1.4, 1.4), "null")
+      )
+    )
+  )
+
+  print(plot_bundle$curve_plot, vp = grid::viewport(layout.pos.row = 1, layout.pos.col = 1))
+  print(plot_bundle$at_risk_plot, vp = grid::viewport(layout.pos.row = 2, layout.pos.col = 1))
+  print(plot_bundle$transition_plot, vp = grid::viewport(layout.pos.row = 3, layout.pos.col = 1))
+}
+
+# Load Data and Compile Model --------------------------------------------
+analysis_datasets <- build_analysis_datasets_from_source(
+  source_file = source_data_file,
   pnu_label = pnu_site_label,
   snu_label = snu_site_label
 )
+dataset_summary <- summarize_analysis_datasets(analysis_datasets)
+pnu_max_observed_followup_year <- dataset_summary %>%
+  filter(source_dataset == "PNU") %>%
+  pull(max_observed_followup_year) %>%
+  .[[1L]]
 
-analysis_datasets <- loaded_objects$datasets
-dataset_summary <- loaded_objects$dataset_summary
+if (!is.finite(pnu_max_observed_followup_year)) {
+  stop("Could not derive the PNU maximum observed follow-up in years.", call. = FALSE)
+}
+
 prior_artifacts <- build_prior_artifacts()
 model_spec_registry <- build_model_spec_registry() %>%
   mutate(fit_rds_path = vapply(model_id, fit_rds_path, character(1)))
@@ -854,13 +1110,13 @@ curve_time_grid <- sort(unique(round(c(
 n_models_requiring_fit <- sum(!(reuse_existing_fit_rds & file.exists(model_spec_registry$fit_rds_path)))
 if (n_models_requiring_fit > 0L) {
   message(
-    "Compiling simplified Stage 8A Bayesian log-normal mixture cure model for ",
+    "Compiling Bayesian log-normal mixture cure model for ",
     n_models_requiring_fit,
     " model(s) that still need fitting."
   )
-  stan_model_compiled <- compile_stage8a_simple_stan_model()
+  stan_model_compiled <- compile_bayesian_mixture_cure_stan_model()
 } else {
-  message("All model fit RDS files already exist. Stan compilation skipped.")
+  message("All fitted-model RDS files already exist. Stan compilation skipped.")
   stan_model_compiled <- NULL
 }
 
@@ -931,7 +1187,6 @@ for (ii in seq_len(nrow(model_spec_registry))) {
 
   curve_data_list[[ii]] <- build_curve_prediction_df_from_draws(
     model_row = model_row,
-    n_subjects = nrow(analysis_df),
     design_bundle = design_bundle,
     draw_bundle = draw_bundle,
     times = curve_time_grid
@@ -972,7 +1227,11 @@ for (ii in seq_len(nrow(model_spec_registry))) {
 
   message(
     "  ",
-    if (isTRUE(reused_existing_fit)) "reuse completed" else paste0("completed in ", formatC(elapsed_seconds, digits = 1L, format = "f"), " sec"),
+    if (isTRUE(reused_existing_fit)) {
+      "reuse completed"
+    } else {
+      paste0("completed in ", formatC(elapsed_seconds, digits = 1L, format = "f"), " sec")
+    },
     "; divergent=",
     divergent_transitions,
     ", treedepth_hits=",
@@ -983,89 +1242,170 @@ for (ii in seq_len(nrow(model_spec_registry))) {
 }
 
 curve_data_df <- bind_rows(curve_data_list) %>%
-  mutate(time_year = round(as.numeric(time_year), 10)) %>%
-  arrange(match(dataset, model_spec_registry$dataset), time_year)
+  mutate(time_horizon_year = round(as.numeric(time_horizon_year), 10)) %>%
+  arrange(match(dataset, dataset_order), time_horizon_year)
+
 parameter_summary_df <- bind_rows(parameter_summary_list) %>%
-  arrange(match(dataset, model_spec_registry$dataset), model_id, parameter)
+  arrange(match(dataset, dataset_order), model_id, parameter)
+
 model_registry_df <- bind_rows(model_registry_list) %>%
-  arrange(match(dataset, model_spec_registry$dataset), model_id)
+  arrange(match(dataset, dataset_order), model_id)
 
-# Derive Horizon Summary --------------------------------------------------
-horizon_lookup <- tibble(
-  time_year = as.numeric(horizon_years),
-  horizon_year = as.integer(horizon_years)
-)
-
-horizon_summary_df <- curve_data_df %>%
-  inner_join(horizon_lookup, by = "time_year") %>%
+plot_source_df <- curve_data_df %>%
   transmute(
-    dataset = dataset,
-    model_id = model_id,
-    site_adjustment_flag = site_adjustment_flag,
-    risk_scale = risk_scale,
-    horizon_year = horizon_year,
-    susceptible_fraction = susceptible_fraction,
-    overall_survival_prob = overall_survival_prob,
-    overall_risk_prob = overall_risk_prob,
-    susceptible_only_survival_prob = susceptible_only_survival_prob,
-    susceptible_only_risk_prob = susceptible_only_risk_prob,
-    n_subjects = n_subjects
+    dataset,
+    dataset_label,
+    plot_dataset_label,
+    model_id,
+    site_adjustment_flag,
+    risk_scale,
+    time_horizon_year,
+    susceptible_fraction,
+    cure_fraction,
+    overall_survival_prob,
+    overall_risk_prob,
+    susceptible_only_survival_prob,
+    susceptible_only_risk_prob,
+    n_subjects
   ) %>%
-  arrange(match(dataset, model_spec_registry$dataset), horizon_year)
+  arrange(match(dataset, dataset_order), time_horizon_year)
+
+horizon_summary_df <- plot_source_df %>%
+  filter(time_horizon_year %in% horizon_years) %>%
+  mutate(horizon_year = as.integer(time_horizon_year)) %>%
+  arrange(match(dataset, dataset_order), horizon_year)
 
 # Build Plot Objects ------------------------------------------------------
-overall_survival_plot <- make_curve_plot(
-  curve_df = curve_data_df,
-  value_col = "overall_survival_prob",
-  y_label = "Overall survival probability",
-  title_text = "Stage 8A simplified Bayesian mixture cure: overall survival"
+plot_group_registry <- build_plot_group_registry()
+detail_plot_group_registry <- build_dataset_detail_plot_registry()
+plot_registry <- list()
+detail_annotation_list <- list()
+
+for (ii in seq_len(nrow(plot_group_registry))) {
+  plot_group <- plot_group_registry$plot_group[[ii]]
+  group_title <- plot_group_registry$group_title[[ii]]
+  group_dataset_keys <- plot_group_registry$dataset_keys[[ii]]
+  include_pnu_reference <- isTRUE(plot_group_registry$include_pnu_reference[[ii]])
+  group_curve_df <- plot_source_df %>%
+    filter(dataset %in% group_dataset_keys)
+
+  if (nrow(group_curve_df) == 0L) {
+    stop(sprintf("No plotting rows found for plot group `%s`.", plot_group), call. = FALSE)
+  }
+
+  pnu_reference_year <- if (include_pnu_reference) pnu_max_observed_followup_year else NA_real_
+
+  survival_plot <- make_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_survival_prob",
+    y_label = "Estimated survival probability",
+    title_text = paste0("Estimated survival probability: ", group_title),
+    pnu_reference_year = pnu_reference_year
+  )
+
+  risk_plot <- make_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_risk_prob",
+    y_label = "Estimated risk probability (1 - survival)",
+    title_text = paste0("Estimated risk probability: ", group_title),
+    pnu_reference_year = pnu_reference_year
+  )
+
+  plot_registry[[paste0(plot_group, "__survival_curve")]] <- survival_plot
+  plot_registry[[paste0(plot_group, "__risk_curve")]] <- risk_plot
+
+  save_plot_png(
+    survival_plot,
+    make_plot_output_file(export_path, "estimated_survival_curve", plot_group)
+  )
+  save_plot_png(
+    risk_plot,
+    make_plot_output_file(export_path, "estimated_risk_curve", plot_group)
+  )
+}
+
+remove_existing_detail_plot_outputs(
+  export_dir = export_path,
+  annotation_file = detail_annotation_file
 )
 
-overall_risk_plot <- make_curve_plot(
-  curve_df = curve_data_df,
-  value_col = "overall_risk_prob",
-  y_label = "Overall cumulative risk",
-  title_text = "Stage 8A simplified Bayesian mixture cure: overall cumulative risk"
-)
+for (ii in seq_len(nrow(detail_plot_group_registry))) {
+  plot_group <- detail_plot_group_registry$plot_group[[ii]]
+  group_title <- detail_plot_group_registry$group_title[[ii]]
+  group_dataset_keys <- detail_plot_group_registry$dataset_keys[[ii]]
+  source_dataset_name <- detail_plot_group_registry$source_dataset[[ii]]
+  include_pnu_reference <- isTRUE(detail_plot_group_registry$include_pnu_reference[[ii]])
+  analysis_df <- analysis_datasets[[source_dataset_name]]
+  group_curve_df <- plot_source_df %>%
+    filter(dataset %in% group_dataset_keys)
 
-susceptible_survival_plot <- make_curve_plot(
-  curve_df = curve_data_df,
-  value_col = "susceptible_only_survival_prob",
-  y_label = "Susceptible-only survival probability",
-  title_text = "Stage 8A simplified Bayesian mixture cure: susceptible-only survival"
-)
+  if (nrow(group_curve_df) == 0L) {
+    stop(sprintf("No plotting rows found for detail plot group `%s`.", plot_group), call. = FALSE)
+  }
 
-susceptible_risk_plot <- make_curve_plot(
-  curve_df = curve_data_df,
-  value_col = "susceptible_only_risk_prob",
-  y_label = "Susceptible-only cumulative risk",
-  title_text = "Stage 8A simplified Bayesian mixture cure: susceptible-only cumulative risk"
-)
+  pnu_reference_year <- if (include_pnu_reference) pnu_max_observed_followup_year else NA_real_
 
-plot_registry <- list(
-  overall_survival_curve = overall_survival_plot,
-  overall_risk_curve = overall_risk_plot,
-  susceptible_only_survival_curve = susceptible_survival_plot,
-  susceptible_only_risk_curve = susceptible_risk_plot
-)
+  detail_annotation_list[[ii]] <- build_detail_annotation_table(
+    analysis_df = analysis_df,
+    times = seq(0, curve_horizon_max_year, by = detail_tick_step_year)
+  ) %>%
+    mutate(
+      plot_group = plot_group,
+      source_dataset = source_dataset_name
+    )
+
+  survival_detail_plot_bundle <- make_detail_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_survival_prob",
+    y_label = "Estimated survival probability",
+    title_text = paste0("Estimated survival probability with risk counts: ", group_title),
+    analysis_df = analysis_df,
+    pnu_reference_year = pnu_reference_year
+  )
+
+  risk_detail_plot_bundle <- make_detail_curve_plot(
+    curve_df = group_curve_df,
+    value_col = "overall_risk_prob",
+    y_label = "Estimated risk probability (1 - survival)",
+    title_text = paste0("Estimated risk probability with risk counts: ", group_title),
+    analysis_df = analysis_df,
+    pnu_reference_year = pnu_reference_year
+  )
+
+  plot_registry[[paste0(plot_group, "__survival_curve_with_counts")]] <- survival_detail_plot_bundle
+  plot_registry[[paste0(plot_group, "__risk_curve_with_counts")]] <- risk_detail_plot_bundle
+
+  save_stacked_plot_png(
+    survival_detail_plot_bundle,
+    make_plot_output_file(export_path, "estimated_survival_curve_with_counts", plot_group),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
+  save_stacked_plot_png(
+    risk_detail_plot_bundle,
+    make_plot_output_file(export_path, "estimated_risk_curve_with_counts", plot_group),
+    width = detail_plot_width_in,
+    height = detail_plot_height_in
+  )
+}
+
+detail_annotation_df <- bind_rows(detail_annotation_list)
 
 # Write Outputs -----------------------------------------------------------
 readr::write_csv(horizon_summary_df, horizon_summary_file)
-readr::write_csv(curve_data_df, curve_data_file)
+readr::write_csv(plot_source_df, plot_source_file)
+readr::write_csv(detail_annotation_df, detail_annotation_file)
 readr::write_csv(model_registry_df, model_registry_file)
 readr::write_csv(parameter_summary_df, parameter_summary_file)
 saveRDS(plot_registry, plot_rds_file)
 write_trace_plot_pdf(fit_records = fit_records, output_file = trace_plot_pdf_file)
 
-save_plot_png(overall_survival_plot, overall_survival_png_file)
-save_plot_png(overall_risk_plot, overall_risk_png_file)
-save_plot_png(susceptible_survival_plot, susceptible_survival_png_file)
-save_plot_png(susceptible_risk_plot, susceptible_risk_png_file)
-
-message("Stage 8A simplified Bayesian transition-only cure export completed.")
+message("Bayesian mixture cure export completed.")
 message("Horizon summary CSV: ", normalizePath(horizon_summary_file, winslash = "/", mustWork = FALSE))
-message("Curve data CSV: ", normalizePath(curve_data_file, winslash = "/", mustWork = FALSE))
+message("Plot source CSV: ", normalizePath(plot_source_file, winslash = "/", mustWork = FALSE))
+message("Detail annotation CSV: ", normalizePath(detail_annotation_file, winslash = "/", mustWork = FALSE))
 message("Model registry CSV: ", normalizePath(model_registry_file, winslash = "/", mustWork = FALSE))
 message("Parameter summary CSV: ", normalizePath(parameter_summary_file, winslash = "/", mustWork = FALSE))
 message("Plot RDS: ", normalizePath(plot_rds_file, winslash = "/", mustWork = FALSE))
 message("Trace plot PDF: ", normalizePath(trace_plot_pdf_file, winslash = "/", mustWork = FALSE))
+message("Per-model fit RDS files are stored in: ", normalizePath(export_path, winslash = "/", mustWork = FALSE))
