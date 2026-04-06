@@ -1,0 +1,4 @@
+dataset,latency_family,d_n,p_value,contextual_signal_flag,contextual_note
+PNU,exponential,1.6387217394104994,0.10025047040715997,FALSE,Exponential working-model Maller-Zhou boundary test is not positive and remains contextual only.
+SNU,exponential,4.245561442540122,0.019676527852077966,TRUE,"Exponential working-model Maller-Zhou boundary test is positive, but remains contextual only."
+merged,exponential,10.613673432636233,5.612722895400368e-4,TRUE,"Exponential working-model Maller-Zhou boundary test is positive, but remains contextual only."

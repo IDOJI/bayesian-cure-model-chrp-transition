@@ -1,0 +1,3 @@
+model,estimation_method,interval_type,n_subjects,prediction_draws,susceptible_fraction_estimate,cure_fraction_estimate,uncertainty_sd,interval_lower_95,interval_median_50,interval_upper_95
+Frequentist mixture cure,maximum likelihood,95% CI,54,4000,0.410205,0.589795,0.131651,0.343066,0.584769,0.844717
+Bayesian transition-only cure,Bayesian posterior,95% CrI,54,400,0.514664,0.485336,0.190543,0.056776,0.518984,0.782911

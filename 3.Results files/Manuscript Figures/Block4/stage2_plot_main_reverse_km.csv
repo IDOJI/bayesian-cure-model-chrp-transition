@@ -1,0 +1,206 @@
+dataset,subgroup_kind,subgroup_value,group_id,panel_label,summary_view,curve_role,time_year,estimate,conf_low,conf_high,std_error,n_risk,n_event,n_censor,n_total,state,state_n,state_prop
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,0,1,1,1,0,54,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,0.25,0.8585457096095394,0.7258938908510464,0.929962816329739,0.049581828961741244,41,7,6,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,0.5,0.7538450133156931,0.6071277593716166,0.8521397192577166,0.06180934239251899,35,5,1,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,0.75,0.6676912975081852,0.5154667487877388,0.781758204117031,0.06812199398957147,31,4,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,1,0.6246144396044313,0.47162610576160935,0.7447584030214048,0.0702074297825801,28,2,1,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,1.25,0.5533621257532592,0.39950147888869786,0.6827480603358067,0.07327985207573204,22,3,3,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,1.5,0.422567441484307,0.27368584926051664,0.5640307453676899,0.07582854752312106,16,5,1,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,1.75,0.2905151160204611,0.16099894053981906,0.43317805917586605,0.07152243281726993,11,5,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,2,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,10,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,2.25,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,2.5,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,2.75,NA,NA,NA,NA,0,1,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,3,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,3.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,3.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,3.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,4,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,4.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,4.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,4.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,5.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,5.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,5.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,6,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,6.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,6.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,6.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,7,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,7.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,7.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,7.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,8,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,8.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,8.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,8.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,9,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,9.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,9.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,9.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,transition_only,reverse_km_curve,10,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,0,1,1,1,0,208,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,0.25,0.9267198949919323,0.8813867391778617,0.955163727003329,0.018216231031114874,187,15,6,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,0.5,0.8811837129846332,0.8279311356481021,0.918758677230481,0.022785251555797383,173,9,5,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,0.75,0.8760901655107335,0.8220974118920983,0.9145426424142616,0.023215885849020065,171,1,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,1,0.8451657048825373,0.7870876541010753,0.8885186938828875,0.025600357752267367,163,6,2,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,1.25,0.8084763486313162,0.7463552176326088,0.8568409646871253,0.027994771238177986,153,7,3,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,1.5,0.77655811026213,0.7115065065646478,0.8287108172078483,0.029768518632421723,145,6,2,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,1.75,0.738837922222109,0.6709247893428704,0.7948908521779813,0.031553077256752875,136,7,2,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,2,0.7334052904410641,0.6651281676369661,0.7899739871410804,0.031785308893597874,134,1,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,2.25,0.7113033643171366,0.6416115281852081,0.7698954452829563,0.03269235877437816,126,4,4,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,2.5,0.700012834724801,0.6296371111148725,0.7595955444769676,0.03313391117506078,122,2,2,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,2.75,0.6827037741940375,0.6113192871338746,0.7437598336585031,0.03378814623849002,118,3,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,3,0.6769181489890033,0.6052237350836907,0.7384427886541347,0.03399354044482657,117,1,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,3.25,0.6418476968550486,0.5685168164658423,0.7059948178587323,0.03511886800031598,109,6,2,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,3.5,0.624182163914084,0.5501970230479813,0.6894998205745582,0.03560252532017143,106,3,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,3.75,0.6182936529337625,0.5441180726713487,0.6839772707008666,0.03575030373813841,105,1,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,4,0.5888510980321549,0.5139223434253307,0.6561885519649125,0.036391991164827615,103,5,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,4.25,0.5591681957435953,0.483762729123546,0.6279182625944716,0.03689948694675489,94,5,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,4.5,0.5293583684304657,0.4537708361421391,0.5992604633365555,0.03726310458837095,88,5,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,4.75,0.5113120604157908,0.4357400705546293,0.5817975830681816,0.037421053203688194,85,3,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,5,0.3910033403179577,0.3184264952695492,0.4627563820857887,0.03704464862050992,64,20,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,5.25,0.28643814413917673,0.22042036771592521,0.35571172507548376,0.03476117081875988,46,17,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,5.5,0.24907664707754493,0.18649207587818725,0.31648342339131713,0.03340627997180382,40,6,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,5.75,0.23662281472366767,0.17533989357172738,0.3032641012478355,0.03287617766551871,38,2,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,6,0.19214484203124893,0.13610100158419297,0.25556376320977814,0.030699903422885713,30,7,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,6.25,0.16652552976041576,0.11408373610821508,0.22757255805679572,0.029156804387425003,26,4,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,6.5,0.16652552976041576,0.11408373610821508,0.22757255805679572,0.029156804387425003,26,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,6.75,0.14731104555729088,0.09792148412819629,0.20626301464928773,0.02782304153372729,23,3,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,7,0.1409062174895826,0.09260897851622026,0.19909231026718632,0.027340598895548,22,1,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,7.25,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,18,3,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,7.5,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,18,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,7.75,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,17,0,1,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,8,0.08590004702573484,0.04836732114446548,0.13681525854635504,0.022618974210445543,16,5,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,8.25,0.04295002351286742,0.018047834573145155,0.08475891528472773,0.016781831700667306,6,6,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,8.5,0.04295002351286742,0.018047834573145155,0.08475891528472773,0.016781831700667306,6,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,8.75,0.03579168626072285,0.013673412695004251,0.0755092276549273,0.015436249407015646,5,1,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,9,0.02147501175643371,0.005948276648181027,0.05620882470427393,0.01213549163118419,3,2,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,9.25,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,1,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,9.5,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,9.75,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,0,0,208,NA,NA,NA
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,transition_only,reverse_km_curve,10,0.00715833725214457,6.58978401533114e-4,0.03575994778757244,0.007108062014542091,1,1,0,208,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,0,1,1,1,0,262,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,0.25,0.9134570712896132,0.8715299544966892,0.9421524810421175,0.01763849401105998,228,22,12,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,0.5,0.8564389643928926,0.8065551606991496,0.8943009014811916,0.022164882865914497,208,14,6,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,0.75,0.835791233262595,0.7836370183877147,0.8763659230578924,0.023475350107576856,202,5,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,1,0.8024783955344272,0.7471678611873592,0.8469331995128786,0.025322933423151187,191,8,3,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,1.25,0.7597755946834274,0.7010724365401376,0.8085383558978123,0.02734123099195844,175,10,6,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,1.5,0.7115013631458921,0.6497309299109726,0.7643822405728923,0.029223723167759817,161,11,3,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,1.75,0.6582360724986327,0.5940446011517039,0.7147669878253321,0.030817750644182525,147,12,2,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,2,0.60872980587857,0.543060839456898,0.6679305019294639,0.03191110921974724,135,11,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,2.25,0.5905222989717884,0.5244771220478448,0.6505480668114046,0.03222923045541031,127,4,4,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,2.5,0.5812227352084531,0.5149963160560762,0.6416574423637985,0.03238557068582607,123,2,2,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,2.75,0.562204024461526,0.49563134516544427,0.6234494756092754,0.0326922542824313,118,4,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,3,0.5574395835762588,0.4907976491749421,0.6188725173581024,0.03276053722035898,117,1,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,3.25,0.5285591963941736,0.4616134538347773,0.5910237834042441,0.03311741509794946,109,6,2,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,3.5,0.5140116955759854,0.44700136786283784,0.5769167923262648,0.03325392324446058,106,3,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,3.75,0.5091625286365893,0.44214610142692007,0.5722006790646472,0.03329188823467886,105,1,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,4,0.48491669393960884,0.41798405752398315,0.5485174985470002,0.033425729458117955,103,5,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,4.25,0.4604729340614286,0.39378759073896424,0.5244945354640087,0.03348081934330056,94,5,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,4.5,0.4359246518965473,0.36966803569914475,0.5002063984029781,0.033447625850337163,88,5,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,4.75,0.4210635842182559,0.3551438067832631,0.48543367726655073,0.033389718875704535,85,3,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,5,0.32198979969631336,0.2602455063017057,0.3851929619722423,0.03205078882092813,64,20,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,5.25,0.23588074869579684,0.18054993845210401,0.2955679837200643,0.02951758047353067,46,17,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,5.5,0.2051136945180842,0.15288268662826593,0.26281958827515095,0.028213625411948964,40,6,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,5.75,0.19485800979218,0.14377987567354286,0.2517943221648624,0.02771926897508398,38,2,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,6,0.15823056434252208,0.11172154738450067,0.212051344535869,0.025738623541971966,30,7,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,6.25,0.13713315576351917,0.09370983137512748,0.18875873260830228,0.02437277406330518,26,4,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,6.5,0.13713315576351917,0.09370983137512748,0.18875873260830228,0.02437277406330518,26,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,6.75,0.12131009932926697,0.08047646379161733,0.17104010058879676,0.023209551548449555,23,3,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,7,0.11603574718451623,0.07612449402505257,0.1650803902646159,0.022791859100604054,22,1,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,7.25,0.10021269075026401,0.06326926845559826,0.14701992341207623,0.021436674714434525,18,3,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,7.5,0.10021269075026401,0.06326926845559826,0.14701992341207623,0.021436674714434525,18,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,7.75,0.10021269075026401,0.06326926845559826,0.14701992341207623,0.021436674714434525,17,0,1,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,8,0.07073836994136283,0.03984443513496132,0.11338146141407379,0.01875141325613258,16,5,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,8.25,0.035369184970681415,0.01491309613289045,0.07025292485015351,0.013861895441572524,6,6,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,8.5,0.035369184970681415,0.01491309613289045,0.07025292485015351,0.013861895441572524,6,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,8.75,0.02947432080890118,0.011308431823635848,0.06259876130484558,0.012743501977481241,5,1,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,9,0.01768459248534071,0.004933612495437011,0.046641455146420194,0.010008105292063718,3,2,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,9.25,0.011789728323560473,0.00237627409035864,0.038257524020026475,0.008226955877298731,2,1,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,9.5,0.011789728323560473,0.00237627409035864,0.038257524020026475,0.008226955877298731,2,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,9.75,0.011789728323560473,0.00237627409035864,0.038257524020026475,0.008226955877298731,2,0,0,262,NA,NA,NA
+merged,overall,Overall,merged__overall__Overall,merged | Overall,transition_only,reverse_km_curve,10,0.0058948641617802364,5.522466017822614e-4,0.029800280857609697,0.00585622852138435,1,1,0,262,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,0,1,1,1,0,54,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,0.25,0.8585457096095394,0.7258938908510464,0.929962816329739,0.049581828961741244,41,7,6,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,0.5,0.7538450133156931,0.6071277593716166,0.8521397192577166,0.06180934239251899,35,5,1,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,0.75,0.6676912975081852,0.5154667487877388,0.781758204117031,0.06812199398957147,31,4,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,1,0.6246144396044313,0.47162610576160935,0.7447584030214048,0.0702074297825801,28,2,1,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,1.25,0.5533621257532592,0.39950147888869786,0.6827480603358067,0.07327985207573204,22,3,3,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,1.5,0.422567441484307,0.27368584926051664,0.5640307453676899,0.07582854752312106,16,5,1,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,1.75,0.2905151160204611,0.16099894053981906,0.43317805917586605,0.07152243281726993,11,5,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,2,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,10,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,2.25,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,2.5,0.02641046509276919,0.0020688646830406905,0.1180533060120155,0.026007286280678076,1,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,2.75,NA,NA,NA,NA,0,1,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,3,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,3.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,3.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,3.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,4,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,4.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,4.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,4.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,5.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,5.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,5.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,6,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,6.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,6.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,6.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,7,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,7.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,7.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,7.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,8,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,8.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,8.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,8.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,9,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,9.25,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,9.5,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,9.75,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,transition_only,reverse_km_curve,10,NA,NA,NA,NA,0,0,0,54,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,0,1,1,1,0,208,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,0.25,0.9267198949919323,0.8813867391778617,0.955163727003329,0.018216231031114874,187,15,6,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,0.5,0.8811837129846332,0.8279311356481021,0.918758677230481,0.022785251555797383,173,9,5,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,0.75,0.8760901655107335,0.8220974118920983,0.9145426424142616,0.023215885849020065,171,1,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,1,0.8451657048825373,0.7870876541010753,0.8885186938828875,0.025600357752267367,163,6,2,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,1.25,0.8084763486313162,0.7463552176326088,0.8568409646871253,0.027994771238177986,153,7,3,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,1.5,0.77655811026213,0.7115065065646478,0.8287108172078483,0.029768518632421723,145,6,2,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,1.75,0.738837922222109,0.6709247893428704,0.7948908521779813,0.031553077256752875,136,7,2,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,2,0.7334052904410641,0.6651281676369661,0.7899739871410804,0.031785308893597874,134,1,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,2.25,0.7113033643171366,0.6416115281852081,0.7698954452829563,0.03269235877437816,126,4,4,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,2.5,0.700012834724801,0.6296371111148725,0.7595955444769676,0.03313391117506078,122,2,2,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,2.75,0.6827037741940375,0.6113192871338746,0.7437598336585031,0.03378814623849002,118,3,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,3,0.6769181489890033,0.6052237350836907,0.7384427886541347,0.03399354044482657,117,1,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,3.25,0.6418476968550486,0.5685168164658423,0.7059948178587323,0.03511886800031598,109,6,2,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,3.5,0.624182163914084,0.5501970230479813,0.6894998205745582,0.03560252532017143,106,3,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,3.75,0.6182936529337625,0.5441180726713487,0.6839772707008666,0.03575030373813841,105,1,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,4,0.5888510980321549,0.5139223434253307,0.6561885519649125,0.036391991164827615,103,5,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,4.25,0.5591681957435953,0.483762729123546,0.6279182625944716,0.03689948694675489,94,5,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,4.5,0.5293583684304657,0.4537708361421391,0.5992604633365555,0.03726310458837095,88,5,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,4.75,0.5113120604157908,0.4357400705546293,0.5817975830681816,0.037421053203688194,85,3,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,5,0.3910033403179577,0.3184264952695492,0.4627563820857887,0.03704464862050992,64,20,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,5.25,0.28643814413917673,0.22042036771592521,0.35571172507548376,0.03476117081875988,46,17,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,5.5,0.24907664707754493,0.18649207587818725,0.31648342339131713,0.03340627997180382,40,6,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,5.75,0.23662281472366767,0.17533989357172738,0.3032641012478355,0.03287617766551871,38,2,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,6,0.19214484203124893,0.13610100158419297,0.25556376320977814,0.030699903422885713,30,7,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,6.25,0.16652552976041576,0.11408373610821508,0.22757255805679572,0.029156804387425003,26,4,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,6.5,0.16652552976041576,0.11408373610821508,0.22757255805679572,0.029156804387425003,26,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,6.75,0.14731104555729088,0.09792148412819629,0.20626301464928773,0.02782304153372729,23,3,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,7,0.1409062174895826,0.09260897851622026,0.19909231026718632,0.027340598895548,22,1,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,7.25,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,18,3,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,7.5,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,18,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,7.75,0.12169173328645769,0.07692444549433432,0.17735234542106867,0.025764824791654452,17,0,1,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,8,0.08590004702573484,0.04836732114446548,0.13681525854635504,0.022618974210445543,16,5,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,8.25,0.04295002351286742,0.018047834573145155,0.08475891528472773,0.016781831700667306,6,6,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,8.5,0.04295002351286742,0.018047834573145155,0.08475891528472773,0.016781831700667306,6,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,8.75,0.03579168626072285,0.013673412695004251,0.0755092276549273,0.015436249407015646,5,1,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,9,0.02147501175643371,0.005948276648181027,0.05620882470427393,0.01213549163118419,3,2,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,9.25,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,1,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,9.5,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,9.75,0.01431667450428914,0.0028565682592584588,0.04605139055984402,0.00998071129626658,2,0,0,208,NA,NA,NA
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,transition_only,reverse_km_curve,10,0.00715833725214457,6.58978401533114e-4,0.03575994778757244,0.007108062014542091,1,1,0,208,NA,NA,NA

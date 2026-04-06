@@ -1,0 +1,5 @@
+model,estimation_method,interval_type,n_subjects,prediction_draws,susceptible_fraction_estimate,cure_fraction_estimate,uncertainty_sd,interval_lower_95,interval_median_50,interval_upper_95
+Frequentist mixture cure [merged],maximum likelihood,95% CI,262,4000,0.915748,0.084252,0.344752,0.002575,0.345908,0.975448
+Frequentist mixture cure [merged(site-adj)],maximum likelihood,95% CI,262,4000,0.827153,0.172847,0.226588,0.046133,0.414979,0.858573
+Bayesian transition-only cure [merged],Bayesian posterior,95% CrI,262,400,0.752865,0.247135,0.145986,0.01183,0.232255,0.564699
+Bayesian transition-only cure [merged(site-adj)],Bayesian posterior,95% CrI,262,400,0.798201,0.201799,0.142107,0.013805,0.178745,0.53317

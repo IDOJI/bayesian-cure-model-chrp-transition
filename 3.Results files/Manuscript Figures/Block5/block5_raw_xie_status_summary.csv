@@ -1,0 +1,4 @@
+dataset,xie_statistic,xie_bootstrap_p_value,xie_contradiction_flag,xie_method_label,xie_interpretation_note
+PNU,0.00537443346036714,0.296,FALSE,legacy_stage6_centered_bootstrap,Legacy Stage 6 Xie bootstrap output does not indicate a contradiction signal against sufficient follow-up.
+SNU,0.14741319774388273,0.202,FALSE,legacy_stage6_centered_bootstrap,Legacy Stage 6 Xie bootstrap output does not indicate a contradiction signal against sufficient follow-up.
+merged,0.11318148945495082,0.266,FALSE,legacy_stage6_centered_bootstrap,Legacy Stage 6 Xie bootstrap output does not indicate a contradiction signal against sufficient follow-up.

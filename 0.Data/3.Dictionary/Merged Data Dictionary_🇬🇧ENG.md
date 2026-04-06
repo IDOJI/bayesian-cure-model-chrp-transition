@@ -145,7 +145,7 @@
         
         - *if transition: `dur_transition`*
             
-        - *if remission: `dur_remission`*
+        - *if remission (`status_num == 2`, analyzed as right censoring): `dur_remission`*
             
         - *if censored (both = 0): use `dur_transition` (preprocessing QC enforces `dur_transition == dur_remission`)*
             
@@ -162,9 +162,9 @@
 
 *---*
 
-## *🟩 `status_num` (integer; event code)*
+## *🟩 `status_num` (integer; status code)*
 
-- ***Meaning**: Numeric coding for event status*
+- ***Meaning**: Numeric coding for raw event status*
     
 - ***Coding***
     
@@ -173,19 +173,21 @@
     - *`1` = transition*
         
     - *`2` = remission*
+
+- ***Analysis convention**: In the integrated/main transition-only analysis, `status_num == 2` is treated as right censoring*
         
 - ***Site-specific difference***
     
-    - *PNU: all `0/1/2` are possible (competing risks)*
+    - *PNU: raw `0/1/2` can all appear; in analysis, `2` is collapsed into right censoring*
         
     - *SNU: only `0/1` exist (transition vs censoring); `2` is structurally absent*
         
 
 *---*
 
-## *🟩 `status` (factor; levels = right_censoring, remission, transition)*
+## *🟩 `status` (factor; raw levels = right_censoring, remission, transition)*
 
-- ***Meaning**: Labeled factor for event status*
+- ***Meaning**: Labeled factor for raw event status*
     
 - ***Labels***
     
@@ -197,6 +199,8 @@
         
 - ***Levels (fixed order)**: `c("right_censoring","remission","transition")`*
     
+- ***Note**: The `"remission"` label is retained for raw-data traceability, but in the integrated/main transition-only analysis it is treated the same as `"right_censoring"`*
+
 - ***Note**: In SNU, the `"remission"` level exists but has no observed cases (empty level) — it is still included for merge stability ✅*
     
 
@@ -215,18 +219,14 @@
 
 # *🟧 Interpretation Notes for Analysis Design ⚠️*
 
-## *1) Competing risk exists only in PNU*
+## *1) Raw remission code exists only in PNU*
 
-- *PNU has a competing-risk structure: `transition` vs `remission`*
+- *PNU raw data can contain `status_num == 2` / `"remission"`, but the integrated/main analysis treats this as right censoring rather than as a separate event*
     
-- *SNU has a binary structure: `transition` vs censoring (“no remission event”)*
+- *SNU has only `0/1`, so the integrated dataset is aligned as a transition-only analysis with censoring*
     
 
-*➡️ In integrated modeling, the strategy is usually one of the following:*
-
-- *(A) Standardize to a **transition-only analysis** and handle remission separately*
-    
-- *(B) Use a competing-risk model, but interpret **SNU remission as structurally impossible (structural zero)** and include `site` stratification/adjustment*
+*➡️ In integrated modeling for this project, the analysis is standardized to a **transition-only analysis**, and remission-coded observations are handled as right censoring.*
     
 
 ## *2) `site + id` is recommended as the identification key*
@@ -239,5 +239,5 @@
 # *✅ Final One-Line Definition 🧠*
 
 *This merged dataset is a **standardized schema for center-integrated survival analysis**, using*  
-***`days_followup` (elapsed days since Day 0) + `status/status_num` (event type)** as the core survival variables,*  
+***`days_followup` (elapsed days since Day 0) + `status/status_num` (with `1` as transition and `0/2` treated as censoring in the main analysis)** as the core survival variables,*  
 *with `age_*` variables harmonized as covariates derived from `date_birth` and `date_entry`. ✅📌*

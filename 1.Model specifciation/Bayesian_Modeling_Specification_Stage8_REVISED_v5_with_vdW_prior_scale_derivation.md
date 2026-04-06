@@ -569,16 +569,13 @@ This is scientifically important because the merged analysis is trying to separa
 
 Any merged site coefficient or site-placement label is a structural decomposition term only. It must **not** be described as a clean clinical treatment effect, because site here stands in for care pathway, referral, selection, and follow-up maturity differences.
 
-### 5.8 Latency families
+### 5.8 Latency family
 
-The main Stage 8A family set remains:
+The main Stage 8A latency family is fixed to:
 
-- exponential
-- Weibull
 - log-normal
-- log-logistic
 
-These are retained because they cover the main parametric shapes already used in the project, permit direct comparison with Stage 7, and remain computationally feasible in a Bayesian workflow.
+This is retained because the project now keeps the latency-side parametric assumption aligned across the main no-cure, frequentist cure, and Bayesian cure analyses, rather than comparing multiple latency families inside Stage 8.
 
 
 ### 5.9 Priors for latency coefficients
@@ -590,11 +587,9 @@ Use weakly informative priors consistent with the Stage 1 scaling discipline:
 - when included in merged latency-site branches: $\gamma_s \sim \mathcal{N}(0, 1^2)$ in the main site-prior family
 - mandatory site-prior sensitivity for merged latency-site branches: $\gamma_s \sim t_{3}(0, 1)$
 
-Family-specific priors can follow the current companion convention, for example:
+Family-specific priors therefore reduce here to the retained log-normal scale prior:
 
-- Weibull shape on log scale: $\rho_W \sim \mathcal{N}(0, 0.35^2)$
 - log-normal scale: $\log(\sigma_{LN}) \sim \mathcal{N}(0, 0.50^2)$
-- log-logistic shape parametrization: $\psi_{LL} \sim \mathcal{N}(0, 0.50^2)$
 
 This unified site-prior policy is deliberate: when site terms appear in incidence, latency, or remission, the preferred main prior is $\mathcal{N}(0,1^2)$ and the robustness sensitivity is $t_3(0,1)$.
 
@@ -686,12 +681,12 @@ To maximize comparability, Stage 8B reuses the same incidence architecture as St
 
 ### 6.6 Transition latency component in Stage 8B
 
-To maximize comparability, Stage 8B reuses the same transition latency structure and family set as Stage 8A:
+To maximize comparability, Stage 8B reuses the same transition latency structure and retained family as Stage 8A:
 
 - same PNU/SNU branches `L0` and `L1`
 - same merged branches `L0S0`, `L1S0`, `L0S1`, `L1S1`
 - same site-placement labels
-- same transition families: exponential, Weibull, log-normal, log-logistic
+- same transition family: log-normal
 
 ### 6.7 Remission component
 
@@ -980,7 +975,7 @@ Stage 8 should be interpreted as genuine stabilization only when:
 
 1. posterior quantities move meaningfully away from the prior center;
 2. supported-horizon risk, delta-risk, and threshold-based outputs stabilize together;
-3. directional conclusions remain coherent across latency families;
+3. directional conclusions remain coherent under the retained log-normal latency structure and prior-sensitivity checks;
 4. the signal persists after alternative explanations such as site/context and remission handling are examined.
 
 ### 7.4 Hazard-shape plausibility export
@@ -1205,7 +1200,7 @@ The following are standard or literature-aligned:
 - mixture cure decomposition into incidence and latency;
 - Bayesian weakly informative priors for regression coefficients after sensible scaling;
 - use of 2-SD scaling for continuous covariates to improve coefficient interpretability and prior specification;
-- use of parametric latency families such as Weibull, log-normal, and log-logistic;
+- use of a parametric log-normal latency structure;
 - the AFT-versus-Cox discussion about latency support and insufficient follow-up;
 - use of CIF-based decision curves and clinical usefulness under competing risks;
 - piecewise-exponential hazards as a practical baseline model for a competing event process;
@@ -1288,7 +1283,7 @@ These references justify both the prior scale logic and the scaling discipline u
 
 The AFT-versus-Cox cure discussion in Parsa and Van Keilegom supports the concern that Cox-latency cure models impose a common support structure that may be unrealistic when follow-up sufficiency varies across covariate regions, while AFT-style structures can be more realistic in such settings.
 
-Disagreement across latency families should be interpreted first as evidence of latency-side heterogeneity, tail identifiability limits, or both.
+Residual instability under the retained log-normal latency structure should be interpreted first as evidence of latency-side heterogeneity, tail identifiability limits, or both.
 
 It should not be treated as direct evidence of a stable discrete cured subgroup unless the separation also appears in supported horizons and remains coherent under prior sensitivity, site adjustment, and remission-sensitive comparison.
 

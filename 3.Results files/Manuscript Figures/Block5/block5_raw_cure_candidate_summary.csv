@@ -1,0 +1,16 @@
+dataset,fit_name,selection_pool,latency_family,converged,cure_fraction_hat,receus_ratio_hat,receus_candidate_flag,selected_by_primary_aic
+PNU,cure__lognormal,primary,lognormal,TRUE,0.06035327962551206,0.9661892627447775,unsupportive,FALSE
+PNU,cure__exponential,sensitivity,exponential,TRUE,0.6347481293695376,0.1213822802610953,unsupportive,FALSE
+PNU,cure__weibull,sensitivity,weibull,TRUE,0.3767223391113076,0.6630090491092434,unsupportive,FALSE
+PNU,cure__gamma,sensitivity,gamma,TRUE,0.4461850379124505,0.5469483776988299,unsupportive,FALSE
+PNU,cure__loglogistic,sensitivity,loglogistic,TRUE,0.08921330177923907,0.9458785900553949,unsupportive,FALSE
+SNU,cure__lognormal,primary,lognormal,TRUE,1.7772756876551637e-4,0.9999207150706128,unsupportive,FALSE
+SNU,cure__exponential,sensitivity,exponential,TRUE,0.669611847405598,0.13093678992249086,unsupportive,FALSE
+SNU,cure__weibull,sensitivity,weibull,TRUE,0.43621738239701624,0.6285942600754317,unsupportive,FALSE
+SNU,cure__gamma,sensitivity,gamma,TRUE,0.4994423039116285,0.5189577271179792,unsupportive,FALSE
+SNU,cure__loglogistic,sensitivity,loglogistic,TRUE,0.18616273616582432,0.8913896957505635,unsupportive,FALSE
+merged,cure__lognormal,primary,lognormal,TRUE,5.249278785621963e-4,0.9997344963670607,unsupportive,FALSE
+merged,cure__exponential,sensitivity,exponential,TRUE,0.6775232229316618,0.048598995115760504,supportive,FALSE
+merged,cure__weibull,sensitivity,weibull,TRUE,0.5258526214635054,0.42921317622489624,unsupportive,FALSE
+merged,cure__gamma,sensitivity,gamma,TRUE,0.5726359232187826,0.30923070389535107,unsupportive,FALSE
+merged,cure__loglogistic,sensitivity,loglogistic,TRUE,0.34671277124929206,0.7295182931657146,unsupportive,FALSE

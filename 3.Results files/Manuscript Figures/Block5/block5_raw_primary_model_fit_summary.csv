@@ -1,0 +1,7 @@
+dataset,selection_pool,fit_name,model_type,latency_family,converged,logLik,effective_parameter_count,AIC,cure_fraction_hat,detail_message,selected_aic
+PNU,primary,noncure__lognormal,noncure,lognormal,TRUE,-28.607822721369057,2,61.215645442738115,0,NA,TRUE
+PNU,primary,cure__lognormal,cure,lognormal,TRUE,-28.607419659116008,3,63.214839318232016,0.06035327962551206,NA,FALSE
+SNU,primary,noncure__lognormal,noncure,lognormal,TRUE,-147.18601648388872,2,298.37203296777744,0,NA,TRUE
+SNU,primary,cure__lognormal,cure,lognormal,TRUE,-147.18607106434519,3,300.37214212869037,1.7772756876551637e-4,NA,FALSE
+merged,primary,noncure__lognormal,noncure,lognormal,TRUE,-179.45880207031448,2,362.91760414062895,0,NA,TRUE
+merged,primary,cure__lognormal,cure,lognormal,TRUE,-179.45885217149402,3,364.91770434298803,5.249278785621963e-4,NA,FALSE

@@ -1,0 +1,19 @@
+dataset,component,component_status,component_value_label,dataset_order,component_order
+PNU,Lognormal primary,Primary unsupportive,"AIC=61.22
+pi=0.000, r=NA",1,1
+SNU,Lognormal primary,Primary unsupportive,"AIC=298.37
+pi=0.000, r=NA",2,1
+merged,Lognormal primary,Primary unsupportive,"AIC=362.92
+pi=0.000, r=NA",3,1
+PNU,Xie contradiction,Xie no contradiction,"T=0.005
+p=0.296",1,2
+SNU,Xie contradiction,Xie no contradiction,"T=0.147
+p=0.202",2,2
+merged,Xie contradiction,Xie no contradiction,"T=0.113
+p=0.266",3,2
+PNU,Maller-Zhou contextual,Contextual signal absent,"d=1.639
+p=0.100",1,3
+SNU,Maller-Zhou contextual,Contextual signal present,"d=4.246
+p=0.020",2,3
+merged,Maller-Zhou contextual,Contextual signal present,"d=10.614
+p=0.001",3,3

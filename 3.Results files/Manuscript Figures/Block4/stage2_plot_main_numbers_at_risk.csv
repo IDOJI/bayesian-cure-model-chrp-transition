@@ -1,0 +1,56 @@
+dataset,subgroup_kind,subgroup_value,group_id,panel_label,time_year,n_risk,n_total,n_risk_fraction,interpretation_tier,support_tier_standard,support_tier,support_display_group,support_display_label,horizon_evidence_class,claim_restriction_flag,risk_table_label,time_year_factor
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,0,54,54,1,baseline,baseline,baseline,baseline,Baseline,baseline,primary_claim_allowed,54,0
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,1,28,54,0.5185185185185185,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,28,1
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,2,1,54,0.018518518518518517,sensitivity,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,1,2
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,3,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,3
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,4,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,4
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,5,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,5
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,6,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,6
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,7,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,7
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,8,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,8
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,9,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,9
+PNU,overall,Overall,PNU__overall__Overall,PNU | Overall,10,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,10
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,0,208,208,1,baseline,baseline,baseline,baseline,Baseline,baseline,primary_claim_allowed,208,0
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,1,163,208,0.7836538461538461,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,163,1
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,2,134,208,0.6442307692307693,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,134,2
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,3,117,208,0.5625,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,117,3
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,4,103,208,0.4951923076923077,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,103,4
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,5,64,208,0.3076923076923077,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,64,5
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,6,30,208,0.14423076923076922,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,30,6
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,7,22,208,0.10576923076923077,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,22,7
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,8,16,208,0.07692307692307693,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,16,8
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,9,3,208,0.014423076923076924,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,3,9
+SNU,overall,Overall,SNU__overall__Overall,SNU | Overall,10,1,208,0.004807692307692308,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,1,10
+merged,overall,Overall,merged__overall__Overall,merged | Overall,0,262,262,1,baseline,baseline,baseline,baseline,Baseline,baseline,primary_claim_allowed,262,0
+merged,overall,Overall,merged__overall__Overall,merged | Overall,1,191,262,0.7290076335877863,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,191,1
+merged,overall,Overall,merged__overall__Overall,merged | Overall,2,135,262,0.5152671755725191,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,135,2
+merged,overall,Overall,merged__overall__Overall,merged | Overall,3,117,262,0.44656488549618323,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,117,3
+merged,overall,Overall,merged__overall__Overall,merged | Overall,4,103,262,0.3931297709923664,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,103,4
+merged,overall,Overall,merged__overall__Overall,merged | Overall,5,64,262,0.24427480916030533,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,64,5
+merged,overall,Overall,merged__overall__Overall,merged | Overall,6,30,262,0.11450381679389313,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,30,6
+merged,overall,Overall,merged__overall__Overall,merged | Overall,7,22,262,0.08396946564885496,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,22,7
+merged,overall,Overall,merged__overall__Overall,merged | Overall,8,16,262,0.061068702290076333,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,16,8
+merged,overall,Overall,merged__overall__Overall,merged | Overall,9,3,262,0.011450381679389313,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,3,9
+merged,overall,Overall,merged__overall__Overall,merged | Overall,10,1,262,0.003816793893129771,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,1,10
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,0,54,54,1,baseline,baseline,baseline,baseline,Baseline,baseline,primary_claim_allowed,54,0
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,1,28,54,0.5185185185185185,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,28,1
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,2,1,54,0.018518518518518517,sensitivity,sensitivity,sensitivity,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,1,2
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,3,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,3
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,4,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,4
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,5,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,5
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,6,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,6
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,7,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,7
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,8,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,8
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,9,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,9
+merged,site,PNU,merged__site__PNU,merged | Site = PNU,10,0,54,0,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,0,10
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,0,208,208,1,baseline,baseline,baseline,baseline,Baseline,baseline,primary_claim_allowed,208,0
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,1,163,208,0.7836538461538461,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,163,1
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,2,134,208,0.6442307692307693,primary-supported,primary_supported,primary_supported,primary_supported,Primary supported,directly_observed_data_supported,primary_claim_allowed,134,2
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,3,117,208,0.5625,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,117,3
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,4,103,208,0.4951923076923077,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,103,4
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,5,64,208,0.3076923076923077,secondary,secondary,secondary,secondary_or_sensitivity,Secondary / sensitivity,partly_model_dependent,secondary_or_sensitivity_only,64,5
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,6,30,208,0.14423076923076922,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,30,6
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,7,22,208,0.10576923076923077,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,22,7
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,8,16,208,0.07692307692307693,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,16,8
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,9,3,208,0.014423076923076924,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,3,9
+merged,site,SNU,merged__site__SNU,merged | Site = SNU,10,1,208,0.004807692307692308,projection,projection,projection,projection,Projection,mostly_extrapolated,projection_only,1,10
